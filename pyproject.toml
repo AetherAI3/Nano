@@ -1,6 +1,6 @@
 [project]
 name = "aether-nano"
-version = "0.1.0"
+version = "1.0.0"
 description = "A compiled execution architecture for autonomous engineering systems — compile AI reasoning into deterministic, auditable execution."
 readme = "README.md"
 license = { text = "MIT" }
@@ -9,10 +9,11 @@ authors = [{ name = "Aether AI LLC" }]
 keywords = [
   "nano", "aether", "compiler", "deterministic-execution", "autonomous-ai",
   "ai-agents", "quantitative-trading", "algorithmic-trading", "llm",
-  "execution-engine", "provenance", "dsl",
+  "execution-engine", "provenance", "dsl", "static-typing", "cli",
 ]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
@@ -22,7 +23,13 @@ classifiers = [
 ]
 
 # Zero mandatory dependencies -- stdlib only, matching the reference runtime.
+# The CLI is argparse, csv, and json; the type checker, indicators, and VM add
+# nothing. A strategy compiler that pulls in a dependency tree is a compiler whose
+# output depends on that tree resolving identically twice.
 dependencies = []
+
+[project.scripts]
+nano = "nano.cli.main:main"
 
 [project.urls]
 Homepage = "https://aethersystems.net"

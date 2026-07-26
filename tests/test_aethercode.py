@@ -65,9 +65,17 @@ def test_semantic_tokens_for_invalid_but_lexable_source():
 
 
 def test_semantic_tokens_survive_lexer_failure():
-    # '=' alone is unlexable; the tokens before it are still classified.
-    tokens = semantic_tokens("strategy S = 5")
+    # '$' is unlexable; the tokens before it are still classified.
+    tokens = semantic_tokens("strategy S $ 5")
     assert [t.kind for t in tokens] == ["keyword", "identifier"]
+
+
+def test_assignment_is_lexable_since_params_and_lets_use_it():
+    # '=' was unlexable in v0.1.0. v1.0 binds params and lets with it, so it is a
+    # real operator token, and `if x = 1` becomes a parser diagnostic rather than
+    # a lexer one -- reported at the same position either way.
+    tokens = semantic_tokens("param fast = 20")
+    assert [t.kind for t in tokens] == ["keyword", "identifier", "operator", "number"]
 
 
 # -- diagnostics -------------------------------------------------------------
