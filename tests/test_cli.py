@@ -192,6 +192,29 @@ def test_check_missing_file_is_an_io_error(tmp_path, capsys):
     assert "cannot read" in err
 
 
+def test_non_utf8_source_is_a_diagnostic_not_a_traceback(tmp_path, capsys):
+    # UnicodeDecodeError is a ValueError, not an OSError, so `except OSError` alone
+    # let a file of binary junk escape as a traceback while a *missing* file got a
+    # clean message. Both are "I cannot read this".
+    path = tmp_path / "binary.nano"
+    path.write_bytes(b"\xff\xfe\x00not text")
+    code, _, err = _run(["check", str(path)], capsys)
+    assert code == EXIT_IO
+    assert "not valid UTF-8" in err
+    assert "Traceback" not in err
+
+
+def test_non_utf8_market_data_is_a_diagnostic_not_a_traceback(
+    strategy, tmp_path, capsys
+):
+    path = tmp_path / "binary.csv"
+    path.write_bytes(b"\xff\xfe\x00not text")
+    code, _, err = _run(["replay", str(strategy), "--data", str(path)], capsys)
+    assert code == EXIT_IO
+    assert "not valid UTF-8" in err
+    assert "Traceback" not in err
+
+
 # -- nano compile -------------------------------------------------------------
 
 

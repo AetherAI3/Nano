@@ -24,12 +24,14 @@ intent and acting on it are different jobs owned by different systems.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 from typing import List, Optional, Sequence
 
 from ..ir.schema import SUPPORTED_IR_VERSIONS
 from .commands import (
+    EXIT_INTERRUPTED,
     EXIT_OK,
     Console,
     command_check,
@@ -171,7 +173,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return EXIT_OK
 
     console = Console(out=sys.stdout, err=sys.stderr)
-    return args.handler(args, console)
+    try:
+        return args.handler(args, console)
+    except KeyboardInterrupt:
+        # Ctrl-C is a decision, not a crash. 130 is the conventional
+        # "terminated by SIGINT" code, and printing a traceback for it would bury
+        # the operator's own action in noise.
+        console.warn("interrupted")
+        return EXIT_INTERRUPTED
+    except BrokenPipeError:
+        # `nano compile x.nano | head -1` closes the pipe mid-write. The command
+        # did its job; the reader stopped listening. Devnull the remaining stdout
+        # so the interpreter's shutdown flush cannot re-raise this after we return.
+        _silence_stdout()
+        return EXIT_OK
+
+
+def _silence_stdout() -> None:
+    """Point stdout at the null device after a broken pipe."""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+    except OSError:  # pragma: no cover - nothing useful left to do
+        pass
 
 
 def run(argv: Optional[List[str]] = None) -> None:  # pragma: no cover - thin shim

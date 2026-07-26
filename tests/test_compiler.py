@@ -287,6 +287,16 @@ def test_single_rule_strategies_still_emit_baseline_ir():
     assert compile_to_dict(MOMENTUM_SRC)["nanoIrVersion"] == "0.1.0"
 
 
+def test_a_higher_tier_forces_v1_ir_even_with_a_baseline_shaped_body():
+    # Baseline IR has no `tier` field, so emitting it for a `nano+` module would
+    # silently drop the declaration -- and the tier is an auditable statement about
+    # whether a model can be in the loop, not a formatting detail.
+    source = "tier nano+\n" + MOMENTUM_SRC
+    document = compile_to_dict(source)
+    assert document["nanoIrVersion"] == "1.0.0"
+    assert document["tier"] == "nano+"
+
+
 def test_unterminated_block():
     err = _compile_error("strategy S {\n    every 5m {\n")
     assert (err.line, err.column) == (3, 1)

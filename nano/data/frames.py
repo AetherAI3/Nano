@@ -276,12 +276,26 @@ def load_json(path: Path, *, on_date: Optional[date] = None) -> LoadedFrame:
 
 
 def load_frame(path: Path, *, on_date: Optional[date] = None) -> LoadedFrame:
-    """Load a market frame, choosing the reader by file extension."""
+    """Load a market frame, choosing the reader by file extension.
+
+    Every failure leaves here as a ``FeedError``. A caller handling bad data
+    should not also have to handle `OSError` for an unreadable file and
+    `UnicodeDecodeError` for a binary one — those are the same problem from the
+    operator's point of view, and one exception type means one diagnostic path.
+    """
     if not path.exists():
         raise FeedError(f"{path} does not exist")
     suffix = path.suffix.lower()
-    if suffix == ".csv":
-        return load_csv(path, on_date=on_date)
-    if suffix == ".json":
+    if suffix not in (".csv", ".json"):
+        raise FeedError(f"Unsupported data format {suffix!r} (expected .csv or .json)")
+
+    try:
+        if suffix == ".csv":
+            return load_csv(path, on_date=on_date)
         return load_json(path, on_date=on_date)
-    raise FeedError(f"Unsupported data format {suffix!r} (expected .csv or .json)")
+    except UnicodeDecodeError as exc:
+        raise FeedError(
+            f"{path} is not valid UTF-8 (market data must be UTF-8 encoded text)"
+        ) from exc
+    except OSError as exc:
+        raise FeedError(f"cannot read {path}: {exc}") from exc

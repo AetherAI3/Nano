@@ -13,6 +13,7 @@ Exit codes are part of the interface, because CI reads them:
 | 1 | the source or the run was rejected — diagnostics printed |
 | 2 | the command was used wrongly (argparse's own code) |
 | 3 | an input could not be read |
+| 130 | interrupted with Ctrl-C (the shell convention for SIGINT) |
 
 `compile` and `check` run the same pipeline and differ only in what they emit, so
 `nano check` passing means `nano compile` will not fail on types. Splitting them
@@ -47,6 +48,7 @@ EXIT_OK = 0
 EXIT_DIAGNOSTICS = 1
 EXIT_USAGE = 2
 EXIT_IO = 3
+EXIT_INTERRUPTED = 130
 
 
 @dataclass(frozen=True)
@@ -64,10 +66,22 @@ class Console:
 
 
 def _read_source(path: Path, console: Console) -> Optional[str]:
+    """Read `.nano` source, or report why it could not be read.
+
+    `UnicodeDecodeError` is caught explicitly because it is a `ValueError`, not an
+    `OSError` — a file of binary junk would otherwise escape as a traceback while a
+    missing file produced a clean diagnostic.
+    """
     try:
         return path.read_text(encoding="utf-8")
     except OSError as exc:
         console.warn(f"error: cannot read {path}: {exc}")
+        return None
+    except UnicodeDecodeError:
+        console.warn(
+            f"error: cannot read {path}: not valid UTF-8 "
+            "(Nano source must be UTF-8 encoded text)"
+        )
         return None
 
 
