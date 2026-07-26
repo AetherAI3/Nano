@@ -22,7 +22,6 @@ from .module import (
     NanoModule,
     OpSpec,
     ParamDecl,
-    canonical_effects,
 )
 from .nodes import AgentNode, ConditionNode, IntentNode, ScheduleNode
 from .schema import (
@@ -61,7 +60,6 @@ __all__ = [
     "ScheduleNode",
     "StrategyGraph",
     "TierViolation",
-    "canonical_effects",
     "load",
     "load_module",
 ]

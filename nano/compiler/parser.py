@@ -90,6 +90,7 @@ from .ast import (
     StringLit,
     Unary,
 )
+from ..ir.schema import CONDITION_OPERATORS
 from .errors import NanoSyntaxError
 from .lexer import decode_string, tokenize
 from .tokens import Token
@@ -100,7 +101,9 @@ _ASSET_ACTIONS = {"buy": "BUY", "sell": "SELL"}
 _NULLARY_ACTIONS = {"execute": "EXECUTE", "pause": "PAUSE", "observe": "OBSERVE"}
 _ALL_ACTIONS = {**_ASSET_ACTIONS, **_NULLARY_ACTIONS}
 
-_COMPARISON_OPS = frozenset({"<", "<=", ">", ">=", "==", "!="})
+# One source for the operator vocabulary: the IR schema, which is what a
+# `Condition` node may actually carry.
+_COMPARISON_OPS = CONDITION_OPERATORS
 _ADDITIVE_OPS = frozenset({"+", "-"})
 _MULTIPLICATIVE_OPS = frozenset({"*", "/", "%"})
 

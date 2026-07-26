@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Sequence, TextIO
 
 from ..compiler import (
+    IRVersionError,
     NanoCompileError,
     check_source,
     compile_module,
@@ -39,10 +40,11 @@ from ..compiler import (
 )
 from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
-from ..ir.schema import SUPPORTED_IR_VERSIONS
+from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
+from ..runtime.interpreter import RuntimeError_
 from ..runtime.vm import run_module
 from ..types.env import KIND_FEED, KIND_INPUT, KIND_LET, KIND_PARAM
-from .render import FORMATS, render, summarise_run
+from .render import render, summarise_run
 
 EXIT_OK = 0
 EXIT_DIAGNOSTICS = 1
@@ -90,18 +92,55 @@ def _report_compile_error(path: Path, error: NanoCompileError, console: Console)
     return EXIT_DIAGNOSTICS
 
 
+class _Rejected(Exception):
+    """A command's input was rejected. Carries the exit code to return."""
+
+    def __init__(self, code: int) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+def _compile(path: Path, source: str, console: Console):
+    """Compile to a module, reporting every rejection as a diagnostic.
+
+    ``compile_module`` round-trips through the IR loader, so it can raise
+    ``IRValidationError`` as well as ``NanoCompileError``. Catching only the
+    latter — which every command used to do — turned a loader rejection into a
+    traceback in `replay` and `visualize` while `compile` reported it cleanly.
+    """
+    try:
+        return compile_module(source)
+    except NanoCompileError as error:
+        raise _Rejected(_report_compile_error(path, error, console)) from error
+    except IRValidationError as error:
+        # No source position: the IR contract was violated after lowering, so the
+        # locator is the node id the loader names, not a line.
+        console.warn(f"{path}: error: {error}")
+        raise _Rejected(EXIT_DIAGNOSTICS) from error
+
+
 # ---------------------------------------------------------------------------
 # nano check
 # ---------------------------------------------------------------------------
 
 
 def command_check(args: Any, console: Console) -> int:
-    """Type-check one or more files. Silent on success, like a linter."""
+    """Type-check one or more files. Silent on success, like a linter.
+
+    Every file is attempted even after one fails. Returning at the first
+    unreadable file made the exit code depend on argument order — `check bad.nano
+    missing.nano` reported an I/O error while `check bad.nano ok.nano` reported a
+    diagnostic — and hid the remaining files from anyone running this over a
+    directory.
+    """
     failed = 0
+    unreadable = 0
+
     for path in args.files:
         source = _read_source(path, console)
         if source is None:
-            return EXIT_IO
+            unreadable += 1
+            continue
         try:
             program = check_source(source)
         except NanoCompileError as error:
@@ -115,9 +154,15 @@ def command_check(args: Any, console: Console) -> int:
                 f"effects {', '.join(program.effects)}, "
                 f"ir {required_ir_version(program)}"
             )
-    if failed:
-        console.warn(f"{failed} of {len(args.files)} file(s) failed")
-        return EXIT_DIAGNOSTICS
+
+    if failed or unreadable:
+        console.warn(
+            f"{failed + unreadable} of {len(args.files)} file(s) failed"
+            + (f" ({unreadable} unreadable)" if unreadable else "")
+        )
+        # A rejected program outranks an unreadable file: the diagnostic is the
+        # actionable result, and reporting I/O would bury it.
+        return EXIT_DIAGNOSTICS if failed else EXIT_IO
     return EXIT_OK
 
 
@@ -146,6 +191,28 @@ def _emit_types(program, console: Console) -> None:
     console.say(f"  warmup:  {program.warmup} bar(s)")
 
 
+def _write_or_print(
+    text: str, args: Any, console: Console, *, note: str
+) -> int:
+    """Send `text` to `--output` if given, else to stdout.
+
+    Shared by every emit mode. `--emit types` and `--emit plan` used to return
+    before reaching the output block, so `-o` was accepted, silently ignored, and
+    the command exited 0 having written nothing — the worst kind of failure,
+    because a script would believe it had a file.
+    """
+    if args.output is None:
+        console.say(text)
+        return EXIT_OK
+    try:
+        args.output.write_text(text + "\n", encoding="utf-8")
+    except OSError as exc:
+        console.warn(f"error: cannot write {args.output}: {exc}")
+        return EXIT_IO
+    console.warn(f"{args.file} -> {args.output} ({note})")
+    return EXIT_OK
+
+
 def command_compile(args: Any, console: Console) -> int:
     """Validate a strategy and emit its execution plan."""
     source = _read_source(args.file, console)
@@ -154,35 +221,55 @@ def command_compile(args: Any, console: Console) -> int:
 
     try:
         if args.emit == "types":
-            _emit_types(check_source(source), console)
-            return EXIT_OK
+            program = check_source(source)
+            lines: List[str] = []
+            _emit_types(program, Console(out=_Collector(lines), err=console.err))
+            return _write_or_print(
+                "\n".join(lines), args, console, note="types"
+            )
         if args.emit == "plan":
-            console.say(render(compile_module(source), "ascii"))
-            return EXIT_OK
+            module = _compile(args.file, source, console)
+            return _write_or_print(
+                render(module, "ascii"), args, console, note="plan"
+            )
         document = compile_to_dict(source, ir_version=args.ir_version)
+    except _Rejected as rejected:
+        return rejected.code
     except NanoCompileError as error:
         return _report_compile_error(args.file, error, console)
-    except ValueError as error:
-        # IRValidationError / IRVersionError: the program is fine, but the shape
-        # that was asked for cannot hold it.
+    except IRVersionError as error:
+        # The program is fine; the version the caller asked for cannot hold it.
+        # That is a wrong argument, not a bad strategy.
+        console.warn(f"error: {error}")
+        return EXIT_USAGE
+    except IRValidationError as error:
         console.warn(f"{args.file}: error: {error}")
         return EXIT_DIAGNOSTICS
 
-    rendered = json.dumps(document, indent=2)
-    if args.output is None:
-        console.say(rendered)
-        return EXIT_OK
-
-    try:
-        args.output.write_text(rendered + "\n", encoding="utf-8")
-    except OSError as exc:
-        console.warn(f"error: cannot write {args.output}: {exc}")
-        return EXIT_IO
-    console.warn(
-        f"{args.file} -> {args.output} "
-        f"(nanoIrVersion {document['nanoIrVersion']}, {len(document['nodes'])} nodes)"
+    return _write_or_print(
+        json.dumps(document, indent=2),
+        args,
+        console,
+        note=(
+            f"nanoIrVersion {document['nanoIrVersion']}, "
+            f"{len(document['nodes'])} nodes"
+        ),
     )
-    return EXIT_OK
+
+
+class _Collector:
+    """A minimal write sink, so `--emit types` can be captured for `-o`."""
+
+    def __init__(self, lines: List[str]) -> None:
+        self._lines = lines
+
+    def write(self, text: str) -> int:
+        if text != "\n":
+            self._lines.append(text.rstrip("\n"))
+        return len(text)
+
+    def flush(self) -> None:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -236,56 +323,67 @@ def _print_text_report(
 
 def command_replay(args: Any, console: Console) -> int:
     """Run a strategy against recorded data and report what it proposed."""
+    # `--date` is parsed before anything expensive: a typo should not cost a whole
+    # compile, and a malformed date is a usage error rather than an I/O one.
+    try:
+        on_date = parse_date(args.date) if args.date else None
+    except FeedError as exc:
+        console.warn(f"error: {exc}")
+        return EXIT_USAGE
+
     source = _read_source(args.file, console)
     if source is None:
         return EXIT_IO
 
     try:
-        module = compile_module(source)
-    except NanoCompileError as error:
-        return _report_compile_error(args.file, error, console)
+        module = _compile(args.file, source, console)
+    except _Rejected as rejected:
+        return rejected.code
 
     try:
-        on_date = parse_date(args.date) if args.date else None
         loaded = load_frame(args.data, on_date=on_date)
     except FeedError as exc:
         console.warn(f"error: {exc}")
         return EXIT_IO
 
     if not loaded.frame.timestamps:
+        # The file read fine; it just holds nothing for this date. That is a
+        # result, not a read failure.
         console.warn(
             "error: no rows to replay"
             + (f" for {args.date}" if args.date else "")
             + f" ({loaded.rows_read} row(s) read, "
             f"{loaded.rows_filtered} filtered out)"
         )
-        return EXIT_IO
+        return EXIT_DIAGNOSTICS
 
     missing = _missing_signals(module, loaded.signal_names)
     if missing:
+        # A program/data mismatch: both inputs were readable and one does not fit
+        # the other.
         console.warn(
             f"error: {args.data} does not supply {', '.join(missing)} "
             f"(it has: {', '.join(loaded.signal_names)})"
         )
-        return EXIT_IO
+        return EXIT_DIAGNOSTICS
 
     try:
         result = run_module(module, loaded.frame)
-    except Exception as exc:  # noqa: BLE001 - reported as a diagnostic, not a crash
+        if args.verify:
+            # Same module, same frame, twice. A divergence means something in the
+            # chain is not a pure function of its inputs, which invalidates every
+            # number the run produced -- so it fails rather than warns. Inside the
+            # same guard as the first run: a fault on the verify pass is a fault.
+            again = run_module(module, loaded.frame)
+            if again.to_dict() != result.to_dict():
+                console.warn(
+                    "error: replay is not deterministic — two identical runs "
+                    "produced different results"
+                )
+                return EXIT_DIAGNOSTICS
+    except (RuntimeError_, IRValidationError) as exc:
         console.warn(f"error: replay failed: {exc}")
         return EXIT_DIAGNOSTICS
-
-    if args.verify:
-        # Same module, same frame, twice. A divergence means something in the
-        # chain is not a pure function of its inputs, which invalidates every
-        # number the run produced -- so it fails rather than warns.
-        again = run_module(module, loaded.frame)
-        if again.to_dict() != result.to_dict():
-            console.warn(
-                "error: replay is not deterministic — two identical runs produced "
-                "different results"
-            )
-            return EXIT_DIAGNOSTICS
 
     if args.report == "json":
         console.say(
@@ -321,21 +419,12 @@ def command_visualize(args: Any, console: Console) -> int:
     if source is None:
         return EXIT_IO
     try:
-        module = compile_module(source)
-    except NanoCompileError as error:
-        return _report_compile_error(args.file, error, console)
-
-    rendered = render(module, args.format)
-    if args.output is None:
-        console.say(rendered)
-        return EXIT_OK
-    try:
-        args.output.write_text(rendered + "\n", encoding="utf-8")
-    except OSError as exc:
-        console.warn(f"error: cannot write {args.output}: {exc}")
-        return EXIT_IO
-    console.warn(f"{args.file} -> {args.output} ({args.format})")
-    return EXIT_OK
+        module = _compile(args.file, source, console)
+    except _Rejected as rejected:
+        return rejected.code
+    return _write_or_print(
+        render(module, args.format), args, console, note=args.format
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -345,14 +434,16 @@ def command_visualize(args: Any, console: Console) -> int:
 
 def command_indicators(args: Any, console: Console) -> int:
     """List the indicators a strategy may compute, or describe one."""
-    if args.name:
+    # `is not None`, not truthiness: `nano indicators ""` asked about an indicator
+    # and should be told there isn't one, not silently handed the whole list.
+    if args.name is not None:
         spec = INDICATORS.get(args.name)
         if spec is None:
             console.warn(
                 f"error: unknown indicator {args.name!r} "
                 "(try `nano indicators` for the full list)"
             )
-            return EXIT_DIAGNOSTICS
+            return EXIT_USAGE
         console.say(spec.signature_text())
         console.say(f"  {spec.doc}")
         if spec.period_indices:
@@ -383,10 +474,10 @@ def command_version(args: Any, console: Console) -> int:
 __all__ = [
     "Console",
     "EXIT_DIAGNOSTICS",
+    "EXIT_INTERRUPTED",
     "EXIT_IO",
     "EXIT_OK",
     "EXIT_USAGE",
-    "FORMATS",
     "command_check",
     "command_compile",
     "command_indicators",

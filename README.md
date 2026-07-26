@@ -13,7 +13,7 @@
 [![CI](https://github.com/DBarr3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/DBarr3/Nano/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
-[![Tests](https://img.shields.io/badge/tests-173%20passing-22c55e.svg)](tests)
+[![Tests](https://img.shields.io/badge/tests-338%20passing-22c55e.svg)](tests)
 [![Made by Aether AI](https://img.shields.io/badge/made%20by-Aether%20AI-0ea5e9.svg)](https://aethersystems.net)
 [![GitHub Repo stars](https://img.shields.io/github/stars/DBarr3/Nano?style=social)](https://github.com/DBarr3/Nano/stargazers)
 
@@ -29,9 +29,9 @@
 >
 > Nano compiles reasoning into execution graphs that can **run, replay, audit, and improve**.
 
-> **Status:** research preview · Milestones 1–6 shipped · **173 tests passing**. The IR, compiler,
-> interpreter, risk-gate bridge, and optimization loop are real and tested; the CLI and
-> `Series<T>` typing are still design. [Full status ↓](#status--whats-real)
+> **Status:** v1.0.0 · **338 tests passing**. The IR, compiler,
+> interpreter, risk-gate bridge, and optimization loop are real and tested; the CLI, static typing, and
+> look-ahead protection are shipped. [Full status ↓](#status--whats-real)
 
 ## What is Nano?
 
@@ -151,18 +151,24 @@ deterministically; unknown states escalate back to reasoning.
 ```nano
 strategy Momentum {
 
+  input close:  series<float>
+  input volume: series<float>
+
+  let oversold  = RSI(close, 14)
+  let avgVolume = SMA(volume, 20)
+
   every 5m {
 
-    observe market
-
-    if RSI(14) < 30
-    and volume > average {
-
-      execute()
+    if oversold < 30 and volume > avgVolume {
+      buy(BTCUSD, 0.85)
+    } else {
+      observe()
     }
   }
 }
 ```
+
+<sub>Every `.nano` block in this README compiles. CI runs `nano check` over them.</sub>
 
 What happens to that file:
 
@@ -249,7 +255,7 @@ language.
 |---|---|
 | Deterministic replay | No ambient clock or RNG — time and entropy are injected, logged inputs |
 | Strategies can't bypass risk | No exchange API in the language; programs emit intents, the runtime disposes |
-| No look-ahead in backtests | `Series<T>` types make peeking at the future a compile error *(design)* |
+| No look-ahead in backtests | series offsets count backwards and must fold to a non-negative constant, so `close[t+1]` is a compile error |
 | Least-privilege execution | Every IR module carries an effect manifest — a capability boundary |
 | Reproducible builds | Content-addressed IR, pinned package hashes |
 | Gated self-improvement | AI-compiled workflows pass admission gates before any runtime loads them |
@@ -259,7 +265,7 @@ threads, and mutable globals — each one destroys replayability.
 
 ## Nano architecture roadmap
 
-Three conceptual tiers over one compiler and one IR. A user starts with `buy when RSI < 30`
+Three conceptual tiers over one compiler and one IR. A user starts with `if RSI < 30 { buy(BTC) }`
 and never has to leave the language as their agents grow.
 
 | Tier | Question it answers | State |
@@ -272,10 +278,10 @@ and never has to leave the language as their agents grow.
 Shipped        →  IR · compiler · deterministic interpreter · risk-gate bridge
                   backtester · pattern memory · editor services · optimization loop
 
-Next           →  CLI (nano compile / replay / visualize)
-                  Series<T> look-ahead typing (no-peek backtests as a compile error)
+Next           →  Multi-agent coordination and a concrete reasoning provider
+                  Live market-data adapters and broker execution (host-side)
 
-Then           →  Nano+ adaptive layer — memory, confidence routing, multi-agent
+Then           →  Autonomous loop runner · self-modifying deployment (gated)
                   Real quantum-hardware dispatch (research)
 ```
 
@@ -312,7 +318,7 @@ compiles behavior *ahead of time* into a replayable IR — the model is never th
 [Paper 01](docs/papers/01-why-nano.md) for the full landscape comparison.
 
 **Is it production-ready?**
-It is a research preview with 173 passing tests. The core (IR, compiler, interpreter, bridge)
+v1.0.0, with 338 passing tests. The core (IR, compiler, interpreter, bridge)
 is real and tested; the CLI and several typing features are still design. The
 [status table](#status--whats-real) is kept honest.
 
@@ -335,11 +341,14 @@ Start with these four; they carry the whole thesis:
 
 | Shipped (tested) | Design / roadmap / research |
 |---|---|
-| Nano IR (`nano/ir/`) | CLI (`nano compile` / `replay` / `visualize`) |
-| Reference interpreter (`nano/runtime/`) | `Series<T>` look-ahead typing |
-| `.nano` → IR compiler (`nano/compiler/`) | Nano+ adaptive layer (memory, multi-agent) |
-| Risk-gate bridge + backtester (`nano/bridge/`) | Real quantum-hardware dispatch |
-| Editor services (`nano/aethercode/`) | Cognitive execution / confidence routing |
+| Nano IR, both versions (`nano/ir/`) | Live market feeds and broker execution |
+| Reference interpreter + VM (`nano/runtime/`) | Autonomous loop runner |
+| `.nano` → IR compiler (`nano/compiler/`) | Multi-agent coordination |
+| Static typing + look-ahead protection (`nano/types/`) | Self-modifying deployment |
+| 33 indicators (`nano/indicators/`) | Real quantum-hardware dispatch |
+| CLI (`nano/cli/`) · data adapters (`nano/data/`) | |
+| Risk-gate bridge + backtester (`nano/bridge/`) | |
+| Editor services (`nano/aethercode/`) | |
 | Pattern cache (`nano/memory/`) + optimization loop (`nano/loop/`) | |
 | Conformance corpus (`nano/examples/`) + strategy library (`nano/library/`) | |
 

@@ -22,7 +22,7 @@ Three shipped components define the execution profile:
 
 ## What is honestly unmeasured
 
-The repository currently ships correctness tests (121 of them), not benchmarks. The following numbers do not exist yet, and no document in this series should be read as implying them:
+The repository currently ships correctness tests (338 of them), not benchmarks. The following numbers do not exist yet, and no document in this series should be read as implying them:
 
 - Interpreter throughput (ticks/second) on realistic strategy graphs and frame sizes.
 - Pattern retrieval latency as a function of store size.

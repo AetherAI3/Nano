@@ -20,10 +20,15 @@ bars it discarded instead of quietly counting them as no-signal.
 
 Purity is the contract the reference interpreter has always held: identical module
 plus identical frame gives an identical result, bit for bit. No ambient clock, no
-ambient randomness, no I/O. Reasoning calls are the one stochastic thing a module
-can contain, and they do not break that — the provider is injected, and
-``nano/agents/`` records results so a replay feeds back recorded data rather than
-calling a model again.
+ambient randomness, no I/O.
+
+Reasoning calls are the one stochastic thing a module can contain, and the VM
+contains rather than solves that. It never constructs a provider — one is injected
+or `infer` yields no value at all — so **the VM is exactly as deterministic as the
+provider it was handed.** A provider that replays a recorded transcript makes a run
+bit-reproducible; one that calls a live model does not, and no amount of care here
+would change that. Recording transcripts is the host's job, and this package ships
+no recorder: see ``ReasoningProvider`` below for the interface a host implements.
 """
 
 from __future__ import annotations
@@ -529,13 +534,22 @@ def run_module(
     frame: MarketFrame,
     *,
     provider: Optional[ReasoningProvider] = None,
+    validate: bool = True,
 ) -> ModuleResult:
     """Execute `module` over `frame`; return intents, escalations, and the log.
 
-    Pure with no provider, and pure *with* one whenever the provider is — which is
-    what ``nano.agents.RecordedProvider`` guarantees for replay.
+    The module is re-validated first. ``NanoModule`` is a frozen dataclass, so
+    in-process code can build one directly and bypass ``from_dict`` — and such a
+    module could carry an `intent.emit` node its manifest never granted. "The
+    runtime cannot execute invalid IR" has to be enforced here to be true, not
+    just asserted in a docstring. The check is one pass over the nodes against an
+    evaluation that is nodes × bars.
+
+    Pass ``validate=False`` only in a loop that already validated the same module
+    (see ``run_frames``), never to accept a module you did not build.
     """
-    return _Machine(module=module, frame=frame, provider=provider).run()
+    checked = module.validate() if validate else module
+    return _Machine(module=checked, frame=frame, provider=provider).run()
 
 
 def run_frames(
@@ -544,5 +558,13 @@ def run_frames(
     *,
     provider: Optional[ReasoningProvider] = None,
 ) -> Tuple[ModuleResult, ...]:
-    """Execute `module` over several frames in order."""
-    return tuple(run_module(module, frame, provider=provider) for frame in frames)
+    """Execute `module` over several frames in order.
+
+    Validates once rather than once per frame: the module does not change between
+    frames, so re-checking it N times would only pay the cost N times.
+    """
+    checked = module.validate()
+    return tuple(
+        run_module(checked, frame, provider=provider, validate=False)
+        for frame in frames
+    )

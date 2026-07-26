@@ -327,3 +327,71 @@ def test_load_module_lifts_baseline_so_runtimes_need_one_path():
 def test_an_unknown_version_is_rejected_rather_than_guessed():
     with pytest.raises(IRValidationError, match="unsupported"):
         load({"type": "Strategy", "nanoIrVersion": "9.9.9", "nodes": []})
+
+
+# -- the boundary holds against direct construction ---------------------------
+
+
+def _handbuilt_module(**overrides):
+    """A module assembled by hand, skipping ``from_dict`` entirely."""
+    from nano.ir.module import IRNode
+
+    fields = {
+        "name": "Sneak",
+        "tier": "nano",
+        "effects": ("log.append",),
+        "nodes": (
+            IRNode(id="n1", op="schedule", attrs={"interval": "1m"}),
+            IRNode(id="n2", op="const", attrs={"value": True}),
+            IRNode(id="n3", op="intent.emit", attrs={"action": "BUY"}),
+            IRNode(id="n4", op="block", inputs=("n3",)),
+            IRNode(id="n5", op="rule", inputs=("n1", "n2", "n4")),
+        ),
+        "entries": ("n5",),
+    }
+    fields.update(overrides)
+    return NanoModule(**fields)
+
+
+def test_validate_catches_a_module_that_never_went_through_the_loader():
+    """``NanoModule`` is a frozen dataclass, so in-process code can build one and
+    skip ``from_dict``. An audit did exactly that and ran an ungranted
+    `intent.emit`. ``validate()`` is what makes the boundary real."""
+    with pytest.raises(ManifestViolation, match=r"intent\.emit"):
+        _handbuilt_module().validate()
+
+
+def test_the_vm_refuses_a_hand_built_module_with_an_ungranted_effect():
+    from nano.runtime.interpreter import MarketFrame
+    from nano.runtime.vm import run_module
+
+    frame = MarketFrame(timestamps=(0,), signals={})
+    with pytest.raises(ManifestViolation, match=r"intent\.emit"):
+        run_module(_handbuilt_module(), frame)
+
+
+def test_a_correctly_declared_hand_built_module_still_runs():
+    # The check rejects an ungranted capability, not hand construction itself --
+    # `to_module()` builds modules directly and must keep working.
+    from nano.runtime.interpreter import MarketFrame
+    from nano.runtime.vm import run_module
+
+    module = _handbuilt_module(effects=("intent.emit", "log.append"))
+    result = run_module(module, MarketFrame(timestamps=(0,), signals={}))
+    assert [i.action for i in result.intents] == ["BUY"]
+
+
+def test_run_frames_validates_once_and_still_rejects():
+    from nano.runtime.interpreter import MarketFrame
+    from nano.runtime.vm import run_frames
+
+    frames = [MarketFrame(timestamps=(0,), signals={})]
+    with pytest.raises(ManifestViolation):
+        run_frames(_handbuilt_module(), frames)
+
+
+def test_duplicate_effects_are_rejected():
+    # Two byte-different documents granting the same capability would make
+    # moduleHash depend on manifest spelling rather than meaning.
+    with pytest.raises(IRValidationError, match="Duplicate effects"):
+        NanoModule.from_dict(document(effects=["log.append", "log.append"]))

@@ -41,7 +41,6 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
 
 from .schema import (
     AGENT_ROLES,
-    EFFECT_ORDER,
     INTENT_ACTIONS,
     IRValidationError,
     KNOWN_EFFECTS,
@@ -318,6 +317,13 @@ class NanoModule:
         unknown = set(effects_raw) - KNOWN_EFFECTS
         if unknown:
             raise IRValidationError(f"Unknown effects declared: {sorted(unknown)}")
+        if len(set(effects_raw)) != len(effects_raw):
+            # A manifest is a set of granted capabilities. Allowing a repeat would
+            # let two byte-different documents grant exactly the same thing, which
+            # makes `moduleHash` depend on manifest spelling rather than meaning.
+            raise IRValidationError(
+                f"Duplicate effects declared: {sorted(effects_raw)}"
+            )
         effects = tuple(effects_raw)
 
         determinism = data.get("determinism", dict(DETERMINISM_CONTRACT))
@@ -412,6 +418,22 @@ class NanoModule:
             provenance=dict(provenance),
         )
 
+    def validate(self) -> "NanoModule":
+        """Re-run load-time validation, returning the validated module.
+
+        ``from_dict`` is the trust boundary, but ``NanoModule`` is a frozen
+        dataclass, so in-process code can construct one directly and skip it —
+        and a module built that way could carry an `intent.emit` node its manifest
+        never granted. That is not a hypothetical: an audit built exactly such a
+        module and ran it.
+
+        So the boundary is enforced where it matters rather than merely
+        documented: the VM calls this before executing. Cost is one pass over the
+        nodes, against an evaluation that is nodes × bars — the check disappears
+        into the noise of the work it protects.
+        """
+        return NanoModule.from_dict(self.to_dict(include_hash=False))
+
     # -- serialise ---------------------------------------------------------
 
     def to_dict(self, *, include_hash: bool = True) -> dict:
@@ -464,9 +486,10 @@ class NanoModule:
 # attribute validation
 # ---------------------------------------------------------------------------
 
-_NAMED_OPS = frozenset(
-    {"input.ref", "param.ref", "feed.signal", "let", "agent"}
-)
+# Opcodes whose behaviour is keyed by an `attrs["name"]`. Shared with the CLI
+# renderer, which labels them the same way -- two copies of this set would drift
+# the moment a named opcode is added.
+NAMED_OPS = frozenset({"input.ref", "param.ref", "feed.signal", "let", "agent"})
 
 
 def _validate_attrs(node: IRNode) -> None:
@@ -481,7 +504,7 @@ def _validate_attrs(node: IRNode) -> None:
         _require_text(attrs, "interval", f"Node {node.id!r} (schedule)")
         return
 
-    if node.op in _NAMED_OPS:
+    if node.op in NAMED_OPS:
         _require_text(attrs, "name", f"Node {node.id!r} ({node.op})")
         if node.op == "agent":
             role = attrs.get("role")
@@ -587,8 +610,3 @@ def _validate_attrs(node: IRNode) -> None:
                 )
         return
 
-
-def canonical_effects(effects: Sequence[str]) -> Tuple[str, ...]:
-    """Order an effect manifest canonically, so two compiles are byte-comparable."""
-    present = set(effects)
-    return tuple(effect for effect in EFFECT_ORDER if effect in present)

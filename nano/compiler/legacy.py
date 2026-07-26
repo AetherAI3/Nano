@@ -26,6 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from ..ir.schema import CONDITION_OPERATORS
 from ..types.checker import ResolvedFeed, TypedProgram
 from .ast import (
     ActionAst,
@@ -38,7 +39,9 @@ from .ast import (
     NumberLit,
 )
 
-_COMPARISON_OPS = frozenset({"<", "<=", ">", ">=", "==", "!="})
+# One source for the operator vocabulary: the IR schema, which is what a
+# `Condition` node may actually carry.
+_COMPARISON_OPS = CONDITION_OPERATORS
 
 
 @dataclass(frozen=True)

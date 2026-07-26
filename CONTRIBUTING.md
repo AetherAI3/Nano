@@ -25,8 +25,17 @@ bit-for-bit). This teaches you the whole pipeline in one PR.
 **The conformance corpus.** New `.nano` programs in [`nano/examples/`](nano/examples/) that
 exercise untested language shapes — each is source + hand-written IR that must match exactly.
 
-**The CLI.** `nano compile` / `nano replay` / `nano visualize` are designed but not built.
-See [BUILD_ORDER.md](BUILD_ORDER.md) for the intended shape.
+**Indicator kernels.** New entries in [`nano/indicators/`](nano/indicators/) — a signature in
+`registry.py` (parameter kinds plus a warm-up rule) and a deterministic kernel in `compute.py`.
+Pin the convention for every degenerate case (zero dispersion, a flat range, a zero divisor) in
+that module's docstring table: an unpinned convention is a silent divergence between two
+runtimes.
+
+**Type-checker diagnostics.** Anywhere [`nano/types/`](nano/types/) rejects a program with a
+message that does not say what *would* have been valid.
+
+**CLI ergonomics.** `nano check / compile / replay / visualize / indicators / version` ship in
+[`nano/cli/`](nano/cli/). Rough edges and missing flags are fair game.
 
 **Docs and papers.** Anything in [`docs/papers/`](docs/papers/) that is unclear, overstated,
 or wrong — issues and PRs both welcome. The house rule: every claim cites shipped code or is

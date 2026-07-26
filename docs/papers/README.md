@@ -46,4 +46,4 @@ Seventeen short papers, each answering one question about Nano — the compiled 
 
 ---
 
-Grounding: papers cite the shipped implementation (`nano/ir/`, `nano/runtime/`, `nano/memory/`, `nano/compiler/`, `nano/bridge/`, `nano/library/`, `nano/aethercode/`, `nano/loop/` — 173 tests) and mark everything else as design, roadmap, or research. Build sequence: [BUILD_ORDER.md](../../BUILD_ORDER.md).
+Grounding: papers cite the shipped implementation (`nano/ir/`, `nano/runtime/`, `nano/memory/`, `nano/compiler/`, `nano/bridge/`, `nano/library/`, `nano/aethercode/`, `nano/loop/` — 338 tests) and mark everything else as design, roadmap, or research. Build sequence: [BUILD_ORDER.md](../../BUILD_ORDER.md).

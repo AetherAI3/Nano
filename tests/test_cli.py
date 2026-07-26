@@ -14,7 +14,13 @@ import json
 
 import pytest
 
-from nano.cli.commands import EXIT_DIAGNOSTICS, EXIT_IO, EXIT_OK, Console
+from nano.cli.commands import (
+    EXIT_DIAGNOSTICS,
+    EXIT_IO,
+    EXIT_OK,
+    EXIT_USAGE,
+    Console,
+)
 from nano.cli.main import build_parser, main
 from nano.cli.render import render
 from nano.compiler import compile_module
@@ -242,8 +248,10 @@ def test_compile_can_be_forced_to_the_newer_version(legacy, capsys):
 
 
 def test_forcing_baseline_on_a_v1_strategy_explains_the_refusal(strategy, capsys):
+    # Usage, not a diagnostic: the strategy is fine and the requested version
+    # cannot hold it, which is a wrong argument rather than a bad program.
     code, _, err = _run(["compile", str(strategy), "--ir-version", "0.1.0"], capsys)
-    assert code == EXIT_DIAGNOSTICS
+    assert code == EXIT_USAGE
     assert "cannot represent" in err
 
 
@@ -291,17 +299,20 @@ def test_replay_json_report_carries_hashes_and_the_audit_log(strategy, bars, cap
 def test_replay_names_the_signal_the_data_lacks(strategy, tmp_path, capsys):
     path = tmp_path / "wrong.csv"
     path.write_text("timestamp,volume\n0,10\n60,20\n", encoding="utf-8")
+    # Both inputs read fine; one does not fit the other. That is a diagnostic
+    # about the pair, not a failure to read either.
     code, _, err = _run(["replay", str(strategy), "--data", str(path)], capsys)
-    assert code == EXIT_IO
+    assert code == EXIT_DIAGNOSTICS
     assert "does not supply close" in err
     assert "it has: volume" in err
 
 
 def test_replay_reports_an_empty_date_selection(strategy, bars, capsys):
+    # The file was read successfully; it simply holds nothing for that date.
     code, _, err = _run(
         ["replay", str(strategy), "--data", str(bars), "--date", "2020-01-01"], capsys
     )
-    assert code == EXIT_IO
+    assert code == EXIT_DIAGNOSTICS
     assert "no rows to replay for 2020-01-01" in err
 
 
@@ -361,10 +372,19 @@ def test_indicators_describes_one_and_flags_constant_periods(capsys):
     assert "compile-time constants" in out
 
 
-def test_unknown_indicator_exits_nonzero(capsys):
+def test_unknown_indicator_is_a_usage_error(capsys):
     code, _, err = _run(["indicators", "NOPE"], capsys)
-    assert code == EXIT_DIAGNOSTICS
+    assert code == EXIT_USAGE
     assert "unknown indicator" in err
+
+
+def test_empty_indicator_name_does_not_silently_list_everything(capsys):
+    # `nano indicators ""` asked about an indicator. Truthiness would have handed
+    # back the whole list as though nothing had been asked.
+    code, out, err = _run(["indicators", ""], capsys)
+    assert code == EXIT_USAGE
+    assert "unknown indicator" in err
+    assert out == ""
 
 
 def test_version_reports_both_ir_versions(capsys):

@@ -37,8 +37,14 @@ from .env import Scope
 _INTEGER_OPS = frozenset({"+", "-", "*", "%"})
 
 
-def _is_plain_int(value: object) -> bool:
-    """True for a real integer. `bool` is an int in Python and is not one here."""
+def is_plain_int(value: object) -> bool:
+    """True for a real integer.
+
+    `bool` is a subclass of `int` in Python, so a bare isinstance check would let
+    `True` pass as a period or an offset. Public because the checker and the IR
+    loader both need exactly this test, and two copies of it would be two places
+    to forget the bool case.
+    """
     return isinstance(value, int) and not isinstance(value, bool)
 
 
@@ -50,14 +56,14 @@ def fold_int(expr: Expr, scope: Scope) -> Optional[int]:
     signal, an input, a let-binding, a float — does not fold, by design.
     """
     if isinstance(expr, NumberLit):
-        return expr.value if _is_plain_int(expr.value) else None
+        return expr.value if is_plain_int(expr.value) else None
 
     if isinstance(expr, Name):
         symbol = scope.get(expr.name)
         if (
             symbol is not None
             and symbol.is_constant
-            and _is_plain_int(symbol.const_value)
+            and is_plain_int(symbol.const_value)
         ):
             return int(symbol.const_value)
         return None

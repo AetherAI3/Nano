@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 from typing import Dict, List, Sequence, Set
 
-from ..ir.module import IRNode, NanoModule
+from ..ir.module import NAMED_OPS, IRNode, NanoModule
 
 FORMATS = ("ascii", "mermaid", "dot", "json")
 
@@ -58,7 +58,6 @@ _OP_LABELS = {
     "logic.not": "not",
 }
 
-_NAMED_OPS = ("input.ref", "param.ref", "feed.signal", "let", "agent")
 _EFFECT_OPS = ("intent.emit", "llmre.escalate")
 
 
@@ -67,7 +66,7 @@ def node_label(node: IRNode) -> str:
     base = _OP_LABELS.get(node.op, node.op)
     attrs = node.attrs
 
-    if node.op in _NAMED_OPS:
+    if node.op in NAMED_OPS:
         role = attrs.get("role")
         return f"{base} {attrs.get('name', '?')}" + (f" [{role}]" if role else "")
     if node.op == "schedule":

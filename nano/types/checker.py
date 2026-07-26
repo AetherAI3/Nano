@@ -55,6 +55,7 @@ from ..compiler.errors import NanoTypeError
 from ..indicators.registry import IndicatorSpec, lookup as lookup_indicator
 from ..ir.schema import (
     AGENT_ROLES,
+    CONDITION_OPERATORS,
     EFFECT_ORDER,
     INTEGER_RISK_LIMITS,
     INTENT_ACTIONS,
@@ -91,10 +92,13 @@ from .kinds import (
     unify_comparison,
     unify_numeric,
 )
-from .lookahead import fold_int, resolve_offset, resolve_period
+from .lookahead import fold_int, is_plain_int, resolve_offset, resolve_period
 
 _ARITHMETIC_OPS = frozenset({"+", "-", "*", "/", "%"})
-_COMPARISON_OPS = frozenset({"<", "<=", ">", ">=", "==", "!="})
+# The comparison set lives in the IR schema: it is the operator vocabulary a
+# `Condition` node may carry, and a checker that accepted a seventh operator the
+# IR could not represent would only fail later, further from the source.
+_COMPARISON_OPS = CONDITION_OPERATORS
 _LOGICAL_OPS = frozenset({"and", "or"})
 
 # `confidence` reads the confidence attached to the decision being evaluated:
@@ -168,11 +172,6 @@ class TypedProgram:
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-
-
-def _is_plain_int(value: object) -> bool:
-    """True for a real integer. `bool` is an int in Python and is not one here."""
-    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _literal_type(value: object) -> Optional[Type]:
@@ -453,7 +452,7 @@ class _Checker:
             seen.add(limit.name)
 
             unit, low, high = spec
-            if limit.name in INTEGER_RISK_LIMITS and not _is_plain_int(limit.value):
+            if limit.name in INTEGER_RISK_LIMITS and not is_plain_int(limit.value):
                 raise self._fail(
                     f"Risk limit {limit.name!r} is measured in {unit} and must "
                     f"be a whole number, got {limit.value}",
@@ -571,7 +570,7 @@ class _Checker:
 
     def _visit_uncached(self, expr: Expr) -> Tuple[Type, int]:
         if isinstance(expr, NumberLit):
-            return (INT if _is_plain_int(expr.value) else FLOAT), 0
+            return (INT if is_plain_int(expr.value) else FLOAT), 0
         if isinstance(expr, StringLit):
             return STRING, 0
         if isinstance(expr, BoolLit):

@@ -39,7 +39,7 @@ requires `intent.emit` in the module's effect manifest.
 | `Schedule(interval)` | when the graph evaluates ("5m") |
 | `Condition(signal, operator, value)` | e.g. RSI < 30 |
 | `Intent(action, asset, confidence)` | proposal, never an order |
-| `Agent(name)` | later — named behavior blocks |
+| `Agent(name)` | named behavior blocks; `agent N { role research }` |
 
 Target: this JSON **is** a runnable strategy:
 
@@ -95,10 +95,10 @@ First execution integration. Flow: `Nano IR → bridge (host-platform adapter) �
 execution decision`. The bridge loads IR, verifies the effect manifest, streams recorded market
 frames through the interpreter, and forwards intents into the host platform's risk/release-gate
 discipline. The backtester runs the same IR against historical frames — bit-identical replay is
-the acceptance test. The reference adapter here defines the `RiskEngine` protocol any platform
+the acceptance test. The reference adapter here defines the `DecisionGate` protocol any platform
 can implement; Aether ATS is the first consumer.
 
-An optional `ProvenanceRiskEngine` (`nano/bridge/provenance.py`) wraps any `RiskEngine` to bind
+An optional `ProvenanceGate` (`nano/bridge/provenance.py`) wraps any `DecisionGate` to bind
 each decision to a signed, independently verifiable receipt — for platforms that need
 non-repudiable proof a decision happened, not just a log line. Fully outside the language: a
 `.nano` author can't see or reach it. Requires the optional `provenance` extra
@@ -107,7 +107,7 @@ non-repudiable proof a decision happened, not just a log line. Fully outside the
 ### Milestone 6 — Editor tooling  ✅ engine layer (`nano/aethercode/`; extension packaging pending)
 
 Not a whole IDE. The pure language-service engine first: syntax highlighting (semantic tokens),
-diagnostics, IR preview (`when RSI < 30` → shows the compiled ConditionNode). Packaged as a
+diagnostics, IR preview (`if RSI < 30 { … }` → shows the compiled ConditionNode). Packaged as a
 VS-Code-style extension by the host editor.
 
 ### Milestone 7 — Host-platform compiler inputs
@@ -128,7 +128,7 @@ graph is proven.
 | Week | Build | Exit |
 |---|---|---|
 | 1 | Nano package, IR schema, JSON serialization, basic interpreter | A JSON strategy executes deterministically |
-| 2 | Lexer/parser, `.nano` files compile to IR | `if RSI < 30 { buy() }` works end-to-end |
+| 2 | Lexer/parser, `.nano` files compile to IR | `if RSI < 30 { buy(BTC) }` works end-to-end |
 | 3 | Risk-gate bridge, risk-layer hand-off, backtester | Nano strategies simulate against a host risk engine |
 | 4 | Editor extension: highlighting + IR visualizer | Developer edits Nano with live IR preview |
 
