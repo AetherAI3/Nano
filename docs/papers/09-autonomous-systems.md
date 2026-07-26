@@ -1,5 +1,8 @@
 # 09 — Autonomous Systems
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Every autonomous system runs the same loop — Observe, Decide, Act, Record — and Nano compiles the Decide stage wherever that loop exists, with autonomous trading (ATS) as the first workload rather than the product.
 
 ---

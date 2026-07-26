@@ -1,9 +1,7 @@
-"""Universal loop-stage vocabulary (Nano++).
+"""Experimental Nano++ loop-document vocabulary.
 
-Trading uses BUY/SELL intents; an engineering tool proposes design changes; a
-quantum engineer runs circuit execution. Underneath, they are the same
-lifecycle. These stage kinds are that lifecycle, made into IR nodes so the
-optimization *process itself* becomes a deterministic, replayable graph.
+These values describe and validate a separate loop data model. They do not
+execute stages, invoke reasoning models, or provide autonomous coordination.
 """
 
 from __future__ import annotations

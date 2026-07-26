@@ -1,5 +1,8 @@
 # 17 — Heterogeneous Compute
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** One IR, many backends — Nano's long-term execution model dispatches the same validated graph to the reference interpreter, native runtimes, distributed clusters, or specialized hardware, with the choice of backend invisible to the graph's meaning and guarantees.
 
 ---

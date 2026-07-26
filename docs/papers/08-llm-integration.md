@@ -1,5 +1,8 @@
 # 08 — LLM Integration
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Nano is the model-agnostic execution substrate beneath reasoning models — Claude, GPT, Gemini, or a local model all compile to the same IR, and the economics of compiled memory versus per-decision inference decide the architecture.
 
 ---

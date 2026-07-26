@@ -1,14 +1,8 @@
-"""Nano memory layer — the semantic cache of learned behavior.
+"""Standalone pattern-retrieval primitive.
 
-Nano is not a replacement for ATS intelligence. It is the intelligence
-acceleration layer: compiled patterns answer "have we already solved this type
-of problem?" A match supplies context to ATS reasoning — ATS still thinks, it
-just starts with knowledge. No match escalates to LLM reasoning.
-
-Every pattern records: what happened, why, how often, how confident, and when
-it should expire. Patterns never execute anything — they inform. Provenance is
-mandatory so AQRC-compiled patterns stay distinguishable from hand-authored
-ones and can be gated accordingly.
+A PatternStore matches caller-provided observations against stored conditions
+and returns context plus an ``escalate`` flag. It does not invoke a model and
+is not wired into the core compiler, interpreter, or bridge.
 """
 
 from __future__ import annotations
@@ -106,7 +100,7 @@ class PatternStore:
         now: int,
         min_confidence: float = 0.0,
     ) -> RetrievalResult:
-        """Known pattern -> context for ATS reasoning. No match -> escalate."""
+        """Known pattern -> context; no match -> an escalation flag for the caller."""
         matched = tuple(
             p
             for p in self.patterns

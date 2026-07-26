@@ -1,8 +1,7 @@
-"""Nano++ autonomous optimization loop.
+"""Experimental Nano++ loop primitives.
 
-The universal lifecycle (observe -> propose -> compile -> execute -> measure ->
-verify -> admit -> repeat) as deterministic, replayable IR. One loop model
-across trading, engineering, and quantum optimization workloads.
+This package exposes loop-document validation, mutation-admission helpers, and
+a deterministic simulator protocol. It does not execute an autonomous loop.
 """
 
 from .graph import KNOWN_LOOP_EFFECTS, LoopGraph

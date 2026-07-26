@@ -1,15 +1,15 @@
 [project]
 name = "aether-nano"
 version = "1.0.0"
-description = "A compiled execution architecture for autonomous engineering systems — compile AI reasoning into deterministic, auditable execution."
+description = "A deterministic strategy DSL and reference runtime for host-governed decision rules."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 authors = [{ name = "Aether AI LLC" }]
 keywords = [
-  "nano", "aether", "compiler", "deterministic-execution", "autonomous-ai",
-  "ai-agents", "quantitative-trading", "algorithmic-trading", "llm",
-  "execution-engine", "provenance", "dsl", "static-typing", "cli",
+  "nano", "aether", "compiler", "deterministic-execution", "dsl",
+  "quantitative-trading", "algorithmic-trading", "execution-engine", "provenance",
+  "static-typing", "cli",
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -24,8 +24,8 @@ classifiers = [
 
 # Zero mandatory dependencies -- stdlib only, matching the reference runtime.
 # The CLI is argparse, csv, and json; the type checker, indicators, and VM add
-# nothing. A strategy compiler that pulls in a dependency tree is a compiler whose
-# output depends on that tree resolving identically twice.
+# nothing. A strategy compiler that pulls in a dependency tree is a compiler
+# whose output depends on that tree resolving identically twice.
 dependencies = []
 
 [project.scripts]
@@ -35,10 +35,10 @@ nano = "nano.cli.main:main"
 Homepage = "https://aethersystems.net"
 "Aether Code (web IDE)" = "https://app.aethersystems.net/code"
 Repository = "https://github.com/DBarr3/Nano"
-Documentation = "https://github.com/DBarr3/Nano/tree/main/docs/papers"
+Documentation = "https://github.com/DBarr3/Nano/tree/main/docs"
 
 [project.optional-dependencies]
-# Signed, non-repudiable audit receipts over risk-gate decisions.
+# Signed, non-repudiable audit receipts over decision-gate records.
 # See nano/bridge/provenance.py.
 provenance = ["aether-protocol-c"]
 dev = ["pytest>=7"]
@@ -52,3 +52,13 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["nano*"]
+
+# The source/IR conformance and strategy corpora live alongside the package.
+# Ship them deliberately so installed distributions retain the documented assets.
+[tool.setuptools.package-data]
+nano = [
+  "examples/*.nano",
+  "examples/*.json",
+  "library/*/*.nano",
+  "library/*/*.json",
+]

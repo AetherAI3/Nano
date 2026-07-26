@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible issue in Nano's compiler, IR, runtime, or bridge.
+title: "[bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include secrets, private market data, or security-sensitive details. Use SECURITY.md for a vulnerability report.
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include a small .nano source, IR, MarketFrame, and traceback or result where possible.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Nano version or commit
+      placeholder: 0.1.0 or a commit SHA
+    validations:
+      required: true

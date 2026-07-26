@@ -1,5 +1,8 @@
 # 16 — Quantum Computing
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Quantum computing enters Nano as a research track, not a promise — the shipped Nano++ loop already models vendor-agnostic quantum jobs with a deterministic simulator backend, while real-hardware dispatch and any advantage claim remain squarely research.
 
 ---

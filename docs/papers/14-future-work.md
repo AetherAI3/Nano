@@ -1,5 +1,8 @@
 # 14 — Future Work
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** The build order is deliberate — with the IR, interpreter, compiler front end, risk-gate bridge, and editor services shipped, the remaining work is the CLI, the cognitive execution layer, and real-hardware dispatch on the quantum research track — each stage proven on the shipped IR before the next begins.
 
 ---
@@ -13,7 +16,7 @@
 **Goal: a meaningful result in under a minute.**
 
 ```
-pip install nano
+pip install aether-nano
 nano compile strategy.json     # validate IR, report manifest and content hash
 nano replay strategy.json frame.json    # execute; print intents + audit log; verify bit-identical re-run
 nano visualize strategy.json   # render the execution graph

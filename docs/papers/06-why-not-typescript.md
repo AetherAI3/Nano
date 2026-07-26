@@ -1,5 +1,8 @@
 # 06 — Why Not TypeScript? (And Why Not Python?)
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** TypeScript models applications and Python models reasoning — Nano models deterministic decision graphs, and removing application machinery from the language is not missing functionality, it is removing uncertainty.
 
 ---

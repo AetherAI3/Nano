@@ -1,49 +1,41 @@
-# The Nano Paper Series
+# Nano design notes and research directions
 
-Seventeen short papers, each answering one question about Nano — the compiled execution architecture for autonomous engineering systems. Read [01](01-why-nano.md) first; the rest stand alone.
+> **Important:** this series explores the broader Nano thesis. It is not the language specification, an API reference, or evidence that a capability is implemented. For current behavior, start with the [architecture](../architecture.md), [language reference](../language.md), and [status](../status.md).
 
-## The core thesis
+These short essays record the rationale behind the project, possible future directions, and trade-offs worth testing. Some arguments intentionally extend beyond the alpha Python reference runtime. When a paper differs from the code or reference documentation, the code and tests define the current contract.
 
-| # | Paper | One line |
-|---|---|---|
-| 01 | [Why Nano](01-why-nano.md) | Autonomous systems stop re-reasoning by compiling known reasoning into deterministic execution. |
-| 02 | [The Agentic Compiler](02-the-agentic-compiler.md) | Nano compiles decisions, not algorithms — and moves the LLM from inside the hot loop to above it. |
-| 03 | [Determinism](03-determinism.md) | "Why did the agent do that?" is answered by bit-identical replay, not reconstruction (implemented). |
-| 04 | [Provenance: Protocol C](04-provenance.md) | A cryptographic execution protocol: who proposed, what compiled, what executed, who approved, what changed, when. |
+## Core ideas
 
-## Positioning
+| # | Paper | Question it explores |
+| --- | --- | --- |
+| 01 | [Why Nano](01-why-nano.md) | Why might deterministic compiled rules complement model-driven systems? |
+| 02 | [The Agentic Compiler](02-the-agentic-compiler.md) | What would it mean to compile decisions rather than invoke a model every time? |
+| 03 | [Determinism](03-determinism.md) | Why does deterministic replay matter for a reference runtime? |
+| 04 | [Provenance: Protocol C](04-provenance.md) | How could an optional host integration add signed decision receipts? |
 
-| # | Paper | One line |
-|---|---|---|
-| 05 | [Why Not Go?](05-why-not-go.md) | Go tells a computer how to compute; Nano tells an autonomous system when to act — complementary layers. |
-| 06 | [Why Not TypeScript?](06-why-not-typescript.md) | TS models applications and Python models reasoning; Nano models deterministic decision graphs — removing uncertainty, not functionality. |
-| 07 | [Nano vs. Pine Script](07-nano-vs-pine.md) | Pine draws indicators; Nano compiles gated, replayable decisions — no order primitive, intents plus effect manifests. |
+## Positioning and scope
 
-## Scope
+| # | Paper | Question it explores |
+| --- | --- | --- |
+| 05 | [Why Not Go?](05-why-not-go.md) | Where might a narrow decision DSL fit beside general-purpose languages? |
+| 06 | [Why Not TypeScript?](06-why-not-typescript.md) | What is different about modeling constrained decisions? |
+| 07 | [Nano vs. Pine Script](07-nano-vs-pine.md) | How do the strategy examples compare with indicator-oriented scripting? |
+| 08 | [LLM Integration](08-llm-integration.md) | What could model integration look like? *(Not implemented in Nano v0.1.0.)* |
+| 09 | [Autonomous Systems](09-autonomous-systems.md) | Which broader system shapes motivate the project? |
+| 10 | [The Nano Family](10-nano-family.md) | What is the proposed Nano / Nano+ / Nano++ framing? |
 
-| # | Paper | One line |
-|---|---|---|
-| 08 | [LLM Integration](08-llm-integration.md) | Model-agnostic substrate: any reasoning model compiles to the same IR; the economics of compiled memory decide the architecture. |
-| 09 | [Autonomous Systems](09-autonomous-systems.md) | The Observe → Decide → Act → Record loop generalizes everywhere; ATS trading is the first workload, not the product. |
-| 10 | [The Nano Family](10-nano-family.md) | Nano / Nano+ / Nano++ — deterministic, adaptive, and computational execution over one compiler and one IR. |
+## Engineering and research tracks
 
-## Engineering
+| # | Paper | Question it explores |
+| --- | --- | --- |
+| 11 | [Performance](11-performance.md) | What should future benchmarks measure? |
+| 12 | [Security](12-security.md) | Which constraints can the strategy IR enforce, and where are host boundaries? |
+| 13 | [Design Principles](13-design-principles.md) | Which architectural constraints should guide future work? |
+| 14 | [Future Work](14-future-work.md) | Which capabilities are still unimplemented or experimental? |
+| 15 | [Closed-Loop Engineering](15-closed-loop-engineering.md) | What might governed self-improvement require? |
+| 16 | [Quantum Computing](16-quantum-computing.md) | When might specialized optimization backends be worth researching? |
+| 17 | [Heterogeneous Compute](17-heterogeneous-compute.md) | What could portable execution across backends mean? |
 
-| # | Paper | One line |
-|---|---|---|
-| 11 | [Performance](11-performance.md) | The win is architectural — execution replaces inference; the runtime's own constants are honestly unmeasured. |
-| 12 | [Security](12-security.md) | Capability restriction by construction: absent primitives, effect manifests, load-time validation, admission gates. |
-| 13 | [Design Principles](13-design-principles.md) | Six non-negotiable rules — determinism, intent/dispose, IR-first, injected effects, content addressing, gated change. |
-| 14 | [Future Work](14-future-work.md) | With IR, compiler, bridge, and editor services shipped: the CLI, `Series<T>` typing, cognitive execution layer, quantum hardware dispatch — in that order. |
+## Reading responsibly
 
-## The horizon
-
-| # | Paper | One line |
-|---|---|---|
-| 15 | [Closed-Loop Engineering](15-closed-loop-engineering.md) | Execute → measure → propose → verify by replay → gate → recompile: self-improvement as a governed engineering loop. |
-| 16 | [Quantum Computing](16-quantum-computing.md) | A research track, sized honestly: if quantum backends ever win on real optimization workloads, the IR is ready to dispatch them. |
-| 17 | [Heterogeneous Compute](17-heterogeneous-compute.md) | One IR, many backends — interpreter to cluster to accelerator — with bit-identical replay as the conformance contract. |
-
----
-
-Grounding: papers cite the shipped implementation (`nano/ir/`, `nano/runtime/`, `nano/memory/`, `nano/compiler/`, `nano/bridge/`, `nano/library/`, `nano/aethercode/`, `nano/loop/` — 338 tests) and mark everything else as design, roadmap, or research. Build sequence: [BUILD_ORDER.md](../../BUILD_ORDER.md).
+The shipped repository includes a small strategy DSL, serializable strategy IR, deterministic reference interpreter, host decision-gate bridge, test corpus, and several experimental primitives. It does **not** include an LLM runtime, automatic escalation, general loop executor, live exchange integration, or real quantum dispatch. Use [status.md](../status.md) as the concise capability map.

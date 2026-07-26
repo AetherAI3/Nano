@@ -1,5 +1,8 @@
 # 15 — Closed-Loop Engineering
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Nano turns autonomous improvement into an engineering loop — execute, measure, propose, verify by replay, gate, recompile — where every iteration is evidence-backed and nothing changes without passing through a gate.
 
 ---

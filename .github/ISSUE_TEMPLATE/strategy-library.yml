@@ -1,0 +1,69 @@
+name: Strategy library proposal
+description: Propose a well-specified trading strategy for Nano's paired source/IR library.
+title: "[strategy]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping grow the Nano strategy library. A strategy proposal describes a signal contract for a host to provide; it is not investment advice or a request for live execution.
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - momentum
+        - mean_reversion
+        - trend
+        - volatility
+        - volume
+        - risk
+        - new category proposal
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: Proposed strategy name
+      description: Use a concise, lowercase_snake_case name for the future file pair.
+      placeholder: rsi_oversold_reversal
+    validations:
+      required: true
+  - type: textarea
+    id: thesis
+    attributes:
+      label: Strategy thesis
+      description: Explain the trading idea in plain language and the intended timeframe.
+    validations:
+      required: true
+  - type: textarea
+    id: signals
+    attributes:
+      label: Host signal contract
+      description: For every signal, give its formula/data source, unit or range, normalization, lookback convention, and threshold direction.
+      placeholder: "RSI(14): host-computed RSI, 0-100; emit only when RSI < 30."
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_source
+    attributes:
+      label: Proposed Nano source
+      description: Draft a v0.1-compatible strategy, if possible. Nano currently supports one schedule, one rule, AND-chained conditions, and five intent actions.
+      render: nano
+  - type: textarea
+    id: intent
+    attributes:
+      label: Proposed intent
+      description: State the action, asset convention, and confidence (if any) the strategy should emit.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Proposal checklist
+      options:
+        - label: I understand that Nano emits intents and does not place trades or provide investment advice.
+          required: true
+        - label: I will include paired .nano and _ir.json files plus documented signal conventions in a pull request.
+          required: true
+        - label: I will run python -m pytest tests/test_library.py -q before requesting review.
+          required: true

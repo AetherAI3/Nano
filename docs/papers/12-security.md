@@ -1,5 +1,8 @@
 # 12 — Security
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Nano's security model is capability restriction by construction — effect manifests, no actuation primitives in the language, load-time validation, and admission gates — so least privilege is a property of the artifact, not a policy around it.
 
 ---

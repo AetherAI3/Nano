@@ -1,57 +1,45 @@
-# Security Policy
+# Security policy
 
-Nano is infrastructure for autonomous systems — security posture is a design pillar, not an
-afterthought. This document covers how to report issues and what the architecture does and
-does not protect.
+Nano is an alpha reference implementation for deterministic, host-governed decision rules. This document explains how to report a vulnerability and what the current code does and does not protect.
 
 ## Reporting a vulnerability
 
-Please **do not** open a public issue for security-sensitive reports. Instead use
-[GitHub private vulnerability reporting](https://github.com/DBarr3/Nano/security/advisories/new)
-on this repository. Include a reproduction if possible. You'll get an acknowledgment, and
-fixes for confirmed issues are prioritized ahead of all feature work.
+Please do not open a public issue for security-sensitive reports. Use [GitHub private vulnerability reporting](https://github.com/DBarr3/Nano/security/advisories/new) and include a minimal reproduction where possible. The latest `main` branch is the supported security-fix target.
 
-Currently supported for security fixes: the latest state of `main`.
+## Security properties of the current core
 
-## Threat model
+| Concern | Current protection |
+| --- | --- |
+| Malformed strategy IR | `StrategyGraph.from_dict()` validates the supported version, nodes, effects, and intent-manifest requirement. |
+| A strategy directly calling an external system | The v0.1 grammar and reference runtime expose only intent emission; there is no exchange, network, subprocess, or action primitive. |
+| Reference-runtime reproducibility | The interpreter consumes caller-provided frames and does not read an ambient clock, RNG, or network. Identical graph/frame inputs produce the same reference result. |
+| Gate separation | `NanoBridge` forwards intents to a host-provided `DecisionGate` and records its returned decisions. It does not execute them. |
+| Optional receipt verification | The optional Protocol-C adapter can sign and verify host decision receipts when its dependency is installed. |
 
-What Nano's design defends against, by construction:
+## Boundaries and non-goals
 
-| Threat | Defense |
-|---|---|
-| A compiled program acting on the world directly | No actuation/exchange/network primitive exists in the language; programs emit intents, a gate disposes |
-| A program exceeding its declared capabilities | Effect manifests on every IR module, validated at load time — undeclared effects fail closed |
-| Nondeterministic or unreproducible execution | No ambient clock/RNG/IO; time and entropy are injected, logged inputs; replay is bit-identical |
-| Silent self-modification | Proposed graph changes pass admission gates (validation, replay verification, sign-off) before any runtime loads them |
-| Tampered execution history | Append-only audit log; optional provenance adapter produces signed, independently re-verifiable receipts |
-| Malicious or malformed IR | Schema validation at load; content-addressed graphs — the hash you audited is the artifact that runs |
+Nano is **not** an OS sandbox, a complete authorization system, or a durable audit platform.
 
-## Assumptions and non-goals — read this
+- **The host process is trusted.** Any Python code in the same process, including a data feed, gate, or dependency, can perform side effects outside Nano's strategy boundary.
+- **The host owns the gate.** Nano cannot guarantee that a host policy is correct, deterministic, or safe. `Backtester.verify_replay()` can detect divergent gate results; it cannot prevent a permissive gate from approving a bad action.
+- **Inputs are caller-provided.** Deterministic replay means identical inputs reproduce the reference result. It does not authenticate market data, prove its provenance, or prevent poisoned inputs.
+- **The base log is in memory.** It is an ordered result value, not durable append-only storage or tamper-proof evidence. Durable storage and signing are integration responsibilities.
+- **Strategy IR is not content-addressed.** The separate experimental `LoopGraph` has a content hash; `StrategyGraph` does not.
+- **No LLM/runtime escalation exists in the core.** Model safety, prompt injection, live actuation, and autonomous deployment are outside the current implementation.
 
-Nano's guarantees are **language-level and IR-level**, enforced by a reference interpreter
-written in Python. Be clear about the boundary:
+## In scope for reports
 
-- **The host process is trusted.** Nano is not an OS sandbox. Code running in the same Python
-  process as the interpreter (your gate, your data feed, an installed package) is outside the
-  boundary and can do anything Python can do.
-- **The gate is yours.** Nano guarantees every intent reaches your gate with a full record; it
-  cannot guarantee your gate's policy is correct. A permissive gate approves bad trades
-  deterministically.
-- **Inputs are trusted-as-logged.** Determinism means identical inputs replay identically. It
-  does not authenticate the inputs themselves — feed integrity is the deployment's job.
-- **The escalation path is a model.** Anything routed back to LLM reasoning inherits LLM
-  failure modes (including prompt injection). Nano bounds *when* that path is used and gates
-  its output; it does not make the model safe.
+- strategy-IR validation bypasses or manifest violations that lead to invalid reference execution;
+- an intent/action path that bypasses the `DecisionGate` boundary in the shipped core;
+- nondeterministic behavior from identical graph/frame inputs in the reference runtime;
+- defects in optional provenance receipt verification, when the optional dependency is installed; and
+- security-relevant crashes or data corruption in the public Python API.
 
-Paper [12 — Security](docs/papers/12-security.md) covers the capability-restriction argument
-in depth.
+## Out of scope
 
-## Scope for reports
+- vulnerabilities in a host's gate, data feed, execution connector, or Python environment;
+- market losses or strategy quality;
+- unsupported research proposals described only in design notes; and
+- third-party supply-chain defects without a Nano-specific integration issue.
 
-In scope: IR validation bypasses, effect-manifest escapes, determinism violations (same graph +
-same inputs → different result or log), intent/gate boundary escapes, provenance-receipt
-forgery.
-
-Out of scope: vulnerabilities in your gate implementation, market losses from strategy logic,
-Python-ecosystem supply-chain issues (report those upstream — but tell us if Nano's pinning
-should catch them).
+For the implementation map, see [docs/architecture.md](docs/architecture.md). For current maturity, see [docs/status.md](docs/status.md).

@@ -1,8 +1,7 @@
-"""Intents and the append-only execution log.
+"""Intent values and the ordered, in-memory execution log.
 
-Nano never places trades. The runtime's terminal output is a tuple of Intents —
-proposals a downstream gate (the host platform's risk engine) may accept or reject.
-Components propose; gates decide.
+Nano never places trades. The reference runtime returns Intents as proposals
+for a downstream host gate to accept or reject, together with per-run events.
 """
 
 from __future__ import annotations

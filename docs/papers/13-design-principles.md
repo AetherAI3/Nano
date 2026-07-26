@@ -1,5 +1,8 @@
 # 13 — Design Principles
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Six principles govern every Nano decision — determinism, the intent/dispose split, IR-first construction, injected effects, content addressing, and gated self-improvement — and each is a rule that resolves design arguments before they start.
 
 ---

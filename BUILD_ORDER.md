@@ -1,140 +1,65 @@
-# Nano — Build Order
+# Nano build notes
 
-**Locked strategy: IR-first.** Nano does not start as a programming language. It starts as a
-**deterministic intelligence execution graph** (Nano IR + reference runtime). The language becomes
-the human-friendly way to author those graphs, later. This matches how LLVM and Qiskit evolved:
-representation and execution first, surface syntax second.
+> This is a record of the implementation sequence and architectural constraints. For the current API and maturity boundary, see [docs/architecture.md](docs/architecture.md), [docs/language.md](docs/language.md), and [docs/status.md](docs/status.md).
 
-Nano is the execution abstraction that lets a host trading platform tie together its risk gates,
-provenance, deterministic-execution discipline, and runtime separation. Any platform with those
-pieces can embed it; Aether ATS is the first consumer.
+## The durable constraint
 
-## The one architectural lock
+Nano strategies **propose**; a host gate **decides**. The language has no order, exchange, network, or external-actuation primitive. Its terminal runtime output is an `Intent`, which a host-owned `DecisionGate` may approve or reject.
 
-```
-Nano:      "Execute this intent."
-Risk gate: "Is execution allowed?"
+```text
+.nano rule -> StrategyGraph -> reference runtime -> Intent -> host DecisionGate -> Decision record
 ```
 
-**Nano never places trades.** Strategies produce intents:
+The effect manifest is a small strategy-IR boundary: intent-bearing graphs must declare `intent.emit`, and unknown effects are rejected at load time. It is not a general capability sandbox; the Python host process remains trusted.
 
-```json
-{ "intent": "BUY", "asset": "BTC", "confidence": 0.91 }
-```
+## Implemented sequence
 
-A pluggable risk engine disposes: **components propose, gates decide.** This is enforced
-structurally — the IR has no order/exchange primitive, only `Intent` nodes, and emitting intents
-requires `intent.emit` in the module's effect manifest.
+### 1. Strategy IR and validation
 
----
-
-## Build order
-
-### Milestone 1 — Nano IR  ✅
-
-`nano/ir/` — a few primitives only:
-
-| Node | Purpose |
-|---|---|
-| `Schedule(interval)` | when the graph evaluates ("5m") |
-| `Condition(signal, operator, value)` | e.g. RSI < 30 |
-| `Intent(action, asset, confidence)` | proposal, never an order |
-| `Agent(name)` | named behavior blocks; `agent N { role research }` |
-
-Target: this JSON **is** a runnable strategy:
+`nano/ir/` defines the versioned `StrategyGraph` representation. It supports a schedule, flat numeric conditions, intents, and metadata-only agent labels. A valid serialized strategy includes its version and effect manifest:
 
 ```json
 {
   "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "Momentum",
+  "effects": ["intent.emit", "log.append"],
   "nodes": [
-    { "type": "Schedule",  "interval": "5m" },
-    { "type": "Condition", "signal": "RSI", "operator": "<", "value": 30 },
-    { "type": "Intent",    "action": "BUY", "asset": "BTC" }
+    {"type": "Schedule", "interval": "5m"},
+    {"type": "Condition", "signal": "RSI", "operator": "<", "value": 30},
+    {"type": "Intent", "action": "BUY", "asset": "BTC"}
   ]
 }
 ```
 
-### Milestone 2 — Reference interpreter  ✅
+### 2. Deterministic reference runtime
 
-`nano/runtime/` — execute before you compile:
+`nano/runtime/` evaluates validated strategy IR against an injected `MarketFrame`. The caller supplies timestamps and aligned signal series. The runtime emits intents and an ordered, in-memory event log; it does not fetch data or act externally.
 
-```python
-result = interpreter.execute(strategy_graph, market_frame)
-```
+### 3. Conformance corpus
 
-1. Load IR (manifest-checked). 2. Evaluate conditions against injected signal series
-(no ambient clock, no lookahead). 3. Produce intents. 4. Log everything (replayable).
+`nano/examples/` contains paired source and IR fixtures. `nano/library/` extends that pattern with a trading-oriented strategy corpus. The tests compile pairs, validate IR, and replay reference execution.
 
-Pipeline shape: `price stream → condition → TRUE → Intent → [hand-off] → risk engine →
-execution decision`. The hand-off is Milestone 5.
+### 4. .nano source compiler
 
-### Milestone 3 — Example corpus  ✅
+`nano/compiler/` implements the locked v0.1 grammar with a handwritten lexer and recursive-descent parser. The compiler lowers source to canonical strategy IR; it does not implement static typing, optimization passes, or bytecode generation.
 
-`nano/examples/` — becomes the language test suite: `basic_rsi`, `momentum`, `mean_reversion`,
-`volatility_guard`, `risk_manager`, `ai_agent`. Hand-written IR JSON now; the same examples must
-compile from `.nano` source in Milestone 4 and produce identical IR.
+### 5. Host decision-gate bridge
 
-### Milestone 4 — `.nano` syntax → IR  ✅
+`nano/bridge/` connects the reference runtime to a host-provided `DecisionGate` and records its decisions. `Backtester.verify_replay()` detects differences between two serialized bridge runs. The bridge remains a reference adapter: policy, persistence, and external action belong to the host.
 
-`nano/compiler/` — lexer, parser, compiler for the strategy subset:
+### 6. Editor-service helpers
 
-```nano
-strategy Momentum {
-  every 5m {
-    if RSI(14) < 30 { execute() }
-  }
-}
-```
+`nano/aethercode/` provides syntax/semantic tokens, diagnostics, and IR-preview functions. It is an engine layer, not a packaged editor extension.
 
-compiles to exactly the Milestone-1 JSON. Conformance rule: compiled IR replays identically to the
-hand-written IR for every example.
+## Adjacent experimental primitives
 
-### Milestone 5 — Risk-gate integration  ✅ (reference adapter in `nano/bridge/`)
+- `nano/memory/` provides standalone pattern retrieval and an `escalate` boolean; it is not a runtime model-routing system.
+- `nano/loop/` provides separate loop-document validation, mutation-admission helpers, and a deterministic simulator protocol; it does not execute an autonomous loop.
+- `nano/bridge/provenance.py` is an optional adapter that requires its external dependency and signs side-channel receipts.
 
-First execution integration. Flow: `Nano IR → bridge (host-platform adapter) → risk engine →
-execution decision`. The bridge loads IR, verifies the effect manifest, streams recorded market
-frames through the interpreter, and forwards intents into the host platform's risk/release-gate
-discipline. The backtester runs the same IR against historical frames — bit-identical replay is
-the acceptance test. The reference adapter here defines the `DecisionGate` protocol any platform
-can implement; Aether ATS is the first consumer.
+## Work that remains outside the v0.1 implementation
 
-An optional `ProvenanceGate` (`nano/bridge/provenance.py`) wraps any `DecisionGate` to bind
-each decision to a signed, independently verifiable receipt — for platforms that need
-non-repudiable proof a decision happened, not just a log line. Fully outside the language: a
-`.nano` author can't see or reach it. Requires the optional `provenance` extra
-(`pip install aether-nano[provenance]`); see `examples/provenance_signing_demo.py`.
+The repository does not currently provide CLI commands, a type system, look-ahead analysis, an LLM runtime, automatic escalation, live data or exchange connectors, persistent core audit storage, general agent coordination, a loop executor, or real quantum-hardware dispatch.
 
-### Milestone 6 — Editor tooling  ✅ engine layer (`nano/aethercode/`; extension packaging pending)
-
-Not a whole IDE. The pure language-service engine first: syntax highlighting (semantic tokens),
-diagnostics, IR preview (`if RSI < 30 { … }` → shows the compiled ConditionNode). Packaged as a
-VS-Code-style extension by the host editor.
-
-### Milestone 7 — Host-platform compiler inputs
-
-Advanced compiler-input integrations (systems that discover computational patterns and feed them
-to Nano) live in the host platform, not this repo.
-
-### Where Nano++ starts
-
-Much later, as an extension over the same IR (`Nano → Nano IR → Nano++`). Do not begin with
-advanced computational features; the mistake would be building that syntax before the execution
-graph is proven.
-
----
-
-## Original 30-day plan (for the record)
-
-| Week | Build | Exit |
-|---|---|---|
-| 1 | Nano package, IR schema, JSON serialization, basic interpreter | A JSON strategy executes deterministically |
-| 2 | Lexer/parser, `.nano` files compile to IR | `if RSI < 30 { buy(BTC) }` works end-to-end |
-| 3 | Risk-gate bridge, risk-layer hand-off, backtester | Nano strategies simulate against a host risk engine |
-| 4 | Editor extension: highlighting + IR visualizer | Developer edits Nano with live IR preview |
-
-## Alternate ordering (rejected)
-
-For the record: building the bridge inside a host trading platform first, then extracting the
-package, was rejected because the IR + runtime are ecosystem-wide — many runtimes and tools
-consume them — so they belong in the standalone repo from day one, with the host platform as the
-first *consumer*, not the owner.
+The [design-note series](docs/papers/README.md) discusses some of these possible directions. It is not a substitute for the implemented contract.

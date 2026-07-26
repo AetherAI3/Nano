@@ -1,10 +1,7 @@
-"""LoopGraph — a compiled autonomous optimization loop (Nano++).
+"""Validated Nano++ LoopGraph data model.
 
-A LoopGraph is to an optimization *process* what a StrategyGraph is to a trading
-rule: a validated, content-addressable, replayable DAG. Trading, engineering,
-and quantum-optimization workloads each supply different node payloads over the
-same graph. Load-time validation is the security boundary — forward references,
-unknown stages, and undeclared capabilities are rejected here, not at runtime.
+A LoopGraph serializes, validates, and hashes a proposed loop document. This
+module does not compile or execute a loop, perform replay, or deploy changes.
 """
 
 from __future__ import annotations

@@ -1,5 +1,8 @@
 # 07 — Nano vs. Pine Script and Trading DSLs
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Pine Script draws indicators and fires alerts inside a charting product; Nano compiles decisions into a gated, replayable execution substrate — they share a surface vocabulary and almost nothing else.
 
 ---

@@ -132,10 +132,17 @@ byte-different documents granting the same capability would otherwise make
 
 ## Documentation
 
-The docs described the previous release. The worst offender was
-`CONTRIBUTING.md`, which told contributors that *"`nano compile` / `nano replay` /
-`nano visualize` are designed but not built"* — inviting someone to rebuild
-shipped, tested code.
+The docs described the previous release. `CONTRIBUTING.md` told contributors that
+*"`nano compile` / `nano replay` / `nano visualize` are designed but not built"* —
+inviting someone to rebuild shipped, tested code.
+
+A documentation overhaul landed on `main` in parallel with this work (README
+380 → 113 lines, new `docs/{architecture,language,status}.md`, all 17 papers
+edited). That rewrite is newer and better structured than the corrections drafted
+here, so it was adopted wholesale and only the v0.1.0-specific claims v1.0
+invalidates were patched on top: "does not calculate indicators", "number
+literals cannot be negative", "one schedule and one rule per strategy", and the
+capability table's CLI and typing rows.
 
 Three documented examples did not compile, and had not for several releases:
 

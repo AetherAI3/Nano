@@ -1,5 +1,8 @@
 # 10 — The Nano Family
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Nano, Nano+, and Nano++ are three capability tiers over one compiler and one IR — deterministic execution, adaptive execution, and large-scale computational execution — so a user grows without ever migrating.
 
 ---

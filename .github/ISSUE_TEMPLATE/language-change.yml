@@ -1,0 +1,52 @@
+name: Language or IR proposal
+description: Propose a focused change to Nano syntax, IR, or reference-runtime behavior.
+title: "[language]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nano is intentionally small. Explain the problem first, then show how the proposal preserves deterministic reference execution and the host-owned decision boundary.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the concrete limitation or user need.
+    validations:
+      required: true
+  - type: textarea
+    id: syntax
+    attributes:
+      label: Proposed .nano syntax
+      description: Show a minimal before/after example.
+      render: nano
+    validations:
+      required: true
+  - type: textarea
+    id: ir
+    attributes:
+      label: Strategy IR impact
+      description: Show the expected JSON shape or explain why the existing IR remains sufficient.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: semantics
+    attributes:
+      label: Determinism and replay semantics
+      description: Explain inputs, ordering, scheduling, and how two identical graph/frame inputs retain the same reference result.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Host and gate boundary
+      description: Explain data ownership, policy ownership, and why the proposal cannot bypass a host DecisionGate.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility, tests, and documentation
+      description: Note migration/versioning impact and the tests/docs that must change.
+    validations:
+      required: true

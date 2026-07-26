@@ -1,68 +1,41 @@
-# Nano++ — The Autonomous Optimization Loop
+# Nano++ experimental loop primitives
 
-**Status:** design + reference implementation (`nano/loop/`).
+**Status:** experimental data-model and admission primitives in `nano/loop/`; not an executable autonomous optimization system.
 
-Nano started by describing trading strategies. Nano++ describes **execution itself**: it turns an
-optimization *process* into a deterministic, replayable execution graph. The reasoning model does
-not stay in the loop — it *builds* the loop, then the loop runs on its own.
+Nano++ is a research direction adjacent to the core strategy DSL. The code currently provides three narrowly scoped building blocks:
 
-```
-Think once → Compile → Execute N times → Only think again when necessary.
-```
+1. `LoopGraph` validates and serializes a separate loop document with ordered node references and effect declarations.
+2. `admit_mutation()` makes a deterministic admission decision from caller-supplied candidate facts such as replay match, regression count, benchmark delta, and allowed capabilities.
+3. `QuantumRuntime` defines a protocol and `SimulatorRuntime` returns deterministic, hash-derived reference results for a `QuantumJob`.
 
-## The universal lifecycle
+None of these modules executes a loop, invokes a model, performs benchmarking, mutates a running system, deploys changes, or dispatches work to a real quantum processor.
 
-Trading, security response, quantum-circuit tuning, robotics — different domains, one shape:
+## What LoopGraph does
 
-```
-observe → propose → compile → execute → measure → verify → admit → repeat
-```
+A `LoopGraph` is a validated, serializable document whose nodes have IDs, stage names, ordered input references, and free-form attributes. It rejects unknown stages, forward references, duplicate IDs, unknown effects, and stages that lack their required declared capability.
 
-Every stage is deterministic, every transition recorded, every optimization replayable. Domains
-supply different node payloads; the lifecycle never changes. Trading emits BUY/SELL; another
-domain emits a different `Execute` payload — the graph is identical.
-
-## Universal node vocabulary (`nano/loop/nodes.py`)
-
-Fifteen stage kinds compose any autonomous loop:
-
-`Observe` · `Infer` · `Evaluate` · `Optimize` · `Mutate` · `Verify` · `Gate` · `Execute` ·
-`Pause` · `Replay` · `Checkpoint` · `Rollback` · `Escalate` · `Sign` · `Benchmark`
-
-A `LoopGraph` (`nano/loop/graph.py`) is a validated, content-addressable DAG. Forward references
-and undeclared capabilities are load-time rejections — the same effect-manifest security model the
-strategy IR uses: a stage that needs a capability the graph did not declare cannot run.
-
-## Safe self-mutation (`nano/loop/mutation.py`)
-
-A loop that rewrites itself must never mutate live. Every proposed change becomes an engineering
-artifact through four gates in order:
-
-```
-1. Proposal     — a model proposes an improvement
-2. Compilation  — the proposal becomes a deterministic artifact
-3. Verification — replay match · benchmark gain · zero regressions · static analysis · capability check
-4. Admission    — policy · risk · provenance · capability ceiling
+```text
+Loop document -> LoopGraph.from_dict() -> validation / content_hash()
 ```
 
-`admit_mutation` returns the blocking stage + reason on failure, or a gated artifact marked
-`admitted_pending_deploy` on success. **Nothing deploys automatically** — an operator does.
-Components propose; gates decide.
+`LoopGraph.content_hash()` is deterministic for the loop document. This property belongs to the separate experimental loop representation; it does not make `StrategyGraph` content-addressed and does not provide loop execution or replay.
 
-## Vendor-agnostic quantum runtime (`nano/loop/quantum.py`)
+## Mutation admission
 
-Nano knows *quantum jobs*, not vendors. A `QuantumJob(circuit_id, shots, params)` carries no
-vendor field; a backend implements the `QuantumRuntime` protocol
-(`submit(job) → QuantumResult{backend, fidelity, distribution}`). Swapping hardware swaps the
-runtime, never the loop. `SimulatorRuntime` is the deterministic reference backend, so loop
-replays stay bit-identical whether they run on a simulator today or dedicated hardware later.
+`Candidate` is input to `admit_mutation()`, not an artifact that Nano creates by itself. The helper checks, in order:
 
-## Why it matters
+```text
+replay match -> no regressions -> static flag -> benchmark gain -> capability ceiling
+```
 
-One execution model across every autonomous system. The loop is deterministic and replayable, so
-"why did the system do that?" always has an exact, reproducible answer — and a self-improving
-system can never ship an unverified change. Trading is the proving ground because it has
-deterministic inputs and measurable outcomes; the architecture generalizes to any
-Observe → Decide → Act → Record loop.
+On success it returns an `admitted_pending_deploy` record. A host or operator must decide whether and how to deploy anything. This is useful as a small policy primitive, not evidence of autonomous self-modification.
 
-*Reference implementation: `nano/loop/` and `nano/memory/`, covered by the repo test suite.*
+## Simulator protocol
+
+`SimulatorRuntime` implements `QuantumRuntime.submit(job)` as a pure, hash-derived reference calculation. It exists to make the interface testable without a vendor dependency. There is no real hardware connector, performance claim, or quantum advantage claim in this repository.
+
+## Relationship to core Nano
+
+The core `.nano` strategy pipeline is documented in [architecture.md](architecture.md). It compiles source into `StrategyGraph` and runs it over a `MarketFrame`. Nano++ does not share a runtime or executor with that path today.
+
+For current maturity boundaries, see [status.md](status.md) and the [design-notes index](papers/README.md).

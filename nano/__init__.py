@@ -1,10 +1,12 @@
-"""Nano — deterministic intelligence execution graphs.
+"""Nano - deterministic, host-governed rule execution.
 
-IR-first: the execution graph (nano.ir) and reference runtime (nano.runtime) came
-before the surface language (nano.compiler), and the IR is still the contract
-every runtime speaks.
+The core package provides an IR-first strategy DSL with static typing, a
+reference interpreter and VM, and host-gate integration primitives. It does not
+include an LLM runtime, live-action connector, or general agent executor: a
+reasoning provider is a protocol the host implements, and market data arrives as
+frames the host supplies.
 
-The v1.0 layout:
+Package map:
 
 | Package | Role |
 |---|---|
@@ -17,10 +19,10 @@ The v1.0 layout:
 | ``nano.data`` | the one place that reads a file |
 | ``nano.cli`` | check, compile, replay, visualize |
 | ``nano.aethercode`` | editor language services |
-| ``nano.memory`` / ``nano.loop`` | compiled-pattern cache, Nano++ loop IR |
+| ``nano.memory`` / ``nano.loop`` | compiled-pattern cache, loop IR |
 
-Kept dependency-free on purpose: `pip install aether-nano` pulls in nothing, so a
-compiled artifact cannot change behavior because a transitive dependency did.
+Kept dependency-free on purpose: installing pulls in nothing, so a compiled
+artifact cannot change behavior because a transitive dependency did.
 """
 
 __version__ = "1.0.0"

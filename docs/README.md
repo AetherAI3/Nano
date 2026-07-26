@@ -1,14 +1,28 @@
-# docs/
+# Nano documentation
 
-Documentation for the Nano language and runtime.
+This directory separates the **implemented contract** from **design notes and research directions**.
 
-- **[papers/](papers/)** — the research-paper series. One question per paper, from
-  *Why Nano?* through determinism, provenance, the language comparisons, and the
-  quantum / heterogeneous-compute research track. Start at [papers/README.md](papers/README.md).
-- **[nano-optimization-loop.md](nano-optimization-loop.md)** — overview of the Nano++
-  autonomous optimization loop (`nano/loop/`).
+For questions about what Nano does today, start with the reference documents below. The source and test suite are authoritative when documentation is unclear or out of date.
 
-For the top-level story, see the repository [README.md](../README.md) and
-[BUILD_ORDER.md](../BUILD_ORDER.md). The language contract is defined by the code:
-`nano/ir/` (the IR schema), `nano/runtime/` (the reference interpreter), and
-`nano/examples/` (the conformance corpus).
+## Reference documentation
+
+| Document | Purpose |
+| --- | --- |
+| [Architecture](architecture.md) | The actual source -> IR -> interpreter -> host-gate flow and module boundaries. |
+| [Language reference](language.md) | The locked v0.1.0 grammar, IR shape, and execution semantics. |
+| [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
+| [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |
+| [Build notes](../BUILD_ORDER.md) | Historical sequencing and the project's architectural constraints. |
+| [Security policy](../SECURITY.md) | Reporting process and the boundary of Nano's guarantees. |
+
+## Integration examples
+
+- [`../examples/`](../examples/) contains runnable host-integration demonstrations.
+- [`../nano/examples/`](../nano/examples/) is the source/IR conformance fixture corpus, not a generic application-examples directory.
+- [`../nano/aethercode/`](../nano/aethercode/) contains pure editor-service helpers (diagnostics, semantic tokens, and IR preview), not a packaged editor extension.
+
+## Design notes and research directions
+
+[`papers/`](papers/) contains essays about the broader Nano thesis, possible LLM integration, autonomous optimization, and research directions. These documents may describe proposals that are not part of the runtime. Treat them as design material, not as a language specification or a promise of current behavior.
+
+For the project entry point, return to the repository [README](../README.md).

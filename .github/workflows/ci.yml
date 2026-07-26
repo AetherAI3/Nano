@@ -14,11 +14,41 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "${{ matrix.python-version }}"
       - name: Install
         run: pip install -e . pytest
       - name: Run tests
         run: pytest -q
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Build wheel
+        run: python -m pip wheel --no-deps --wheel-dir dist .
+      - name: Verify packaged strategy assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheel = next(Path("dist").glob("*.whl"))
+          expected = {
+              path.as_posix()
+              for root in (Path("nano/examples"), Path("nano/library"))
+              for path in root.rglob("*")
+              if path.suffix in {".nano", ".json"}
+          }
+          with ZipFile(wheel) as archive:
+              packaged = set(archive.namelist())
+
+          missing = sorted(expected - packaged)
+          assert not missing, f"wheel is missing documented strategy assets: {missing}"
+          PY

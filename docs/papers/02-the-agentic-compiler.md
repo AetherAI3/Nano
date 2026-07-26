@@ -1,5 +1,8 @@
 # 02 — The Agentic Compiler
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Nano's compiler does not translate algorithms into machine code — it extracts repeatable decisions from a reasoning model and fixes them into a deterministic, auditable execution graph.
 
 ---

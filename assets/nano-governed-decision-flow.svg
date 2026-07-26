@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-labelledby="title description">
+  <title id="title">From a Nano strategy to a host-governed decision</title>
+  <desc id="description">A Nano strategy is compiled to StrategyGraph IR and evaluated with host-provided market data. The runtime emits an intent and run log, then the host decision gate produces a decision record.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+    </marker>
+  </defs>
+
+  <rect width="1200" height="320" rx="18" fill="#ffffff" />
+
+  <g fill="none" stroke="#475569" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M 160 140 H 195" />
+    <path d="M 340 140 H 375" />
+    <path d="M 520 140 H 555" />
+    <path d="M 720 140 H 755" />
+    <path d="M 900 140 H 935" />
+    <path d="M 1080 140 H 1115" />
+    <path d="M 638 245 V 185" />
+  </g>
+
+  <g font-family="Arial, Helvetica, sans-serif" text-anchor="middle" fill="#0f172a">
+    <g>
+      <rect x="20" y="95" width="140" height="90" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+      <text x="90" y="132" font-size="18" font-weight="700">Nano</text>
+      <text x="90" y="158" font-size="17">strategy</text>
+    </g>
+    <g>
+      <rect x="195" y="95" width="145" height="90" rx="12" fill="#e0f2fe" stroke="#0284c7" stroke-width="2" />
+      <text x="267.5" y="132" font-size="18" font-weight="700">Nano</text>
+      <text x="267.5" y="158" font-size="17">compiler</text>
+    </g>
+    <g>
+      <rect x="375" y="95" width="145" height="90" rx="12" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2" />
+      <text x="447.5" y="132" font-size="18" font-weight="700">StrategyGraph</text>
+      <text x="447.5" y="158" font-size="17">IR</text>
+    </g>
+    <g>
+      <rect x="555" y="95" width="165" height="90" rx="12" fill="#e0e7ff" stroke="#4f46e5" stroke-width="2" />
+      <text x="637.5" y="132" font-size="18" font-weight="700">Reference</text>
+      <text x="637.5" y="158" font-size="17">runtime</text>
+    </g>
+    <g>
+      <rect x="755" y="95" width="145" height="90" rx="12" fill="#dcfce7" stroke="#16a34a" stroke-width="2" />
+      <text x="827.5" y="132" font-size="18" font-weight="700">Intent</text>
+      <text x="827.5" y="158" font-size="17">and run log</text>
+    </g>
+    <g>
+      <rect x="935" y="95" width="145" height="90" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+      <text x="1007.5" y="132" font-size="18" font-weight="700">Host decision</text>
+      <text x="1007.5" y="158" font-size="17">gate</text>
+    </g>
+    <g>
+      <rect x="1115" y="95" width="70" height="90" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+      <text x="1150" y="132" font-size="16" font-weight="700">Decision</text>
+      <text x="1150" y="158" font-size="15">record</text>
+    </g>
+    <g>
+      <rect x="545" y="245" width="185" height="55" rx="12" fill="#fef3c7" stroke="#d97706" stroke-width="2" />
+      <text x="637.5" y="278" font-size="17" font-weight="700">Host MarketFrame</text>
+    </g>
+  </g>
+
+  <g font-family="Arial, Helvetica, sans-serif" fill="#475569" text-anchor="middle">
+    <text x="637.5" y="42" font-size="24" font-weight="700">From source to a governed decision</text>
+    <text x="637.5" y="67" font-size="16">Nano evaluates a rule; the host retains the authority to act.</text>
+  </g>
+</svg>

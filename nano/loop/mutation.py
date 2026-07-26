@@ -1,17 +1,7 @@
-"""Safe self-mutation — the four-stage admission pipeline (Nano++).
+"""Deterministic Nano++ mutation-admission helper.
 
-Autonomous systems that rewrite their own loops must never mutate live. Every
-proposed change becomes an engineering artifact that passes four gates in order:
-
-    1. Proposal      — a model proposes an improvement (upstream; a Candidate)
-    2. Compilation    — the proposal is a deterministic loop artifact
-    3. Verification   — replay match, benchmark gain, zero regressions, static
-                        analysis, capability validation
-    4. Admission      — policy, risk, provenance, capability ceiling
-
-Nothing here deploys. `admit_mutation` returns a decision + (on success) the
-admitted artifact for a human/operator to deploy. This mirrors the trading
-system's release-gate discipline: components propose, gates decide.
+``admit_mutation`` evaluates caller-supplied candidate facts and returns an
+admission record. It does not generate, compile, verify, or deploy a mutation.
 """
 
 from __future__ import annotations

@@ -1,5 +1,8 @@
 # 04 — Provenance: Protocol C
 
+> **Design-note scope:** This essay may discuss proposals or research hypotheses beyond Nano v0.1.0. For the implemented contract, see [Architecture](../architecture.md), [Language](../language.md), and [Status](../status.md).
+
+
 **Answer in one sentence:** Protocol C is Nano's cryptographic execution protocol — a chain of verifiable answers to who proposed a behavior, what compiled, what executed, who approved it, what changed, and when.
 
 ---
