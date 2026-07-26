@@ -28,7 +28,7 @@ The current library contains 15 strategies across six familiar categories. Brows
 
 ## Signal conventions
 
-Nano compares **host-provided named signal series** with numeric literals. It does not calculate indicators or fetch market data. The names and transformations below are conventions a host data feed must implement.
+Library entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable baseline IR. Nano v1.0 *can* compute indicators — `RSI(close, 14)` and 32 others — but a library entry that did so would emit v1.0 IR and change its pinned fixture. Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
 
 | Pine-style expression | Nano signal | Feed convention |
 | --- | --- | --- |
@@ -51,7 +51,7 @@ Nano compares **host-provided named signal series** with numeric literals. It do
 
 Two v0.1 details matter:
 
-1. Number literals cannot be negative. If an indicator naturally has a negative range, transform it in the feed and document the convention in a `//` comment.
+1. Baseline IR cannot carry a negative literal. The v1.0 grammar supports unary minus, but a library entry using it would leave baseline IR — so signals with negative natural ranges are still shifted (`WILLR_POS`) or negated (`ZSCORE_NEG`) by the feed. Document the transform in a `//` comment.
 2. The parenthesized integer is documentation only. `RSI(14)` and `RSI` compile to the same `ConditionNode(signal="RSI", ...)`; the feed owns the actual lookback calculation.
 
 ## Intent boundary
@@ -66,7 +66,7 @@ A corpus strategy can emit `BUY`, `SELL`, `EXECUTE`, `PAUSE`, or `OBSERVE` inten
 ## Adding a strategy
 
 1. Choose an existing category or propose a new one.
-2. Add `<name>.nano` using the [v0.1 grammar](../../docs/language.md): one `every` block, one `if` rule, AND-chained conditions, and supported intent actions.
+2. Add `<name>.nano` using the [v0.1.0 subset](../../docs/language.md): one `every` block, one `if` rule, AND-chained conditions, and supported intent actions. Staying inside it is what keeps the checked-in IR byte-stable.
 3. Add the matching `<name>_ir.json` with the canonical `compile_to_dict()` output.
 4. Document every derived-signal convention in a source comment.
 5. Run `python -m pytest tests/test_library.py -q`.

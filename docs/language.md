@@ -60,7 +60,7 @@ MarketFrame(
 )
 ```
 
-Nano does not calculate indicators. A data feed must compute `RSI`, `VOLUME`, or any other named signal before calling the runtime.
+Two forms exist, distinguished structurally rather than by heuristic. `RSI(14)` — one constant integer argument — is a **feed signal**: the host computes it and injects the series. `RSI(close, 14)` — a series argument — is **computed** by `nano/indicators/`. Nano never fetches data in either case; a feed supplies the frame.
 
 The optional parenthesized integer in a condition is a source-level convention only: `RSI(14)` and `RSI` compile to the same `ConditionNode(signal="RSI", ...)`. Use the annotation to document the feed contract; do not expect the runtime to apply a lookback window.
 

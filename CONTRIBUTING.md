@@ -4,7 +4,7 @@ Welcome. Nano is an alpha reference implementation, and its best contributions m
 
 ## Start here
 
-| If you want to… | Start with… |
+| If you want toâ€¦ | Start withâ€¦ |
 | --- | --- |
 | Translate a familiar trading idea | [Add a strategy](#add-a-strategy) |
 | Suggest grammar, IR, or runtime behavior | [Open a language proposal](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml) |
@@ -50,7 +50,7 @@ The [strategy library](nano/library/README.md) is the easiest way to learn and e
 4. Generate the expected IR with `compile_to_dict()` and keep it formatted like neighboring entries.
 5. Run `python -m pytest tests/test_library.py -q`, then the full suite before opening the pull request.
 
-Nano v0.1 has one schedule and one rule per strategy, AND-chained numeric conditions, and five intent actions. The host supplies every signal and still owns every real-world action. See the [language reference](docs/language.md) before designing a new strategy shape.
+Library entries are deliberately written in the v0.1.0 subset — one `every` block, one `if` rule, AND-chained numeric conditions — so they compile to byte-stable baseline IR. The v1.0 grammar allows more (multiple rules, `else`, arithmetic, `or`/`not`, declarations, computed indicators); reaching for it moves the entry to v1.0 IR, which is fine for `nano/examples/` but changes the library's pinned fixtures. The host supplies every signal and still owns every real-world action. See the [language reference](docs/language.md).
 
 For a normal strategy addition, the library tests automatically discover the source/IR pair and verify compilation, validation, and replay. Add a focused fire/no-fire test only when the new example covers a meaningful runtime edge not already represented.
 

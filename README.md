@@ -59,7 +59,7 @@ strategy Momentum {
 ```
 <!-- README-EXAMPLE:END -->
 
-`RSI(14)` is a source-level signal convention. In v0.1.0, the host computes and injects the `RSI` series; Nano does not calculate indicators or fetch market data. See the [language reference](docs/language.md) for the exact contract.
+`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 33 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
 
 ## From rule to governed decision
 
@@ -77,7 +77,7 @@ The [strategy library](nano/library/README.md) is Nano's community on-ramp: a sm
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
-[Browse strategies →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
+[Browse strategies â†’](nano/library/README.md) Â· [Add a strategy â†’](CONTRIBUTING.md#add-a-strategy) Â· [Propose a language change â†’](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
 
 ## Small by design
 
@@ -87,7 +87,7 @@ The library is a conformance corpus, not a performance claim, live signal servic
 | Named numeric signal series and AND-only threshold conditions | Policy, approvals, persistence, and external effects |
 | Proposed `buy`, `sell`, `execute`, `pause`, and `observe` intents | API calls, exchange execution, and any action with consequences |
 
-The current implementation has no variables, arithmetic, functions, imports, `or`/`not`, type system, CLI, LLM runtime, live data feed, or action executor. [`docs/status.md`](docs/status.md) separates implemented behavior from experimental work and future ideas.
+v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. It still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](docs/status.md) separates implemented behavior from experimental work and future ideas.
 
 ## Build with Nano
 

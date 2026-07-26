@@ -239,8 +239,11 @@ def test_confidence_out_of_range():
     assert "out of range [0, 1]" in err.message
 
 
-def test_two_schedule_blocks():
-    err = _compile_error(
+def test_two_schedule_blocks_compile_as_v1_ir():
+    # v0.1.0 allowed at most one schedule because its flat document had exactly
+    # one Schedule slot. v1.0's DAG holds several, so this now compiles -- and the
+    # version bump is the visible evidence that it needed the richer shape.
+    ir = compile_to_dict(
         "strategy S {\n"
         "    every 5m {\n"
         "    }\n"
@@ -248,12 +251,18 @@ def test_two_schedule_blocks():
         "    }\n"
         "}\n"
     )
-    assert (err.line, err.column) == (4, 5)
-    assert "one schedule block" in err.message
+    assert ir["nanoIrVersion"] == "1.0.0"
+    assert [n["attrs"]["interval"] for n in ir["nodes"] if n["op"] == "schedule"] == [
+        "5m",
+        "1h",
+    ]
 
 
-def test_two_rules_in_one_schedule():
-    err = _compile_error(
+def test_two_rules_in_one_schedule_compile_as_v1_ir():
+    # Entry and exit in one schedule is the ordinary case for a real strategy.
+    # Baseline IR could not express two independent rules; v1.0 emits one `rule`
+    # node per rule, each with its own condition and body.
+    ir = compile_to_dict(
         "strategy S {\n"
         "    every 5m {\n"
         "        if RSI < 30 {\n"
@@ -265,8 +274,27 @@ def test_two_rules_in_one_schedule():
         "    }\n"
         "}\n"
     )
-    assert (err.line, err.column) == (6, 9)
-    assert "one rule" in err.message
+    assert ir["nanoIrVersion"] == "1.0.0"
+    assert len([n for n in ir["nodes"] if n["op"] == "rule"]) == 2
+    assert len(ir["entries"]) == 2
+    # One shared feed.signal node: RSI is read twice but is one data source.
+    assert len([n for n in ir["nodes"] if n["op"] == "feed.signal"]) == 1
+
+
+def test_single_rule_strategies_still_emit_baseline_ir():
+    # The other half of the contract: reaching v1.0 happens only when the program
+    # actually needs it. Anything baseline can express stays byte-identical.
+    assert compile_to_dict(MOMENTUM_SRC)["nanoIrVersion"] == "0.1.0"
+
+
+def test_a_higher_tier_forces_v1_ir_even_with_a_baseline_shaped_body():
+    # Baseline IR has no `tier` field, so emitting it for a `nano+` module would
+    # silently drop the declaration -- and the tier is an auditable statement about
+    # whether a model can be in the loop, not a formatting detail.
+    source = "tier nano+\n" + MOMENTUM_SRC
+    document = compile_to_dict(source)
+    assert document["nanoIrVersion"] == "1.0.0"
+    assert document["tier"] == "nano+"
 
 
 def test_unterminated_block():

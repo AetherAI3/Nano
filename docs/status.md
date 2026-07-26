@@ -4,7 +4,11 @@ Nano is an **alpha reference implementation**. This page distinguishes code that
 
 | Area | Status | Evidence and boundary |
 | --- | --- | --- |
-| `.nano` lexer, parser, and canonical code generation | Implemented | `nano/compiler/` parses the locked v0.1 grammar and produces `StrategyGraph`. There is no type system or optimizer pipeline. |
+| `.nano` lexer, parser, and canonical code generation | Implemented | `nano/compiler/` parses the v1.0 grammar and produces `StrategyGraph` (baseline IR) or `NanoModule` (v1.0 IR). |
+| Static typing and look-ahead protection | Implemented | `nano/types/` types `series<T>`, resolves indicator periods at compile time, and rejects any series offset that is negative or not a compile-time constant. |
+| Computed indicators | Implemented | `nano/indicators/` ships 33 deterministic kernels with pinned degenerate-case conventions. The feed-signal form still works. |
+| CLI | Implemented | `nano check / compile / replay / visualize / indicators / version` in `nano/cli/`. |
+| Risk-limit enforcement | Partial | A `risk { ... }` block parses, range-checks, and reaches the IR, but nothing enforces the limits at run time yet. |
 | Strategy IR validation | Implemented | `nano/ir/` validates the supported data shape and selected effect-manifest constraints. `StrategyGraph` is serializable but not content-addressed. |
 | Reference interpreter and scheduler | Implemented | `nano/runtime/` evaluates injected `MarketFrame` data deterministically and returns intents plus an in-memory log. |
 | Host decision-gate bridge and replay checker | Implemented | `nano/bridge/` forwards intents to a caller-provided `DecisionGate`; it never actuates externally. |
@@ -16,7 +20,6 @@ Nano is an **alpha reference implementation**. This page distinguishes code that
 
 ## Not implemented in this repository
 
-- CLI commands such as `nano compile`, `nano replay`, or `nano visualize`
 - static typing, `Series<T>`, look-ahead protection, arithmetic, or indicator computation
 - LLM calls, automatic escalation, confidence routing, or multi-agent coordination
 - live market data, exchange/API clients, order execution, or a built-in policy/risk engine

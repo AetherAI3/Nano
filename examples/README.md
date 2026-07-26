@@ -8,8 +8,8 @@ pieces together.
 
 ## provenance_signing_demo.py
 
-Wraps a toy risk engine with [`ProvenanceRiskEngine`](../nano/bridge/provenance.py)
-so every risk-gate decision — approved or rejected — is signed via
+Wraps a toy risk engine with [`ProvenanceGate`](../nano/bridge/provenance.py)
+so every decision-gate decision — approved or rejected — is signed via
 [Protocol-C](https://github.com/DBarr3/PROTOCOL-C) into an append-only,
 independently verifiable audit log, with zero changes to the strategy or the
 decision itself.
