@@ -10,6 +10,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
 
+### **[→ Browse the Strategy Library](https://aethersystems.net/nano)**
+
+Read every strategy in this repo — source, compiled IR, signals and provenance — in
+your browser. No install, no account. Open any one of them straight into an editor.
+
 </div>
 
 > **Write readable trading rules. Replay every outcome. Keep the final decision in your application.**
@@ -71,13 +76,15 @@ Nano owns parsing, IR validation, and deterministic reference evaluation. The ho
 
 The [strategy library](nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
 
+The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems.net/nano)** — search and filter by category, cadence or signal, read the source and compiled IR side by side, and open any strategy directly in an editor. Nothing to install, no account needed.
+
 | Momentum | Mean reversion | Trend | Volatility | Volume | Risk |
 | --- | --- | --- | --- | --- | --- |
 | 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 1 strategy |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
-[Browse strategies â†’](nano/library/README.md) Â· [Add a strategy â†’](CONTRIBUTING.md#add-a-strategy) Â· [Propose a language change â†’](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
+[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
 
 ## Small by design
 
