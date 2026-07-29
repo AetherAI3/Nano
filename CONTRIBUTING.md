@@ -4,7 +4,7 @@ Welcome. Nano is an alpha reference implementation, and its best contributions m
 
 ## Start here
 
-| If you want toâ€¦ | Start withâ€¦ |
+| If you want to… | Start with… |
 | --- | --- |
 | Translate a familiar trading idea | [Add a strategy](#add-a-strategy) |
 | Suggest grammar, IR, or runtime behavior | [Open a language proposal](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml) |
