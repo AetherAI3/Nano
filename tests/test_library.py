@@ -27,6 +27,7 @@ EXPECTED_CATEGORIES = {
     "volatility",
     "volume",
     "risk",
+    "event_volatility",
 }
 
 
@@ -142,6 +143,72 @@ def test_golden_cross_ignores_negative_spread():
     assert result.intents[0].action == "BUY"
     assert result.intents[0].asset == "SPY"
     assert result.intents[0].timestamp == 172800
+
+
+def test_cpi_twin_arms_are_mutually_exclusive():
+    # The host publishes CPI_COOL_SCORE and CPI_HOT_SCORE separately so the
+    # bull and bear branches can never both qualify on one print. Feed one
+    # tape where every shared gate passes: only the branch whose release
+    # score is high may fire.
+    long_graph = _load("event_volatility/cpi_impulse_pullback_long.nano")
+    short_graph = _load("event_volatility/cpi_impulse_pullback_short.nano")
+    shared = {
+        "EVENT_READY": (1.0, 1.0),
+        "ENTRY_WINDOW_OPEN": (1.0, 1.0),
+        "RELEASE_CONFIRMED": (1.0, 1.0),
+        "RETRACE_HOLD_SCORE": (0.8, 0.8),
+        "LIQUIDITY_OK": (1.0, 1.0),
+    }
+    cool_print = MarketFrame(
+        timestamps=(0, 5),
+        signals={
+            **shared,
+            "CPI_COOL_SCORE": (0.86, 0.86),
+            "CPI_HOT_SCORE": (0.0, 0.0),
+            "UPSIDE_IMPULSE_ATR": (1.4, 1.4),
+            "DOWNSIDE_IMPULSE_ATR": (0.1, 0.1),
+            "BULL_CROSS_CONFIRM": (0.7, 0.7),
+            "BEAR_CROSS_CONFIRM": (0.1, 0.1),
+        },
+    )
+    long_result = execute(long_graph, cool_print)
+    short_result = execute(short_graph, cool_print)
+    assert [i.action for i in long_result.intents] == ["BUY", "BUY"]
+    assert short_result.intents == ()
+
+
+def test_event_entry_fires_only_inside_entry_window():
+    # ENTRY_WINDOW_OPEN is the host's T+5s..T+180s gate: identical impulse
+    # tape, but the window closes on the last tick and the rule must abstain.
+    graph = _load("event_volatility/event_impulse_pullback_long.nano")
+    frame = MarketFrame(
+        timestamps=(0, 5, 10),
+        signals={
+            "EVENT_READY": (1.0, 1.0, 1.0),
+            "ENTRY_WINDOW_OPEN": (0.0, 1.0, 0.0),
+            "UPSIDE_IMPULSE_ATR": (1.2, 1.2, 1.2),
+            "RETRACE_HOLD_SCORE": (0.75, 0.75, 0.75),
+            "BULL_CROSS_CONFIRM": (0.7, 0.7, 0.7),
+            "LIQUIDITY_OK": (1.0, 1.0, 1.0),
+        },
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [("BUY", 5)]
+    assert result.intents[0].asset == "MES"
+    assert result.intents[0].confidence == 0.78
+
+
+def test_event_release_integrity_halt_pauses_on_conflict():
+    graph = _load("event_volatility/event_release_integrity_halt.nano")
+    frame = MarketFrame(
+        timestamps=(0, 1, 2),
+        signals={"RELEASE_CONFLICT": (0.0, 1.0, 1.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 1),
+        ("PAUSE", 2),
+    ]
 
 
 def test_atr_halt_emits_no_intent_in_calm_regime():

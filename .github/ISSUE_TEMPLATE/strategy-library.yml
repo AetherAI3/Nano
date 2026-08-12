@@ -17,6 +17,7 @@ body:
         - volatility
         - volume
         - risk
+        - event_volatility
         - new category proposal
     validations:
       required: true

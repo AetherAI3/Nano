@@ -78,9 +78,9 @@ The [strategy library](nano/library/README.md) is Nano's community on-ramp: a sm
 
 The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems.net/nano)** — search and filter by category, cadence or signal, read the source and compiled IR side by side, and open any strategy directly in an editor. Nothing to install, no account needed.
 
-| Momentum | Mean reversion | Trend | Volatility | Volume | Risk |
-| --- | --- | --- | --- | --- | --- |
-| 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 1 strategy |
+| Momentum | Mean reversion | Trend | Volatility | Volume | Risk | Event volatility |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 1 strategy | 11 strategies |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 

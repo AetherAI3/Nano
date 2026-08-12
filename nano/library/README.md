@@ -11,7 +11,7 @@ Every entry has two files:
 
 ## Learn, compare, contribute
 
-The current library contains 15 strategies across six familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 26 strategies across seven familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a strategy proposal →](https://github.com/DBarr3/Nano/issues/new?template=strategy-library.yml)
 
@@ -25,6 +25,7 @@ The current library contains 15 strategies across six familiar categories. Brows
 | `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout` |
 | `volume/` | `volume_spike_confirmation`, `obv_trend` |
 | `risk/` | `max_drawdown_breaker` |
+| `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
 
 ## Signal conventions
 
@@ -48,6 +49,31 @@ Library entries compare **host-provided named signal series** with numeric liter
 | volume spike | `VOL_RATIO(20)` | `volume / sma(volume, 20)` |
 | OBV trend | `OBV_SLOPE(20)` | Linear-regression slope of OBV |
 | equity drawdown | `DRAWDOWN` | Portfolio drawdown percentage |
+
+### Macro-event signals (`event_volatility/`)
+
+Event strategies consume a **host event engine** rather than bar indicators: the host arms a scheduled release window, measures the post-release tape deterministically, and publishes nonnegative bounded scores. Bull and bear terms are always separate series (never one signed value), which is what keeps twin-armed branches mutually exclusive and inside baseline IR. The full measurement definitions live in [`docs/event_signal_contract.md`](../../docs/event_signal_contract.md).
+
+| Event measurement | Nano signal | Feed convention |
+| --- | --- | --- |
+| armed event window | `EVENT_READY` | 0 or 1; scheduled high-impact window verified |
+| entry window | `ENTRY_WINDOW_OPEN` | 0 or 1; host-enforced T+5s..T+180s |
+| confirmed release | `RELEASE_CONFIRMED` | 0 or 1; release packet status CONFIRMED only |
+| release integrity | `RELEASE_CONFLICT` | 0 or 1; any source/hash/schedule conflict |
+| cool CPI print | `CPI_COOL_SCORE` | 0..1 from standardized forecast errors |
+| hot CPI print | `CPI_HOT_SCORE` | 0..1; published beside `CPI_COOL_SCORE` |
+| upward impulse | `UPSIDE_IMPULSE_ATR` | max upward excursion from event anchor / pre-event 1m ATR |
+| downward impulse | `DOWNSIDE_IMPULSE_ATR` | max downward excursion from event anchor / pre-event 1m ATR |
+| retracement hold | `RETRACE_HOLD_SCORE` | 1 - retracement/impulse, clamped 0..1 |
+| failed breakout | `BREAK_FAILURE_SCORE` | 0..1; range break then deterministic reclaim |
+| range break up/down | `PRE_EVENT_RANGE_BREAK_UP` / `_DOWN` | 0..1 against the versioned T-5m range |
+| anchor reclaim/reject | `EVENT_ANCHOR_RECLAIM` / `EVENT_ANCHOR_REJECT` | 0..1 at the T-10s..T-1s median mid anchor |
+| second leg | `SECOND_LEG_SCORE` | 0..1; impulse, compression, then fresh extreme, in order |
+| cross-market agreement | `BULL_CROSS_CONFIRM` / `BEAR_CROSS_CONFIRM` | 0..1 MES/MNQ + flow agreement |
+| order-flow confirmation | `BULL_FLOW_CONFIRM` / `BEAR_FLOW_CONFIRM` | 0..1 from the host futures feature fabric |
+| liquidity normalized | `LIQUIDITY_OK` | 0 or 1; spread and depth renormalized |
+| spread stress | `SPREAD_STRESS` | 0 = baseline, 1+ = severely stressed |
+| tape churn | `WHIPSAW_SCORE` | 0..1 normalized anchor crossings in the window |
 
 Two v0.1 details matter:
 
