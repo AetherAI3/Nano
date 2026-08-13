@@ -4,7 +4,7 @@
 
 # Nano
 
-### A deterministic DSL for replayable, host-governed decision rules.
+### Trading and agent rules that run the same way every time — with a receipt.
 
 [![CI](https://github.com/DBarr3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/DBarr3/Nano/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
@@ -17,11 +17,31 @@ your browser. No install, no account. Open any one of them straight into an edit
 
 </div>
 
-> **Write readable trading rules. Replay every outcome. Keep the final decision in your application.**
+> **Write the rule in plain text. Replay any decision. Keep final authority in your application.**
 
-Nano is a small, Python-embeddable language for transparent threshold rules. It compiles source into validated IR, evaluates host-provided numeric signals deterministically, and returns proposed `Intent` values with an ordered run log. It does not call an exchange, API, or other external system.
+Nano is a small, Python-embeddable language for transparent threshold rules. You write the rule; Nano compiles it into validated IR, evaluates it against numbers your system supplies, and returns proposed `Intent` values with an ordered run log of every step it took to get there. It does not call an exchange, API, or other external system.
 
-**Alpha reference implementation (v0.1.0).** The examples are trading-oriented, but Nano fits any system where a host supplies numeric signals and must retain control over what happens next.
+```nano
+strategy MaxDrawdownBreaker {
+    agent RiskDesk
+    every 1m {
+        if DRAWDOWN >= 5 {
+            pause()
+        }
+    }
+}
+```
+
+That is the risk breaker from the [strategy library](nano/library/risk/max_drawdown_breaker.nano), with its comment header trimmed: when portfolio drawdown reaches 5 percent, propose a `PAUSE` and escalate to a named risk desk. Nano cannot halt anything by itself — your application's gate decides whether to act on the proposal. That separation is the whole design.
+
+### Why that matters when money is on the line
+
+- **Deterministic** — the same rule over the same inputs replays to the same decision, every time.
+- **Auditable** — every run carries an ordered log you can archive, diff, or hand to someone who is asking questions.
+- **Host-governed** — Nano *proposes* an intent; your system disposes. Nano cannot place an order.
+- **Small** — few moving parts to audit, and it embeds in a Python stack you already have.
+
+**Alpha reference implementation (v0.1.0).** The examples are trading-oriented, but Nano fits any system where a host supplies numeric signals and must retain control over what happens next — see [deterministic watchdogs and compliance controls](#deterministic-watchdogs-and-compliance-controls).
 
 ## Why Nano
 
@@ -66,12 +86,6 @@ strategy Momentum {
 
 `RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 33 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
 
-## From rule to governed decision
-
-![From a Nano strategy to a host-governed decision](assets/nano-governed-decision-flow.svg)
-
-Nano owns parsing, IR validation, and deterministic reference evaluation. The host supplies the `MarketFrame`, applies its `DecisionGate`, stores the result, and performs any real-world action. The same graph and frame produce the same reference result; bridge replay is deterministic when the host gate is deterministic too.
-
 ## Start with the strategy library
 
 The [strategy library](nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
@@ -86,6 +100,12 @@ The library is a conformance corpus, not a performance claim, live signal servic
 
 [Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
 
+## From rule to governed decision
+
+![From a Nano strategy to a host-governed decision](assets/nano-governed-decision-flow.svg)
+
+Nano owns parsing, IR validation, and deterministic reference evaluation. The host supplies the `MarketFrame`, applies its `DecisionGate`, stores the result, and performs any real-world action. The same graph and frame produce the same reference result; bridge replay is deterministic when the host gate is deterministic too.
+
 ## Small by design
 
 | Nano provides | The host retains |
@@ -95,6 +115,130 @@ The library is a conformance corpus, not a performance claim, live signal servic
 | Proposed `buy`, `sell`, `execute`, `pause`, and `observe` intents | API calls, exchange execution, and any action with consequences |
 
 v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. It still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](docs/status.md) separates implemented behavior from experimental work and future ideas.
+
+## Deterministic watchdogs and compliance controls
+
+Trading is Nano's first reference domain, not its limit.
+
+We envision Nano as a compact rule layer for **deterministic watchdog agents**: small, continuously evaluated programs that inspect host-provided signals, identify a policy condition, and propose a bounded response. A watchdog can recommend that an operation proceed, pause, or receive additional review, but it cannot perform the operation itself.
+
+In this model, "agent" does not mean an autonomous AI process. A Nano watchdog is:
+
+- versioned;
+- deterministic;
+- restricted to declared inputs;
+- replayable from the same input frame;
+- unable to fetch data or call external systems; and
+- subordinate to a host-controlled decision gate.
+
+The host remains responsible for collecting trustworthy signals, deciding whether the rule is authorized for use, recording the result, and carrying out any real-world effect.
+
+### Security watchdogs
+
+A security system could provide Nano with numeric state such as:
+
+- whether a trusted network route is available;
+- the number of unsigned artifacts in a release;
+- authentication failures within a bounded interval;
+- the age of a credential or signing key;
+- the number of endpoints outside an approved posture;
+- whether a required security control is currently verified; or
+- the severity and confidence of a host-generated finding.
+
+A watchdog could then produce a proposed `PAUSE`, `OBSERVE`, or other supported intent for the host to evaluate.
+
+For example, a host could represent trusted-route availability as `1` or `0`:
+
+```nano
+strategy TrustedRouteWatchdog {
+  every 1m {
+    if TRUSTED_ROUTE < 1 {
+      pause()
+      observe()
+    }
+  }
+}
+```
+
+Nano does not inspect the network, disable traffic, or decide that a network is hostile. The host measures the route state and supplies `TRUSTED_ROUTE`. Nano only evaluates the declared threshold and returns proposed intents with an ordered execution log.
+
+The application's gate can then consider additional context, require operator consent, reject the proposal, or authorize an independently implemented enforcement mechanism.
+
+### Compliance as executable, replayable policy
+
+Compliance rules are often distributed across prose, dashboards, scripts, ticket approvals, and undocumented operational knowledge. Nano can provide a narrow way to express the measurable portion of a control as versioned source.
+
+Potential applications include:
+
+- requiring a minimum number of approvals before a release;
+- holding deployment when unresolved critical findings exceed a threshold;
+- checking credential age against an organizational limit;
+- detecting configuration or access-policy drift;
+- enforcing transaction or exposure limits;
+- verifying that required controls reported healthy before a sensitive operation;
+- checking retention, residency, or review-state signals supplied by a host; and
+- generating repeatable evidence for internal or external audits.
+
+An illustrative release rule might be:
+
+```nano
+strategy ReleaseCompliance {
+  every 5m {
+    if CRITICAL_FINDINGS > 0 and APPROVED_REVIEWERS < 2 {
+      pause()
+      observe()
+    }
+  }
+}
+```
+
+The host determines what counts as a critical finding, how reviewer approval is verified, and what `pause()` means in that environment. Nano does not connect to CI, modify a deployment, or approve a release.
+
+### From policy text to audit evidence
+
+For every evaluation, a host integration can preserve:
+
+1. the original `.nano` source;
+2. the validated and versioned `StrategyGraph`;
+3. the exact host-provided input frame;
+4. the ordered Nano execution log;
+5. the proposed intents;
+6. the host gate's final decision; and
+7. any separately authorized external action.
+
+This creates a useful separation between three questions:
+
+- What condition did the rule evaluate?
+- What did the rule propose?
+- What did the host ultimately authorize?
+
+Because those stages remain distinct, a team can replay an incident or audit decision without granting the rule authority over infrastructure.
+
+### Explainable automation without autonomous authority
+
+A reasoning model may help an operator write a rule, summarize a run log, or explain why a threshold matched. It should not silently change the validated strategy, manufacture input values, or bypass the host gate.
+
+The intended pattern is:
+
+```
+host observations
+       ↓
+validated Nano rule
+       ↓
+deterministic proposal + ordered log
+       ↓
+host policy and authorization gate
+       ↓
+optional external effect
+```
+
+This architecture makes Nano suitable for environments where automation is valuable but unbounded autonomy is not: security operations, infrastructure governance, financial controls, software release management, privacy systems, and regulated workflows.
+
+### Current status
+
+Nano v0.1.0 provides the small scheduled-threshold foundation used by these examples. Broader watchdog and compliance deployments require host integrations, domain-specific signal contracts, durable persistence, authorization gates, and security review.
+
+Nano itself remains intentionally narrow: it evaluates declared rules and proposes intents. The host observes the world, owns the policy boundary, and performs any action with consequences.
 
 ## Build with Nano
 
