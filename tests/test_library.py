@@ -211,6 +211,83 @@ def test_event_release_integrity_halt_pauses_on_conflict():
     ]
 
 
+def test_daily_loss_limit_fires_at_the_boundary_not_below_it():
+    # 2.0 is >= 2, so the boundary tick fires. This is where a control differs
+    # from an entry: a limit that only trips *past* its number lets the book sit
+    # exactly on the limit indefinitely.
+    graph = _load("risk/daily_loss_limit.nano")
+    frame = MarketFrame(
+        timestamps=(0, 60, 120),
+        signals={"DAY_LOSS_PCT": (0.4, 2.0, 3.1)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 60),
+        ("PAUSE", 120),
+    ]
+    assert [a.name for a in graph.agents] == ["RiskDesk"]
+
+
+def test_stale_data_halt_emits_pause_then_observe_in_order():
+    # The ordered run log is the product here: a host reading it needs to know
+    # the halt came first and the review flag second, not merely that both fired.
+    graph = _load("risk/stale_data_halt.nano")
+    frame = MarketFrame(
+        timestamps=(0, 60),
+        signals={"FEED_AGE_SEC": (2.0, 45.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 60),
+        ("OBSERVE", 60),
+    ]
+
+
+def test_concentration_and_leverage_are_independent_controls():
+    # The distinction the two rules exist to make: a book can be perfectly
+    # diversified and over-levered, or unlevered and entirely in one name.
+    # Neither rule catches the other's failure, which is why both ship.
+    concentration = _load("risk/position_concentration_cap.nano")
+    leverage = _load("risk/leverage_ceiling.nano")
+
+    # 1x gross, everything in one position -> concentration only.
+    lopsided = MarketFrame(
+        timestamps=(0, 300),
+        signals={"MAX_POSITION_PCT": (80.0, 80.0), "GROSS_LEVERAGE": (1.0, 1.0)},
+    )
+    assert [i.action for i in execute(concentration, lopsided).intents] == ["PAUSE", "PAUSE"]
+    assert execute(leverage, lopsided).intents == ()
+
+    # 5x gross spread thinly -> leverage only.
+    spread_thin = MarketFrame(
+        timestamps=(0, 300),
+        signals={"MAX_POSITION_PCT": (4.0, 4.0), "GROSS_LEVERAGE": (5.0, 5.0)},
+    )
+    assert execute(concentration, spread_thin).intents == ()
+    assert [i.action for i in execute(leverage, spread_thin).intents] == ["PAUSE", "PAUSE"]
+
+
+def test_consecutive_loss_circuit_ignores_a_streak_that_resets():
+    # Three losses, a win (host resets the count), then three more. The streak
+    # never reaches four, so a rule counting losses rather than tracking runs
+    # would fire here and this one must not.
+    graph = _load("risk/consecutive_loss_circuit.nano")
+    frame = MarketFrame(
+        timestamps=(0, 300, 600, 900, 1200, 1500, 1800),
+        signals={"CONSECUTIVE_LOSSES": (1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0)},
+    )
+    assert execute(graph, frame).intents == ()
+
+
+def test_correlation_cluster_guard_ignores_a_diversified_book():
+    graph = _load("risk/correlation_cluster_guard.nano")
+    frame = MarketFrame(
+        timestamps=(0, 900, 1800),
+        signals={"CLUSTER_EXPOSURE_PCT": (12.0, 28.0, 39.9)},  # never >= 40
+    )
+    assert execute(graph, frame).intents == ()
+
+
 def test_atr_halt_emits_no_intent_in_calm_regime():
     graph = _load("volatility/atr_volatility_halt.nano")
     frame = MarketFrame(

@@ -24,7 +24,7 @@ The current library contains 26 strategies across seven familiar categories. Bro
 | `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout` |
 | `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout` |
 | `volume/` | `volume_spike_confirmation`, `obv_trend` |
-| `risk/` | `max_drawdown_breaker` |
+| `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
 | `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
 
 ## Signal conventions
@@ -49,6 +49,19 @@ Library entries compare **host-provided named signal series** with numeric liter
 | volume spike | `VOL_RATIO(20)` | `volume / sma(volume, 20)` |
 | OBV trend | `OBV_SLOPE(20)` | Linear-regression slope of OBV |
 | equity drawdown | `DRAWDOWN` | Portfolio drawdown percentage |
+
+### Book-control signals (`risk/`)
+
+Risk entries read **portfolio and infrastructure state**, not bar indicators. Every series is nonnegative and rises as the situation worsens, so a control is always a `>=` against a ceiling — the same direction on every rule, which is what makes a stack of them readable at a glance. These rules emit `pause` and `observe` only; none of them proposes a direction.
+
+| Book measurement | Nano signal | Feed convention |
+| --- | --- | --- |
+| session loss | `DAY_LOSS_PCT` | Realised session loss as a positive percentage of starting equity; host owns the session boundary |
+| largest position | `MAX_POSITION_PCT` | Largest single position as a percentage of gross exposure |
+| cluster exposure | `CLUSTER_EXPOSURE_PCT` | Largest correlated-cluster exposure as a percentage of gross; host owns cluster assignment |
+| feed freshness | `FEED_AGE_SEC` | Seconds since the last accepted tick |
+| gross leverage | `GROSS_LEVERAGE` | Gross exposure divided by equity |
+| losing streak | `CONSECUTIVE_LOSSES` | Count of consecutive losing closed decisions; host defines close and loss |
 
 ### Macro-event signals (`event_volatility/`)
 
