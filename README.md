@@ -94,7 +94,7 @@ The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems
 
 | Momentum | Mean reversion | Trend | Volatility | Volume | Risk | Event volatility |
 | --- | --- | --- | --- | --- | --- | --- |
-| 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 1 strategy | 11 strategies |
+| 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 7 strategies | 11 strategies |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
