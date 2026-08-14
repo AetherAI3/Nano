@@ -176,6 +176,24 @@ def test_cpi_twin_arms_are_mutually_exclusive():
     assert [i.action for i in long_result.intents] == ["BUY", "BUY"]
     assert short_result.intents == ()
 
+    # The mirror print. Without it the short arm is only ever asserted silent,
+    # so a short rule that could never fire would pass this test unchanged —
+    # and the mutual-exclusion claim would rest on one arm alone.
+    hot_print = MarketFrame(
+        timestamps=(0, 5),
+        signals={
+            **shared,
+            "CPI_COOL_SCORE": (0.0, 0.0),
+            "CPI_HOT_SCORE": (0.86, 0.86),
+            "UPSIDE_IMPULSE_ATR": (0.1, 0.1),
+            "DOWNSIDE_IMPULSE_ATR": (1.4, 1.4),
+            "BULL_CROSS_CONFIRM": (0.1, 0.1),
+            "BEAR_CROSS_CONFIRM": (0.7, 0.7),
+        },
+    )
+    assert [i.action for i in execute(short_graph, hot_print).intents] == ["SELL", "SELL"]
+    assert execute(long_graph, hot_print).intents == ()
+
 
 def test_event_entry_fires_only_inside_entry_window():
     # ENTRY_WINDOW_OPEN is the host's T+5s..T+180s gate: identical impulse
@@ -272,27 +290,59 @@ def test_consecutive_loss_circuit_ignores_a_streak_that_resets():
     # never reaches four, so a rule counting losses rather than tracking runs
     # would fire here and this one must not.
     graph = _load("risk/consecutive_loss_circuit.nano")
-    frame = MarketFrame(
+    reset = MarketFrame(
         timestamps=(0, 300, 600, 900, 1200, 1500, 1800),
         signals={"CONSECUTIVE_LOSSES": (1.0, 2.0, 3.0, 0.0, 1.0, 2.0, 3.0)},
     )
-    assert execute(graph, frame).intents == ()
+    assert execute(graph, reset).intents == ()
+
+    # Positive control: the same graph on an unbroken run. Without it the
+    # no-fire assertion above passes just as well against a rule that can never
+    # fire at all.
+    unbroken = MarketFrame(
+        timestamps=(0, 300, 600, 900),
+        signals={"CONSECUTIVE_LOSSES": (1.0, 2.0, 3.0, 4.0)},
+    )
+    assert [(i.action, i.timestamp) for i in execute(graph, unbroken).intents] == [
+        ("PAUSE", 900)
+    ]
 
 
 def test_correlation_cluster_guard_ignores_a_diversified_book():
     graph = _load("risk/correlation_cluster_guard.nano")
-    frame = MarketFrame(
+    diversified = MarketFrame(
         timestamps=(0, 900, 1800),
         signals={"CLUSTER_EXPOSURE_PCT": (12.0, 28.0, 39.9)},  # never >= 40
     )
-    assert execute(graph, frame).intents == ()
+    assert execute(graph, diversified).intents == ()
+
+    # Positive control on the same graph — proves the silence above is the rule
+    # declining to fire, not the rule being incapable of firing.
+    concentrated = MarketFrame(
+        timestamps=(0, 900),
+        signals={"CLUSTER_EXPOSURE_PCT": (12.0, 40.0)},
+    )
+    assert [i.action for i in execute(graph, concentrated).intents] == [
+        "PAUSE",
+        "OBSERVE",
+    ]
 
 
 def test_atr_halt_emits_no_intent_in_calm_regime():
     graph = _load("volatility/atr_volatility_halt.nano")
-    frame = MarketFrame(
+    calm = MarketFrame(
         timestamps=(0, 300, 600),
         signals={"ATR_PCT": (1.2, 3.0, 5.0)},  # never > 5
     )
-    result = execute(graph, frame)
-    assert result.intents == ()
+    assert execute(graph, calm).intents == ()
+
+    # Positive control on the same graph. A no-fire assertion on its own cannot
+    # tell a rule that declined to fire from a rule that never could — which is
+    # exactly how a vacuous test stays green.
+    violent = MarketFrame(
+        timestamps=(0, 300),
+        signals={"ATR_PCT": (1.2, 5.1)},
+    )
+    assert [(i.action, i.timestamp) for i in execute(graph, violent).intents] == [
+        ("PAUSE", 300)
+    ]
