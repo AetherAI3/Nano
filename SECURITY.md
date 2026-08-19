@@ -4,7 +4,7 @@ Nano is an alpha reference implementation for deterministic, host-governed decis
 
 ## Reporting a vulnerability
 
-Please do not open a public issue for security-sensitive reports. Use [GitHub private vulnerability reporting](https://github.com/DBarr3/Nano/security/advisories/new) and include a minimal reproduction where possible. The latest `main` branch is the supported security-fix target.
+Please do not open a public issue for security-sensitive reports. Use [GitHub private vulnerability reporting](https://github.com/AetherAI3/Nano/security/advisories/new) and include a minimal reproduction where possible. The latest `main` branch is the supported security-fix target.
 
 ## Security properties of the current core
 

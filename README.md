@@ -6,7 +6,7 @@
 
 ### Trading and agent rules that run the same way every time — with a receipt.
 
-[![CI](https://github.com/DBarr3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/DBarr3/Nano/actions/workflows/ci.yml)
+[![CI](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
 
@@ -52,7 +52,7 @@ A rule and an approval are different jobs. Nano makes the rule compact, versione
 From a fresh checkout, run the bundled Momentum strategy and then the test suite:
 
 ```bash
-git clone https://github.com/DBarr3/Nano.git
+git clone https://github.com/AetherAI3/Nano.git
 cd Nano
 python -m venv .venv
 
@@ -98,7 +98,7 @@ The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
-[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
+[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml)
 
 ## From rule to governed decision
 

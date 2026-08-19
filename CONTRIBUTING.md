@@ -7,8 +7,8 @@ Welcome. Nano is an alpha reference implementation, and its best contributions m
 | If you want to… | Start with… |
 | --- | --- |
 | Translate a familiar trading idea | [Add a strategy](#add-a-strategy) |
-| Suggest grammar, IR, or runtime behavior | [Open a language proposal](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml) |
-| Report a reproducible defect | [Open a bug report](https://github.com/DBarr3/Nano/issues/new?template=bug-report.yml) |
+| Suggest grammar, IR, or runtime behavior | [Open a language proposal](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml) |
+| Report a reproducible defect | [Open a bug report](https://github.com/AetherAI3/Nano/issues/new?template=bug-report.yml) |
 | Improve an explanation or correct a claim | A focused documentation issue or pull request |
 
 For security-sensitive reports, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
@@ -16,7 +16,7 @@ For security-sensitive reports, follow [SECURITY.md](SECURITY.md) instead of ope
 ## Development setup
 
 ```bash
-git clone https://github.com/DBarr3/Nano.git
+git clone https://github.com/AetherAI3/Nano.git
 cd Nano
 python -m venv .venv
 ```
@@ -44,7 +44,7 @@ Python 3.10+ is required. The reference suite is intentionally fast; run it ofte
 
 The [strategy library](nano/library/README.md) is the easiest way to learn and extend Nano. Every strategy is a paired artifact: readable `.nano` source plus checked-in IR that the suite must reproduce exactly.
 
-1. Open a [strategy proposal](https://github.com/DBarr3/Nano/issues/new?template=strategy-library.yml) for a new idea or use an existing issue.
+1. Open a [strategy proposal](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml) for a new idea or use an existing issue.
 2. Choose one existing category in `nano/library/`, then add `<slug>.nano` and `<slug>_ir.json`.
 3. Document the signal contract in `//` comments: formula or data source, unit/range, any normalization, and the lookback convention the host must supply.
 4. Generate the expected IR with `compile_to_dict()` and keep it formatted like neighboring entries.
@@ -56,7 +56,7 @@ For a normal strategy addition, the library tests automatically discover the sou
 
 ## Propose a language change
 
-Start with the [language proposal form](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml) before writing an implementation. It asks for the problem, proposed syntax, IR impact, deterministic/replay semantics, host-gate impact, and migration story.
+Start with the [language proposal form](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml) before writing an implementation. It asks for the problem, proposed syntax, IR impact, deterministic/replay semantics, host-gate impact, and migration story.
 
 This discipline matters: Nano's boundary is intentional. Do not add ambient I/O, an external-actuation primitive, a clock/RNG dependency, or a behavior that lets source bypass the host `DecisionGate`.
 

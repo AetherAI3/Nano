@@ -13,7 +13,7 @@ Every entry has two files:
 
 The current library contains 26 strategies across seven familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
-[Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a strategy proposal →](https://github.com/DBarr3/Nano/issues/new?template=strategy-library.yml)
+[Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a strategy proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
 ## Categories
 
