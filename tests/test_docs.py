@@ -233,3 +233,45 @@ def test_the_dagger_marks_exactly_the_v1_entries():
         f"daggered but baseline: {sorted(marked - expected)}; "
         f"v1 but undaggered: {sorted(expected - marked)}"
     )
+
+
+def test_readme_maturity_matches_the_packaging_classifier():
+    """The README may not assert a maturity the packaging metadata denies.
+
+    A corpus change once rewrote "Alpha reference implementation (v0.1.0)" to
+    "Reference implementation, v1.0.0" — repairing a stale version number and
+    silently upgrading the project's stated maturity in the same edit, leaving
+    the README less qualified than `Development Status :: 4 - Beta`. Advertised
+    maturity is a project decision, so this pins the prose to the classifier
+    rather than to anyone's judgement.
+    """
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    classifier = re.search(r'"Development Status :: \d+ - (\w+)"', pyproject)
+    assert classifier, "pyproject no longer declares a Development Status classifier"
+    stage = classifier.group(1)
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    claim = re.search(r"^\*\*(\w+) reference implementation", readme, re.MULTILINE)
+    assert claim, "README no longer states a maturity for the reference implementation"
+    assert claim.group(1).lower() == stage.lower(), (
+        f"README advertises a {claim.group(1)!r} reference implementation while "
+        f"pyproject.toml classifies the package as {stage!r}"
+    )
+
+
+def test_the_trademark_notice_travels_with_the_distribution():
+    """The nominative-use notice must live somewhere an installed wheel carries.
+
+    `nano/library/README.md` is not packaged — `package-data` ships only
+    `library/*/*.nano` and `library/*/*.json` — so a notice that lives only there
+    is absent from every installed distribution, which is exactly where the
+    strategy filenames and the `BollingerLowerReclaim` identifier show up with no
+    context. The top-level README becomes the wheel's `METADATA` long
+    description, so the sentence has to be there too.
+    """
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "nominatively" in readme, (
+        "the trademark nominative-use notice is missing from README.md, which is "
+        "the only copy an installed distribution carries"
+    )
+    assert "No affiliation" in readme

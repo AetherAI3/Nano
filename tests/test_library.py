@@ -976,6 +976,28 @@ def test_macd_zero_reclaim_fires_once_at_the_crossing():
     assert _fires(module, _ohlcv([200.0 - 2.0 * i for i in range(75)])) == []
 
 
+def test_macd_zero_reclaim_ignores_a_second_cross_under_its_own_signal():
+    """The frame that proves `MACD_HIST > 0` is load-bearing, not decoration.
+
+    A revision of this strategy deleted that term, arguing that a line crossing
+    up through zero necessarily sits above its own signal EMA. That holds for the
+    *first* cross out of a sustained negative stretch and fails for a second one:
+    after a rally and a retrace the signal EMA still carries the earlier high
+    line values, so it sits above the line at the crossing.
+
+    Here bar 53 is the clean first cross and bar 78 is the second, with
+    line = +0.3243, line[1] = -0.0980 and hist = -3.6859 — above zero, below its
+    own signal, which is the fading spike the term exists to reject. Without the
+    histogram condition this frame fires twice.
+    """
+    module = _module("trend/macd_zero_line_reclaim.nano")
+    closes = [200.0 - 2.0 * i for i in range(45)]
+    for step, count in ((6.0, 19), (-6.0, 11), (6.0, 4)):
+        for _ in range(count):
+            closes.append(closes[-1] + step)
+    assert _fires(module, _ohlcv(closes)) == [("BUY", 53)]
+
+
 def test_donchian_breakout_arms_are_symmetric_and_ranges_are_silent():
     module = _module("trend/donchian_high_breakout.nano")
 
@@ -990,6 +1012,26 @@ def test_donchian_breakout_arms_are_symmetric_and_ranges_are_silent():
     # range, so neither arm can ever clear it.
     assert _fires(module, _ohlcv([100.0 + (i % 5) * 0.4 for i in range(60)])) == []
 
+    # Boundary. `_ohlcv` puts the high half a point above the close, so the prior
+    # channel top is exactly 101.5. A close *at* the top does not break it —
+    # `>` not `>=` — and one tick above does. The baseline corpus pins its
+    # boundaries this way (`0 is NOT > 0`); the v1 corpus should too.
+    assert _fires(module, _ohlcv(base + [101.5])) == []
+    assert _fires(module, _ohlcv(base + [101.6])) == [("BUY", 30)]
+    # The same distinction on the short arm: the floor is exactly 99.5.
+    assert _fires(module, _ohlcv(base + [99.5])) == []
+    assert _fires(module, _ohlcv(base + [99.4])) == [("SELL", 30)]
+
+    # Two bars beyond the channel in a row. Bar 30 breaks out and raises the
+    # channel top to its own high of 105.5, so bar 31's close of 105.2 is inside
+    # the *new* channel and must not re-fire. Reading the channel at [2] instead
+    # of [1] would compare bar 31 against the stale pre-breakout top of 101.5 and
+    # signal the same breakout twice — which is how an offset that is off by one
+    # bar hides: it stays silent on every frame where nothing changed in between.
+    assert _fires(module, _ohlcv(base + [105.0, 105.2])) == [("BUY", 30)]
+    # The short arm's mirror, so both offsets are pinned rather than one.
+    assert _fires(module, _ohlcv(base + [95.0, 94.8])) == [("SELL", 30)]
+
 
 def test_absolute_momentum_reports_risk_off_when_either_window_turns():
     module = _module("momentum/absolute_momentum_filter.nano")
@@ -1000,6 +1042,13 @@ def test_absolute_momentum_reports_risk_off_when_either_window_turns():
     # Both windows negative: the else arm, every period, and never a BUY.
     decline = [200.0 - 0.5 * i for i in range(135)]
     assert _fires(module, _ohlcv(decline)) == [
+        ("OBSERVE", bar) for bar in range(126, 135)
+    ]
+
+    # Boundary. A perfectly flat tape makes both returns exactly zero, and zero
+    # is not greater than zero, so the filter reports risk-off. `>` not `>=`:
+    # an instrument that has gone nowhere for six months is not momentum.
+    assert _fires(module, _ohlcv([100.0] * 135)) == [
         ("OBSERVE", bar) for bar in range(126, 135)
     ]
 
@@ -1039,6 +1088,14 @@ def test_bollinger_reclaim_needs_the_excursion_to_end():
     # has not happened — this is what `close > lower` is for, and without the
     # frame the term is unfalsifiable.
     assert _fires(module, _ohlcv(base + [92.0, 91.0, 99.0])) == [("BUY", 30)]
+
+    # Offset consistency. On a flat tape, bar 28 closes at 94.1 against a lower
+    # band of 97.13, and bar 29's violent reclaim to 122.0 widens the band so far
+    # that the *current* lower band falls to 90.75. The excursion is therefore
+    # real against its own bar's band and not against this one, so comparing
+    # `close[1]` with the unshifted `lower` would mix two different band widths
+    # and lose the signal. A margin of three points either side, not a knife edge.
+    assert _fires(module, _ohlcv([100.0] * 28 + [94.1, 122.0])) == [("BUY", 29)]
 
     # A calm tape never leaves the bands, so there is no excursion to reclaim.
     assert _fires(module, _ohlcv(base + base)) == []
@@ -1092,6 +1149,19 @@ def test_gap_fade_needs_the_gap_to_fail_not_merely_to_exist():
     # direction test is satisfied and the size test is not, which is the whole
     # job of the ATR threshold.
     assert _fires(module, _session(base[-1], base[-1] - 1.0)) == []
+
+    # A small *up* gap that closes higher — an unremarkable green bar. This is
+    # the frame that falsifies the unary minus: written `gap <= threshold`
+    # instead of `gap <= -threshold`, the else arm buys this bar. Nothing else
+    # in the suite can tell the two spellings apart, and the sign is the whole
+    # reason the down-gap arm is a down-gap arm.
+    assert _fires(module, _session(base[-1] + 0.2, base[-1] + 1.0)) == []
+
+    # A gap of 2.30 against a prior-bar ATR threshold of 2.25 — but the gap bar's
+    # own range lifts the unshifted threshold to 2.39. The rule fires because the
+    # header's claim is true: the threshold is the *prior* bar's ATR. Reading the
+    # current bar's ATR instead would silently raise the bar the gap must clear.
+    assert _fires(module, _session(base[-1] + 2.30, base[-1] + 1.90)) == [("SELL", 25)]
 
 
 def _contracting(count: int, amplitude: float = 6.0, decay: float = 0.94):

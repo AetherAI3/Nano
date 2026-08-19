@@ -22,6 +22,11 @@
       "name": "slow",
       "type": "int",
       "value": 26
+    },
+    {
+      "name": "smoothing",
+      "type": "int",
+      "value": 9
     }
   ],
   "inputs": [
@@ -30,7 +35,7 @@
       "type": "series<float>"
     }
   ],
-  "warmup": 26,
+  "warmup": 33,
   "nodes": [
     {
       "id": "n1",
@@ -71,6 +76,35 @@
     },
     {
       "id": "n4",
+      "op": "indicator",
+      "inputs": [
+        "n1"
+      ],
+      "attrs": {
+        "name": "MACD_HIST",
+        "periods": [
+          12,
+          26,
+          9
+        ],
+        "lookback": 33,
+        "lifted": false
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n5",
+      "op": "let",
+      "inputs": [
+        "n4"
+      ],
+      "attrs": {
+        "name": "hist"
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n6",
       "op": "schedule",
       "inputs": [],
       "attrs": {
@@ -78,7 +112,7 @@
       }
     },
     {
-      "id": "n5",
+      "id": "n7",
       "op": "const",
       "inputs": [],
       "attrs": {
@@ -87,16 +121,16 @@
       "type": "int"
     },
     {
-      "id": "n6",
+      "id": "n8",
       "op": "compare.gt",
       "inputs": [
         "n3",
-        "n5"
+        "n7"
       ],
       "type": "series<bool>"
     },
     {
-      "id": "n7",
+      "id": "n9",
       "op": "series.index",
       "inputs": [
         "n3"
@@ -107,7 +141,7 @@
       "type": "series<float>"
     },
     {
-      "id": "n8",
+      "id": "n10",
       "op": "const",
       "inputs": [],
       "attrs": {
@@ -116,25 +150,52 @@
       "type": "int"
     },
     {
-      "id": "n9",
+      "id": "n11",
       "op": "compare.le",
       "inputs": [
-        "n7",
-        "n8"
+        "n9",
+        "n10"
       ],
       "type": "series<bool>"
     },
     {
-      "id": "n10",
+      "id": "n12",
       "op": "logic.and",
       "inputs": [
-        "n6",
-        "n9"
+        "n8",
+        "n11"
       ],
       "type": "series<bool>"
     },
     {
-      "id": "n11",
+      "id": "n13",
+      "op": "const",
+      "inputs": [],
+      "attrs": {
+        "value": 0
+      },
+      "type": "int"
+    },
+    {
+      "id": "n14",
+      "op": "compare.gt",
+      "inputs": [
+        "n5",
+        "n13"
+      ],
+      "type": "series<bool>"
+    },
+    {
+      "id": "n15",
+      "op": "logic.and",
+      "inputs": [
+        "n12",
+        "n14"
+      ],
+      "type": "series<bool>"
+    },
+    {
+      "id": "n16",
       "op": "intent.emit",
       "inputs": [],
       "attrs": {
@@ -144,31 +205,31 @@
       }
     },
     {
-      "id": "n12",
+      "id": "n17",
       "op": "block",
       "inputs": [
-        "n11"
+        "n16"
       ]
     },
     {
-      "id": "n13",
+      "id": "n18",
       "op": "rule",
       "inputs": [
-        "n4",
-        "n10",
-        "n12"
+        "n6",
+        "n15",
+        "n17"
       ]
     }
   ],
   "entries": [
-    "n13"
+    "n18"
   ],
   "provenance": {
     "compiler": {
       "name": "nnc",
       "version": "1.0.0"
     },
-    "sourceHash": "sha256:ed1aa10cd541881ffd479d268e9f1b4f5a26da1200e632e6e3d2a76266790daf"
+    "sourceHash": "sha256:f4d2a660548f08badf6f9c728b962a7e1631744a18729726d9a827baa0ed7b94"
   },
-  "moduleHash": "sha256:369cd834343033fe3dbf53ec2e089fcae4f49d38ebcbc5370ce4f8df6e3c0f23"
+  "moduleHash": "sha256:0b6c7405592a3154dc6a14fd6fff3eb38f667a5b2970fb4872cef1a4ff77ffb8"
 }
