@@ -579,7 +579,11 @@ def build_catalog(library_root: Optional[Any] = None) -> dict[str, Any]:
 def render_catalog(document: Mapping[str, Any]) -> str:
     """Render a catalog with one canonical byte representation."""
 
-    return json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    # The separator after the root opener is part of the byte contract.  It
+    # changes the blob when the LF-only Git attribute first lands, forcing old
+    # Windows checkouts to replace an already-materialized CRLF copy.
+    rendered = json.dumps(document, ensure_ascii=False, indent=2)
+    return rendered.replace("{\n", "{\n\n", 1) + "\n"
 
 
 def generate_catalog_text(library_root: Optional[Any] = None) -> str:
