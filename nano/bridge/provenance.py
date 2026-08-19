@@ -7,7 +7,7 @@ or bypass it — it wraps whatever ``DecisionGate`` a host platform hands to
 (strategies propose, gates decide) already gives every decision a recorded
 reason; this module lets a production deployment additionally bind that
 decision to a non-repudiable, tamper-evident signature via Protocol-C
-(https://github.com/DBarr3/PROTOCOL-C) — useful wherever a decision needs
+(https://github.com/AetherAI3/PROTOCOL-C) — useful wherever a decision needs
 to be provable to a third party after the fact, not just logged for
 internal debugging.
 
@@ -60,7 +60,7 @@ class ProvenanceError(Exception):
 _INSTALL_MESSAGE = (
     "ProvenanceGate requires the optional 'aether-protocol-c' package. "
     "Install with: pip install aether-protocol-c "
-    "(source: https://github.com/DBarr3/PROTOCOL-C)"
+    "(source: https://github.com/AetherAI3/PROTOCOL-C)"
 )
 
 AccountStateSource = Union[Mapping[str, Any], Callable[[], Mapping[str, Any]], None]

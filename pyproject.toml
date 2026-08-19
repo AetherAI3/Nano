@@ -34,8 +34,8 @@ nano = "nano.cli.main:main"
 [project.urls]
 Homepage = "https://aethersystems.net"
 "Aether Code (web IDE)" = "https://app.aethersystems.net/code"
-Repository = "https://github.com/DBarr3/Nano"
-Documentation = "https://github.com/DBarr3/Nano/tree/main/docs"
+Repository = "https://github.com/AetherAI3/Nano"
+Documentation = "https://github.com/AetherAI3/Nano/tree/main/docs"
 
 [project.optional-dependencies]
 # Signed, non-repudiable audit receipts over decision-gate records.
