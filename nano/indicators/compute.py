@@ -9,11 +9,11 @@ the indicator has not warmed up yet, or the feed had a gap. Absence is never
 filled in. Fabricating a warm-up value is the mirror image of look-ahead: both
 invent data the strategy could not have had, and both inflate a backtest.
 
-**Recursive indicators reset on a gap.** EMA, RSI, ATR, and OBV carry state
-across bars, so they operate on *contiguous runs* of present values: a `None`
-clears the accumulator and the kernel re-seeds from the next full window. The
-alternative — smoothing across a hole as if it were not there — would make the
-result depend on how the feed was chunked.
+**Recursive indicators reset on a gap.** EMA, RSI, ATR, OBV, and SUPERTREND
+carry state across bars, so they operate on *contiguous runs* of present values:
+a `None` clears the accumulator and the kernel re-seeds from the next full
+window. The alternative — smoothing across a hole as if it were not there —
+would make the result depend on how the feed was chunked.
 
 Conventions where the classic formula divides by zero are pinned here rather
 than left to the caller, because an unpinned convention is a silent divergence
@@ -28,6 +28,7 @@ between two runtimes:
 | BB_PCT_B with zero band width | `0.5` |
 | ROC from a zero base, VWAP with zero volume, BB_WIDTH on a zero mid | absent |
 | SQRT of a negative | absent |
+| SUPERTREND's first warm bar, which has no prior trend to continue | up when `close >= (high + low) / 2` |
 """
 
 from __future__ import annotations
@@ -325,6 +326,88 @@ def atr(high: Series, low: Series, close: Series, period: int) -> Series:
     return tuple(out)
 
 
+def _supertrend(
+    high: Series,
+    low: Series,
+    close: Series,
+    period: int,
+    mult: Union[Series, Scalar],
+) -> Tuple[Series, Series]:
+    """The trailing line and its direction, from one shared recursion.
+
+    They are two readings of the same state, not two indicators: the line *is*
+    whichever final band the current direction selects, and the direction only
+    changes when a close breaks the band the line is sitting on. Running the
+    recursion twice would let the two answers drift apart on a gap.
+
+    Two conventions are pinned here because leaving them to the caller is how
+    two runtimes silently disagree about where a flip happened:
+
+    * **Seeding.** The first warm bar has no prior trend to continue, so the
+      direction is read from where that bar closed inside its own range —
+      `close >= (high + low) / 2` is up. There is no flip on a seed bar.
+    * **Flipping.** The trend changes only on a *strict* break of the active
+      band. A close resting exactly on the band has not broken it, so an
+      uptrend survives `close == lower` and a downtrend survives
+      `close == upper`.
+    """
+    highs, lows, closes = _floats(high), _floats(low), _floats(close)
+    ranges = _floats(atr(high, low, close, period))
+    lines: list[Cell] = []
+    directions: list[Cell] = []
+    upper: Optional[float] = None
+    lower: Optional[float] = None
+    up: Optional[bool] = None
+
+    for i in range(len(closes)):
+        band = _cell(mult, i)
+        current, top, bottom, average_range = closes[i], highs[i], lows[i], ranges[i]
+        if (
+            current is None
+            or top is None
+            or bottom is None
+            or average_range is None
+            or band is None
+        ):
+            upper = lower = up = None
+            lines.append(None)
+            directions.append(None)
+            continue
+
+        mid = (float(top) + float(bottom)) / 2.0
+        offset = band * float(average_range)
+        basic_upper, basic_lower = mid + offset, mid - offset
+
+        if up is None:
+            upper, lower = basic_upper, basic_lower
+            up = float(current) >= mid
+        else:
+            # The bands only ever tighten toward price, and release when the
+            # previous close pushed through them.
+            previous_close = float(closes[i - 1])
+            if basic_upper < float(upper) or previous_close > float(upper):
+                upper = basic_upper
+            if basic_lower > float(lower) or previous_close < float(lower):
+                lower = basic_lower
+            up = float(current) >= float(lower) if up else float(current) > float(upper)
+
+        lines.append(lower if up else upper)
+        directions.append(up)
+    return tuple(lines), tuple(directions)
+
+
+def supertrend(
+    high: Series, low: Series, close: Series, period: int, mult: Union[Series, Scalar]
+) -> Series:
+    return _supertrend(high, low, close, period, mult)[0]
+
+
+def supertrend_dir(
+    high: Series, low: Series, close: Series, period: int, mult: Union[Series, Scalar]
+) -> Series:
+    return _supertrend(high, low, close, period, mult)[1]
+
+
 # ---------------------------------------------------------------------------
 # oscillators over (high, low, close)
 # ---------------------------------------------------------------------------
@@ -591,6 +674,8 @@ _KERNELS: Dict[str, Callable[..., Series]] = {
     "LOWEST": lowest,
     "TR": true_range,
     "ATR": atr,
+    "SUPERTREND": supertrend,
+    "SUPERTREND_DIR": supertrend_dir,
     "STOCH_K": stoch_k,
     "WILLR": willr,
     "CCI": cci,

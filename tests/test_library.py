@@ -15,7 +15,7 @@ import pytest
 
 from nano.compiler import compile_source, compile_to_dict
 from nano.ir.graph import StrategyGraph
-from nano.runtime.interpreter import MarketFrame, execute
+from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
 
 LIBRARY = Path(__file__).resolve().parent.parent / "nano" / "library"
 
@@ -197,6 +197,95 @@ def test_golden_cross_ignores_negative_spread():
     assert result.intents[0].action == "BUY"
     assert result.intents[0].asset == "SPY"
     assert result.intents[0].timestamp == 172800
+
+
+def _supertrend_frame(**overrides):
+    """A qualifying MNQ 15m tape, with named fields overridden per case.
+
+    Every field starts from a value that clears its floor, so each test below
+    changes exactly one thing and the change in outcome is attributable to it.
+    """
+    signals = {
+        "SUPERTREND_FLIP_BULL": (0.0, 1.0),
+        "ATR_PCT": (0.09, 0.09),
+        "STOP_DISTANCE_ATR": (1.0, 1.0),
+        "TARGET_R": (2.4, 2.4),
+    }
+    signals.update(overrides)
+    return MarketFrame(timestamps=(0, 900), signals=signals)
+
+
+def test_supertrend_flip_long_fires_only_on_the_flip_bar():
+    # The flip is a one-bar event. The host publishes the *change*, not the trend
+    # state, which is what keeps this from firing on every bar of the leg that
+    # follows -- the failure mode golden_cross exists to demonstrate.
+    graph = _load("trend/supertrend_flip_long.nano")
+    result = execute(graph, _supertrend_frame())
+    assert [(i.action, i.timestamp) for i in result.intents] == [("BUY", 900)]
+    assert result.intents[0].asset == "MNQ"
+    assert result.intents[0].confidence == 0.7
+
+    # No flip on the tape at all, everything else qualifying: silent.
+    quiet = _supertrend_frame(SUPERTREND_FLIP_BULL=(0.0, 0.0))
+    assert execute(graph, quiet).intents == ()
+
+
+def test_supertrend_flip_long_refuses_a_flip_in_a_dead_tape():
+    # A real flip, but ATR is 0.04 percent of price. A band that flips in a tape
+    # this quiet is flipping on noise, and the stop under it has nothing to clear.
+    graph = _load("trend/supertrend_flip_long.nano")
+    assert execute(graph, _supertrend_frame(ATR_PCT=(0.04, 0.04))).intents == ()
+
+    # Positive control: the identical flip sitting exactly on the volatility
+    # floor. Without it the silence above reads the same as a rule that could
+    # never fire on any tape.
+    on_the_floor = _supertrend_frame(ATR_PCT=(0.05, 0.05))
+    assert [i.action for i in execute(graph, on_the_floor).intents] == ["BUY"]
+
+
+def test_supertrend_flip_long_refuses_a_stop_packed_inside_the_noise():
+    # The risk parameter. A stop 0.4 ATR under entry sits inside the range the
+    # instrument travels routinely, so it is taken out by the tape breathing
+    # rather than by the idea being wrong.
+    graph = _load("trend/supertrend_flip_long.nano")
+    assert execute(graph, _supertrend_frame(STOP_DISTANCE_ATR=(0.4, 0.4))).intents == ()
+
+    on_the_floor = _supertrend_frame(STOP_DISTANCE_ATR=(0.5, 0.5))
+    assert [i.action for i in execute(graph, on_the_floor).intents] == ["BUY"]
+
+
+def test_supertrend_flip_long_refuses_a_target_that_does_not_pay_for_the_stop():
+    # The target parameter, and the only floor measured against the risk rather
+    # than against price. 2.32 R is not a bad trade; it is not this rule's trade,
+    # which is the distinction a named parameter is supposed to make arguable.
+    graph = _load("trend/supertrend_flip_long.nano")
+    assert execute(graph, _supertrend_frame(TARGET_R=(2.32, 2.32))).intents == ()
+
+    on_the_floor = _supertrend_frame(TARGET_R=(2.33, 2.33))
+    assert [i.action for i in execute(graph, on_the_floor).intents] == ["BUY"]
+
+
+def test_supertrend_flip_long_reports_a_missing_signal_rather_than_assuming_one():
+    # A host that has not published TARGET_R has not decided the target is
+    # unacceptable -- it has not decided anything. Defaulting an absent series to
+    # zero would read as a refusal and defaulting it high would read as approval;
+    # either way the runtime would be inventing the risk decision it exists to
+    # relay. Three of this rule's four signals are that decision.
+    graph = _load("trend/supertrend_flip_long.nano")
+    partial = MarketFrame(
+        timestamps=(0, 900),
+        signals={
+            "SUPERTREND_FLIP_BULL": (0.0, 1.0),
+            "ATR_PCT": (0.09, 0.09),
+            "STOP_DISTANCE_ATR": (1.0, 1.0),
+        },
+    )
+    with pytest.raises(RuntimeError_, match="TARGET_R"):
+        execute(graph, partial)
+
+    # Positive control: the same tape with the field present fires, so the raise
+    # above is the absent signal rather than a rule that cannot qualify.
+    assert [i.action for i in execute(graph, _supertrend_frame()).intents] == ["BUY"]
 
 
 def test_cpi_twin_arms_are_mutually_exclusive():

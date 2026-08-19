@@ -11,7 +11,17 @@ import pytest
 
 from nano.compiler import compile_module, compile_source
 from nano.indicators import evaluate, lookup
-from nano.indicators.compute import ema, obv, rsi, sma, stddev, true_range
+from nano.indicators.compute import (
+    atr,
+    ema,
+    obv,
+    rsi,
+    sma,
+    stddev,
+    supertrend,
+    supertrend_dir,
+    true_range,
+)
 from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
 from nano.runtime.vm import run_module
 
@@ -50,6 +60,113 @@ def test_true_range_needs_a_previous_close():
     result = true_range((10.0, 12.0), (8.0, 9.0), (9.0, 11.0))
     assert result[0] is None
     assert result[1] == 3.0  # max(12-9, |12-9|, |9-9|)
+
+
+# A six-bar tape small enough to check with a pencil. Every ATR and SuperTrend
+# value asserted below is derived in the comment beside it.
+#
+#   bar   high    low   close   TR                                ATR(2)
+#   0     10.0    8.0     9.0   absent (no previous close)         absent
+#   1     11.0    9.0    10.0   max(2, |11-9|,  |9-9|)   = 2.0     absent
+#   2     12.0   10.0    11.0   max(2, |12-10|, |10-10|) = 2.0     (2+2)/2   = 2.0
+#   3     12.0    8.0     8.5   max(4, |12-11|, |8-11|)  = 4.0     (2*1+4)/2 = 3.0
+#   4     11.0    7.0     7.5   max(4, |11-8.5|,|7-8.5|) = 4.0     (3*1+4)/2 = 3.5
+#   5     14.0   12.0    13.5   max(2, |14-7.5|,|12-7.5|)= 6.5     (3.5*1+6.5)/2 = 5.0
+_HIGH = (10.0, 11.0, 12.0, 12.0, 11.0, 14.0)
+_LOW = (8.0, 9.0, 10.0, 8.0, 7.0, 12.0)
+_CLOSE = (9.0, 10.0, 11.0, 8.5, 7.5, 13.5)
+
+
+def test_atr_wilder_smooths_hand_computed_true_ranges():
+    assert true_range(_HIGH, _LOW, _CLOSE) == (None, 2.0, 2.0, 4.0, 4.0, 6.5)
+    # Seeded with the mean of the first two ranges, then Wilder-smoothed. The two
+    # absent bars are the warm-up: there is no second range to average yet.
+    assert atr(_HIGH, _LOW, _CLOSE, 2) == (None, None, 2.0, 3.0, 3.5, 5.0)
+
+
+def test_supertrend_line_and_direction_match_the_hand_computation():
+    # mult = 1.0, so the bands sit one ATR either side of hl2.
+    #
+    #  bar  hl2   basic upper / lower   final upper / lower   trend      line
+    #   2   11.0    13.0 /  9.0           13.0  /  9.0        seed up     9.0
+    #   3   10.0    13.0 /  7.0           13.0  /  9.0        8.5 < 9.0   13.0
+    #                                                         -> down
+    #   4    9.0    12.5 /  5.5           12.5  /  5.5        7.5 < 12.5  12.5
+    #                                                         -> still down
+    #   5   13.0    18.0 /  8.0           12.5  /  8.0        13.5 > 12.5  8.0
+    #                                                         -> up
+    assert supertrend(_HIGH, _LOW, _CLOSE, 2, 1.0) == (None, None, 9.0, 13.0, 12.5, 8.0)
+    assert supertrend_dir(_HIGH, _LOW, _CLOSE, 2, 1.0) == (
+        None,
+        None,
+        True,
+        False,
+        False,
+        True,
+    )
+
+
+def test_supertrend_seeds_its_first_warm_bar_from_the_close_inside_the_bar():
+    # Bar 2 closes at 11.0, exactly its own hl2, and the pinned convention seeds
+    # up on the tie -- so the line is the lower band, 9.0.
+    assert supertrend_dir(_HIGH, _LOW, _CLOSE, 2, 1.0)[2] is True
+    assert supertrend(_HIGH, _LOW, _CLOSE, 2, 1.0)[2] == 9.0
+
+    # One tick below hl2 on the same bar seeds down instead, onto the upper band.
+    # Bar 2's own true range is unchanged by its close, so ATR(2) is still 2.0 and
+    # the bands are the same two numbers -- only the seed reading moved.
+    lower_close = (9.0, 10.0, 10.9, 8.5, 7.5, 13.5)
+    assert supertrend_dir(_HIGH, _LOW, lower_close, 2, 1.0)[2] is False
+    assert supertrend(_HIGH, _LOW, lower_close, 2, 1.0)[2] == 13.0
+
+
+def test_supertrend_survives_a_close_resting_exactly_on_its_band():
+    # Bar 3's final lower band is 9.0. A close of exactly 9.0 has not broken it,
+    # so the uptrend holds -- the pinned convention is a strict break.
+    resting = (9.0, 10.0, 11.0, 9.0, 7.5, 13.5)
+    assert supertrend_dir(_HIGH, _LOW, resting, 2, 1.0)[3] is True
+
+    # Positive control: half a point lower is a break, on an otherwise identical
+    # tape. Without it the assertion above passes equally well against a kernel
+    # that never flips at all.
+    assert supertrend_dir(_HIGH, _LOW, _CLOSE, 2, 1.0)[3] is False
+
+
+def test_a_gap_reseeds_supertrend_rather_than_smoothing_across_it():
+    # Two more bars so the kernel has room to warm up again after the hole.
+    high = _HIGH + (15.0, 16.0)
+    low = _LOW + (13.0, 14.0)
+    clean = _CLOSE + (14.5, 15.5)
+    gapped = (9.0, 10.0, 11.0, None, 7.5, 13.5, 14.5, 15.5)
+
+    # The gapped run goes absent at the hole and stays absent until ATR(2) has two
+    # fresh ranges again. Nothing is carried over the hole and nothing is invented.
+    assert supertrend(high, low, gapped, 2, 1.0)[3:6] == (None, None, None)
+
+    # Bars 6 and 7 are identical in both tapes, yet the values differ: the gapped
+    # run re-seeded from a fresh ATR (4.25, from ranges 6.5 and 2.0) instead of
+    # continuing the old recursion. That difference is the point -- a kernel that
+    # smoothed across the hole would return the clean numbers here.
+    assert supertrend(high, low, clean, 2, 1.0)[6:] == (10.5, 12.25)
+    assert supertrend(high, low, gapped, 2, 1.0)[6:] == (9.75, 11.875)
+
+
+def test_supertrend_warmup_matches_its_registry_rule():
+    for name in ("SUPERTREND", "SUPERTREND_DIR"):
+        spec = lookup(name)
+        assert spec.lookback((10,)) == 10
+        assert spec.series_indices == (0, 1, 2)
+        assert spec.period_indices == (3,)
+
+    # And the dispatch table reaches the same kernels the direct import did.
+    assert evaluate("SUPERTREND", [_HIGH, _LOW, _CLOSE, 2, 1.0], length=6) == (
+        None,
+        None,
+        9.0,
+        13.0,
+        12.5,
+        8.0,
+    )
 
 
 def test_a_gap_resets_a_recursive_kernel():

@@ -6,7 +6,7 @@ Nano is an **alpha reference implementation**. This page distinguishes code that
 | --- | --- | --- |
 | `.nano` lexer, parser, and canonical code generation | Implemented | `nano/compiler/` parses the v1.0 grammar and produces `StrategyGraph` (baseline IR) or `NanoModule` (v1.0 IR). |
 | Static typing and look-ahead protection | Implemented | `nano/types/` types `series<T>`, resolves indicator periods at compile time, and rejects any series offset that is negative or not a compile-time constant. |
-| Computed indicators | Implemented | `nano/indicators/` ships 33 deterministic kernels with pinned degenerate-case conventions. The feed-signal form still works. |
+| Computed indicators | Implemented | `nano/indicators/` ships 35 deterministic kernels with pinned degenerate-case conventions. The feed-signal form still works. |
 | CLI | Implemented | `nano check / compile / replay / visualize / indicators / version` in `nano/cli/`. |
 | Risk-limit enforcement | Partial | A `risk { ... }` block parses, range-checks, and reaches the IR, but nothing enforces the limits at run time yet. |
 | Strategy IR validation | Implemented | `nano/ir/` validates the supported data shape and selected effect-manifest constraints. `StrategyGraph` is serializable but not content-addressed. |
