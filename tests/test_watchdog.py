@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pytest
 
+import nano
 from nano.compiler import compile_module
 from nano.ir.module import OPS
 from nano.runtime import MarketFrame, SignalFrame
@@ -385,7 +386,7 @@ def test_the_receipt_answers_the_four_questions():
     assert document["watchdog_revision"] == 3
     assert document["ir_hash"] == artifact.canonical_ir_hash
     assert document["source_hash"] == artifact.source_hash
-    assert document["nano_version"] == "1.0.1"
+    assert document["nano_version"] == nano.__version__
 
     # what matched
     assert any(e["event"] == "condition.evaluated" for e in document["execution_log"])
