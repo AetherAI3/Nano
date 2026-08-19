@@ -41,6 +41,13 @@ from ..compiler import (
 from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
+from ..library.catalog import (
+    CatalogValidationError,
+    catalog_diagnostics,
+    load_catalog,
+    searchable_text,
+    strategy_rows,
+)
 from ..runtime.interpreter import RuntimeError_
 from ..runtime.receipt import ReceiptError, build_receipt, canonical_bytes, differences
 from ..runtime.risk import RiskGate
@@ -524,6 +531,123 @@ def command_indicators(args: Any, console: Console) -> int:
     return EXIT_OK
 
 
+# ---------------------------------------------------------------------------
+# nano library
+# ---------------------------------------------------------------------------
+
+
+def _library_document(console: Console) -> Optional[dict[str, Any]]:
+    try:
+        return load_catalog()
+    except CatalogValidationError as error:
+        for diagnostic in error.diagnostics:
+            console.warn(f"error: {diagnostic.render()}")
+        return None
+
+
+def _print_library_rows(rows: Sequence[dict[str, Any]], console: Console) -> None:
+    console.say("ID\tIR\tHOST SIGNALS")
+    for row in rows:
+        signals = ",".join(row.get("requiredHostSignals", []))
+        console.say(f"{row['id']}\t{row['irVersion']}\t{signals}")
+
+
+def command_library(args: Any, console: Console) -> int:
+    """Browse or verify the generated strategy-library catalog."""
+
+    action = args.library_action
+    if action == "check":
+        diagnostics = catalog_diagnostics()
+        if diagnostics:
+            for diagnostic in diagnostics:
+                console.warn(f"error: {diagnostic.render()}")
+            return EXIT_DIAGNOSTICS
+        document = _library_document(console)
+        if document is None:
+            return EXIT_DIAGNOSTICS
+        counts = document["irMaturityCounts"]
+        console.say(
+            f"catalog ok — {document['strategyCount']} strategies, "
+            f"{len(document['categoryCounts'])} categories, "
+            f"{counts.get('baseline', 0)} baseline + {counts.get('v1', 0)} v1"
+        )
+        return EXIT_OK
+
+    document = _library_document(console)
+    if document is None:
+        return EXIT_DIAGNOSTICS
+    rows = strategy_rows(document)
+
+    if action == "show":
+        needle = args.strategy.casefold()
+        match = next(
+            (
+                row
+                for row in rows
+                if row.get("id", "").casefold() == needle
+                or row.get("slug", "").casefold() == needle
+            ),
+            None,
+        )
+        if match is None:
+            console.warn(f"error: unknown library strategy {args.strategy!r}")
+            return EXIT_USAGE
+        console.say(json.dumps(match, indent=2, ensure_ascii=False))
+        return EXIT_OK
+
+    if action == "search":
+        terms = tuple(term.casefold() for term in args.query.split() if term)
+        if not terms:
+            console.warn("error: library search needs a non-empty query")
+            return EXIT_USAGE
+        matched = [
+            row
+            for row in rows
+            if all(term in searchable_text(row) for term in terms)
+        ]
+        _print_library_rows(matched, console)
+        return EXIT_OK
+
+    if action == "filter":
+        if args.category is None and args.regime is None and args.input is None:
+            console.warn(
+                "error: library filter needs --category, --regime, or --input"
+            )
+            return EXIT_USAGE
+        if any(
+            value is not None and not value.strip()
+            for value in (args.category, args.regime, args.input)
+        ):
+            console.warn("error: library filter values must not be empty")
+            return EXIT_USAGE
+        matched = rows
+        if args.category is not None:
+            category = args.category.strip().casefold()
+            matched = [
+                row for row in matched if row.get("category", "").casefold() == category
+            ]
+        if args.regime is not None:
+            regime = args.regime.strip().casefold()
+            matched = [
+                row for row in matched if regime in row.get("regime", "").casefold()
+            ]
+        if args.input is not None:
+            input_name = args.input.strip().casefold()
+            matched = [
+                row
+                for row in matched
+                if any(
+                    input_name in str(signal).casefold()
+                    for signal in row.get("requiredHostSignals", [])
+                )
+            ]
+        _print_library_rows(matched, console)
+        return EXIT_OK
+
+    _print_library_rows(rows, console)
+    return EXIT_OK
+
+
 def command_version(args: Any, console: Console) -> int:
     """Print component versions — useful when a host reports a mismatch."""
     from .. import __version__
@@ -546,6 +670,7 @@ __all__ = [
     "command_check",
     "command_compile",
     "command_indicators",
+    "command_library",
     "command_replay",
     "command_version",
     "command_visualize",

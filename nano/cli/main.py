@@ -37,6 +37,7 @@ from .commands import (
     command_check,
     command_compile,
     command_indicators,
+    command_library,
     command_replay,
     command_version,
     command_visualize,
@@ -56,6 +57,8 @@ examples:
   nano compile strategy.nano --emit types
   nano replay strategy.nano --data bars.csv --date 2026-01-15 --verify
   nano visualize strategy.nano --format mermaid
+  nano library search trend
+  nano library show ema_pullback_continuation
 """
 
 
@@ -157,6 +160,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     indicators.add_argument("name", nargs="?", metavar="NAME")
     indicators.set_defaults(handler=command_indicators)
+
+    library = subcommands.add_parser(
+        "library", help="browse and verify the packaged strategy catalog"
+    )
+    library_actions = library.add_subparsers(
+        dest="library_action", metavar="ACTION", required=True
+    )
+
+    library_list = library_actions.add_parser(
+        "list", help="list every strategy in stable ID order"
+    )
+    library_list.set_defaults(handler=command_library)
+
+    library_show = library_actions.add_parser(
+        "show", help="show one strategy's complete metadata as JSON"
+    )
+    library_show.add_argument("strategy", metavar="ID_OR_SLUG")
+    library_show.set_defaults(handler=command_library)
+
+    library_search = library_actions.add_parser(
+        "search", help="search all authored and derived metadata"
+    )
+    library_search.add_argument("query", metavar="QUERY")
+    library_search.set_defaults(handler=command_library)
+
+    library_filter = library_actions.add_parser(
+        "filter", help="filter by category, regime text, or host input"
+    )
+    library_filter.add_argument("--category", metavar="CATEGORY")
+    library_filter.add_argument("--regime", metavar="TEXT")
+    library_filter.add_argument("--input", metavar="SIGNAL")
+    library_filter.set_defaults(handler=command_library)
+
+    library_check = library_actions.add_parser(
+        "check", help="verify catalogability and byte-identical regeneration"
+    )
+    library_check.set_defaults(handler=command_library)
 
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)

@@ -14,7 +14,8 @@ This script is that missing check, and it is also the fixer:
     python scripts/check_contribution.py --all
 
 `--write` generates or repairs the `_ir.json` partner in the library's exact
-format, so nobody has to hand-reflow JSON to match its neighbours.
+format and refreshes the derived strategy catalog, so nobody has to hand-reflow
+JSON or maintain metadata in two places.
 
 Exit code 0 means the entry is shaped like every other entry in the library.
 Exit code 1 prints one line per problem, each naming the file and the rule.
@@ -38,7 +39,13 @@ from nano.compiler import compile_source, compile_to_dict  # noqa: E402
 from nano.library.contribution import (  # noqa: E402
     baseline_control_frames,
     module_control_frame,
-    source_provenance_issues,
+)
+from nano.library.catalog import (  # noqa: E402
+    CatalogDiagnostic,
+    CatalogValidationError,
+    catalog_diagnostics,
+    parse_strategy_metadata,
+    write_catalog,
 )
 from nano.ir.module import NanoModule  # noqa: E402
 from nano.ir.schema import NANO_IR_VERSION_BASELINE  # noqa: E402
@@ -46,17 +53,6 @@ from nano.runtime.vm import run_module  # noqa: E402
 from nano.compiler.errors import NanoCompileError  # noqa: E402
 from nano.ir.graph import StrategyGraph  # noqa: E402
 from nano.runtime.interpreter import execute  # noqa: E402
-
-# Every entry in the library carries this header. It is what makes a rule
-# reviewable by someone who did not write it: not "what does this compute" —
-# the source says that — but when it is meant to fire and when it is wrong.
-REQUIRED_HEADER_FIELDS = (
-    ("REGIME:", "which market or system state this rule is for"),
-    ("CONDITIONS:", "what must already be true before it is armed"),
-    ("INVALIDATION:", "what makes it wrong, so a reader can disprove it"),
-    ("SHAPE:", "the timeframe and the picture it is describing"),
-    ("CALIBRATED ON:", "where the numbers came from, and what does not travel"),
-)
 
 # The only effects a library entry may declare. Nano proposes intents and writes
 # its own run log; anything else on this list would mean the language had grown
@@ -96,6 +92,16 @@ def ir_path(nano_path: Path) -> Path:
     return nano_path.with_name(f"{nano_path.stem}_ir.json")
 
 
+def catalog_problem(diagnostic: CatalogDiagnostic) -> str:
+    """Render catalog diagnostics with repository-relative paths."""
+
+    path = diagnostic.path
+    if path == "library" or path.startswith("library/"):
+        path = f"nano/{path}"
+    location = f"{path}:{diagnostic.line}" if diagnostic.line is not None else path
+    return f"{location}: {diagnostic.message}"
+
+
 def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
     rel = nano_path.relative_to(ROOT).as_posix()
 
@@ -106,20 +112,6 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
 
     header = [line.strip() for line in source.splitlines() if line.strip().startswith("//")]
     header_text = "\n".join(header)
-    if not header:
-        problems.append(
-            f"{rel}: no `//` comment header. Every library entry documents its "
-            "signal contract and its invalidation before the source."
-        )
-    for field, why in REQUIRED_HEADER_FIELDS:
-        if field not in header_text:
-            problems.append(
-                f"{rel}: comment header is missing `// {field}` — {why}. "
-                "See nano/library/README.md."
-            )
-
-    problems.extend(f"{rel}: {issue}" for issue in source_provenance_issues(header))
-
     try:
         document = compile_to_dict(source)
         # The library ships two corpora. A baseline entry names the feed signals
@@ -138,6 +130,20 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
             f"{rel}:{error.line}:{error.column}: does not compile — {error.message}"
         )
         return
+
+    # Use the same field-aware parser that generates the hosted artifact. Its
+    # optional SOURCE validation delegates to contribution.py, preserving the
+    # exact provenance policy landed in #30.
+    try:
+        parse_strategy_metadata(
+            source,
+            document,
+            category=nano_path.parent.name,
+            slug=nano_path.stem,
+            source_path=rel,
+        )
+    except CatalogValidationError as error:
+        problems.extend(catalog_problem(item) for item in error.diagnostics)
 
     if document.get("effects") != ALLOWED_EFFECTS:
         problems.append(
@@ -277,7 +283,7 @@ def main() -> int:
     parser.add_argument(
         "--write",
         action="store_true",
-        help="generate or repair the `_ir.json` partner in library format",
+        help="generate or repair pinned IR and the derived strategy catalog",
     )
     args = parser.parse_args()
 
@@ -299,6 +305,22 @@ def main() -> int:
 
     if args.all or not args.paths:
         check_orphans(problems)
+
+    # The catalog is generated, never hand-maintained. A normal check proves it
+    # is byte-identical to source/IR; --write refreshes it only after the selected
+    # entries have passed the existing compile, replay, and provenance gates.
+    if not problems:
+        if args.write:
+            try:
+                output = write_catalog(LIBRARY)
+            except CatalogValidationError as error:
+                problems.extend(catalog_problem(item) for item in error.diagnostics)
+            else:
+                print(f"wrote {output.relative_to(ROOT).as_posix()}")
+        else:
+            problems.extend(
+                catalog_problem(item) for item in catalog_diagnostics(LIBRARY)
+            )
 
     if problems:
         print(f"\n{len(problems)} problem(s):\n", file=sys.stderr)
