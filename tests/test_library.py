@@ -577,3 +577,209 @@ def test_every_watchdog_entry_is_admissible_under_the_watchdog_profile():
             risk_class="LOW",
         )
         assert artifact.watchdog_id == nano_path.stem
+
+
+# --------------------------------------------------------------------------
+# the release-note publication family
+# --------------------------------------------------------------------------
+#
+# Six watchdog entries gate the publication of release notes for a repository
+# programme. They are tested together because they are deployed together: the
+# reason codes they carry are a closed set, and two of them are the two halves
+# of a single disjunction that baseline IR cannot express in one rule.
+
+RELEASE_NOTE_ENTRIES = sorted(
+    (LIBRARY / "watchdog").glob("aether_release_notes_*.nano")
+)
+
+# The reason code each entry carries. It is the entry's name rather than a field
+# on the intent, because an `Intent` has an action, an asset and a confidence and
+# nothing else - there is no reason slot to write into, and inventing one would
+# mean changing the language to carry a label. One rule per reason code is the
+# shape the runtime already has: `WatchdogReceiptV1` records `watchdog_id`, so a
+# host reads the reason off the receipt without parsing anything.
+RELEASE_NOTE_REASONS = {
+    "aether_release_notes_uncovered_merge": "MERGE_WITHOUT_RELEASE_CANDIDATE",
+    "aether_release_notes_candidate_unattached": "RELEASE_CANDIDATE_NOT_ATTACHED",
+    "aether_release_notes_proof_missing": "PUBLIC_RELEASE_NOT_PROVEN",
+    "aether_release_notes_copy_unvalidated": "PUBLIC_RELEASE_NOT_PROVEN",
+    "aether_release_notes_batch_unaccounted": "RELEASE_BATCH_ACCOUNTING_INCOMPLETE",
+    "aether_release_notes_coverage": "MERGE_COVERAGE_UNKNOWN",
+}
+
+
+def _satisfies(condition) -> float:
+    """A value that satisfies one baseline condition, and only just."""
+    if condition.operator in (">=", "<="):
+        return float(condition.value)
+    raise AssertionError(
+        "the release-note family reads >= and <= only; got "
+        f"{condition.operator!r} on {condition.signal}"
+    )
+
+
+def _fails(condition) -> float:
+    """A value that fails one baseline condition, and only just."""
+    if condition.operator == ">=":
+        return float(condition.value) - 1.0
+    return float(condition.value) + 1.0
+
+
+def _one_bar(values: dict) -> MarketFrame:
+    return MarketFrame(
+        timestamps=(0,), signals={name: (value,) for name, value in values.items()}
+    )
+
+
+def test_the_release_note_family_is_the_expected_six_entries():
+    """The reason codes are a closed set; an entry outside it has no host mapping."""
+    assert {path.stem for path in RELEASE_NOTE_ENTRIES} == set(RELEASE_NOTE_REASONS)
+
+
+@pytest.mark.parametrize("nano_path", RELEASE_NOTE_ENTRIES, ids=lambda p: p.stem)
+def test_every_release_note_condition_is_load_bearing(nano_path: Path):
+    """Fire on the trigger frame; go quiet with any single signal flipped.
+
+    A no-fire assertion on its own cannot tell a rule that declined to fire from
+    a rule that never could, so the positive control runs first. Flipping one
+    condition at a time then proves every term is doing work: a condition that
+    can be falsified without changing the answer is a condition that was never
+    part of the rule, and it would sit there looking like a guard.
+    """
+    graph = compile_source(nano_path.read_text(encoding="utf-8"))
+    signals = [condition.signal for condition in graph.conditions]
+    assert len(set(signals)) == len(signals), "a signal is read twice in one rule"
+
+    trigger = {c.signal: _satisfies(c) for c in graph.conditions}
+    fired = execute(graph, _one_bar(trigger)).intents
+    assert len(fired) == 1, f"{nano_path.stem} did not fire on its own trigger frame"
+    assert fired[0].action in {"PAUSE", "OBSERVE"}
+    assert fired[0].asset is None
+
+    for condition in graph.conditions:
+        near_miss = dict(trigger)
+        near_miss[condition.signal] = _fails(condition)
+        assert execute(graph, _one_bar(near_miss)).intents == (), (
+            f"{nano_path.stem} still fires with {condition.signal} flipped, so "
+            f"{condition.signal} {condition.operator} {condition.value} is not "
+            "carrying any weight"
+        )
+
+
+def test_the_coverage_guard_holds_on_every_state_that_is_not_a_complete_scan():
+    """The point of the whole family: an outage must never read as a clean scan.
+
+    The host's coverage vocabulary is `available / empty / unavailable / error /
+    stale`, published as five independent booleans. Only the first two mean the
+    forge answered, so those two are the ones the rule names - an allow-list.
+    The sixth row is a state nobody has invented yet, and it is held for the same
+    reason a new opcode is denied by `WATCHDOG_OPS`: a rule that listed the bad
+    states instead would wave every future one through.
+    """
+    graph = _load("watchdog/aether_release_notes_coverage.nano")
+    assert [a.name for a in graph.agents] == ["ReleaseDesk"]
+
+    states = {
+        "available": (1.0, 0.0),
+        "empty": (0.0, 1.0),
+        "unavailable": (0.0, 0.0),
+        "error": (0.0, 0.0),
+        "stale": (0.0, 0.0),
+        "a state added next year": (0.0, 0.0),
+    }
+    cleared = {"available", "empty"}
+    for state, (available, empty) in states.items():
+        frame = _one_bar(
+            {"MERGE_COVERAGE_AVAILABLE": available, "MERGE_COVERAGE_EMPTY": empty}
+        )
+        actions = [intent.action for intent in execute(graph, frame).intents]
+        if state in cleared:
+            assert actions == [], f"coverage state {state!r} should permit publication"
+        else:
+            assert actions == ["PAUSE"], f"coverage state {state!r} was not held"
+
+
+def test_the_coverage_guard_never_reads_the_unaccounted_count():
+    """The two rules are separate so an outage cannot arrive as a zero.
+
+    `aether_release_notes_batch_unaccounted` reads the count and therefore cannot
+    answer at all when the count is absent. The coverage guard reads only the two
+    facts about the scan itself, so it answers during the outage that made the
+    count absent. Merging them into one rule would put the count back in the
+    coverage guard's dependency set and re-open exactly the hole.
+    """
+    graph = _load("watchdog/aether_release_notes_coverage.nano")
+    assert {c.signal for c in graph.conditions} == {
+        "MERGE_COVERAGE_AVAILABLE",
+        "MERGE_COVERAGE_EMPTY",
+    }
+
+
+def test_the_proof_and_copy_rules_reconstruct_one_disjunction():
+    """`not proof or not copy` is two entries because baseline IR has no `or`.
+
+    The split is only safe if the pair covers the disjunction exactly: a hold for
+    every combination except the one where both halves are satisfied. Deleting
+    either entry leaves a public release that can be published with half its
+    evidence, which is the failure this walks the whole truth table to exclude.
+    """
+    proof = _load("watchdog/aether_release_notes_proof_missing.nano")
+    copy = _load("watchdog/aether_release_notes_copy_unvalidated.nano")
+
+    for has_proof in (0.0, 1.0):
+        for validated in (0.0, 1.0):
+            frame = _one_bar(
+                {
+                    "PUBLIC_CANDIDATE": 1.0,
+                    "REQUIRED_PROOF_AVAILABLE": has_proof,
+                    "COPY_VALIDATED": validated,
+                }
+            )
+            held = [
+                intent.action
+                for graph in (proof, copy)
+                for intent in execute(graph, frame).intents
+            ]
+            if has_proof and validated:
+                assert held == [], "a fully proven public release was still held"
+            else:
+                assert "PAUSE" in held, (
+                    f"REQUIRED_PROOF_AVAILABLE={has_proof} COPY_VALIDATED="
+                    f"{validated} is not proven, and neither entry held it"
+                )
+
+    # An internal candidate is outside both rules by construction.
+    internal = _one_bar(
+        {
+            "PUBLIC_CANDIDATE": 0.0,
+            "REQUIRED_PROOF_AVAILABLE": 0.0,
+            "COPY_VALIDATED": 0.0,
+        }
+    )
+    assert execute(proof, internal).intents == ()
+    assert execute(copy, internal).intents == ()
+
+
+def test_every_release_note_hold_states_the_boundary_it_must_not_cross():
+    """A `pause` here holds publication, never an engineering merge.
+
+    The distinction is not enforceable inside Nano - a proposal is a proposal and
+    the host decides what to do with it - so the boundary lives in the header,
+    where the person wiring the rule into a gate will read it. That makes it
+    prose, and prose rots, so it gets a guard like every other claim the library
+    makes about itself.
+    """
+    for nano_path in RELEASE_NOTE_ENTRIES:
+        source = nano_path.read_text(encoding="utf-8")
+        if "PAUSE" not in {i.action for i in compile_source(source).intents}:
+            continue
+        header = "\n".join(
+            line.strip()
+            for line in source.splitlines()
+            if line.strip().startswith("//")
+        )
+        assert "release-note publication and nothing else" in header, (
+            f"{nano_path.name} proposes a hold without saying what it may hold. "
+            "Say so in the header: these rules gate publication, never a branch, "
+            "a deploy, or an engineering merge."
+        )

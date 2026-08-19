@@ -11,7 +11,7 @@ Every entry has two files:
 
 ## Learn, compare, contribute
 
-The current library contains 35 strategies across eight categories — seven trading, one for deterministic watchdog controls. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 41 strategies across eight categories — seven trading, one for deterministic watchdog controls. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
@@ -32,7 +32,7 @@ python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
 | `volume/` | `volume_spike_confirmation`, `obv_trend` |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
 | `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
-| `watchdog/` | `trusted_route_guard`, `credential_age_alert` |
+| `watchdog/` | `trusted_route_guard`, `credential_age_alert`, `aether_release_notes_coverage`, `aether_release_notes_batch_unaccounted`, `aether_release_notes_proof_missing`, `aether_release_notes_copy_unvalidated`, `aether_release_notes_uncovered_merge`, `aether_release_notes_candidate_unattached` |
 
 ## The comment header
 
@@ -131,6 +131,13 @@ natural measurement falls as things get worse — availability, remaining budget
 a health score — the host publishes the complement, and the header documents the
 transform.
 
+A **magnitude** follows that convention exactly. A **fact** — a host boolean in
+the `0/1` domain — has no worse direction to rise in, so a rule reads it as
+`>= 1` for true and `<= 0` for false. Both spellings appear in the
+release-note family below. The alternative, minting a `NOT_` complement for
+every fact the host publishes, doubles the contract surface and creates two
+names that can disagree; `0/1` and its two comparisons cannot.
+
 Watchdog rules emit `pause` and `observe` only. A rule proposing a direction is
 a trading rule and belongs in another category; `tests/test_library.py` enforces
 this.
@@ -150,9 +157,54 @@ the library.
 | trusted route unavailable | `TRUSTED_ROUTE_DOWN` | 0 while the host's connectivity check verifies the route, 1 while it does not; host owns debouncing |
 | credential age | `CREDENTIAL_AGE_DAYS` | Age in whole days of the oldest in-scope credential or signing key |
 
-The categories are deliberately thin — two entries and two signals. Rules for
-authentication-failure bursts, unsigned release artifacts, endpoint posture, and
-release-approval thresholds are
+#### Release-note signals
+
+Six entries (`aether_release_notes_*`) gate the publication of release notes for
+a repository programme. Read the boundary in each header before deploying them:
+their `pause` proposals hold **release-note publication only** and must never be
+wired to a branch, a deploy, or an engineering merge.
+
+| System measurement | Nano signal | Feed convention |
+| --- | --- | --- |
+| merged | `MERGED` | 0/1; the pull request under examination has merged |
+| canonical repository | `CANONICAL_REPOSITORY` | 0/1; the merge landed in the repository this programme publishes notes for |
+| canonical base | `CANONICAL_BASE` | 0/1; the merge landed on that repository's release branch |
+| release-note pull request | `IS_RELEASE_NOTES_PR` | 0/1; the pull request *is* the release note, so it does not need covering |
+| candidate exists | `HAS_RELEASE_CANDIDATE` | 0/1; some draft release note already covers this merge |
+| candidate attached | `HAS_SOURCE_ATTACHMENT` | 0/1; the draft carries the merge, commit or artifact it describes |
+| candidate age | `PENDING_AGE_SECONDS` | Whole seconds the candidate has held its current state; host resets it on revision |
+| public surface | `PUBLIC_CANDIDATE` | 0/1; the candidate is bound for a surface outside the organisation |
+| proof retrievable | `REQUIRED_PROOF_AVAILABLE` | 0/1; every claim the host requires evidence for can actually be fetched |
+| copy validated | `COPY_VALIDATED` | 0/1; the text passed the host's validation, whatever that host defines it to be |
+| unaccounted merges | `UNACCOUNTED_MERGE_COUNT` | Count of merges on the canonical base that no candidate covers; published only from a completed scan, absent otherwise |
+| merge coverage | `MERGE_COVERAGE_AVAILABLE`, `MERGE_COVERAGE_EMPTY`, `MERGE_COVERAGE_UNAVAILABLE`, `MERGE_COVERAGE_ERROR`, `MERGE_COVERAGE_STALE` | The host's five-value coverage vocabulary as five independent 0/1 facts, exactly one of which is 1 on a bar |
+
+`MERGE_COVERAGE_*` is the encoding worth reading twice. The host's coverage
+state is a closed vocabulary — *available, empty, unavailable, error, stale* —
+with no ordering, so it is published as five independent booleans rather than
+flattened onto one number: `unknown=0, degraded=1, healthy=2` invents the claim
+that degraded sits between the other two, and every `>=` written against it
+inherits the invention. Nano cannot detect that mistake, which is why the
+encoding is a review matter and is written down here.
+
+`empty` and `unavailable` are the pair that has to stay apart. `empty` means the
+forge answered and there was nothing to count; `unavailable` and `error` mean it
+did not answer. A host that lets an error path fall through to an empty result
+publishes a zero that reads exactly like a clean scan, and
+`aether_release_notes_coverage` is the rule that refuses to believe it: it names
+the two states that permit publication and holds on everything else, so a sixth
+coverage state added later is held rather than waved through.
+
+Four further signals — `BATCH_ACCOUNTING_COMPLETE`, `WAITING_PROOF_COUNT`,
+`ROLLING_PR_EXISTS` and `ROLLING_PR_CI_GREEN` — belong to the same host feed and
+are deliberately read by no rule here. They are host bookkeeping about the
+publishing mechanism, and no entry reads a signal it does not need: a condition
+added to make a contract look complete is a condition that can only weaken the
+rule it was added to.
+
+The category has grown from two entries; the signal tables above are still not a
+catalogue. Rules for authentication-failure bursts, unsigned release artifacts,
+endpoint posture, and release-approval thresholds are
 [open issues](https://github.com/AetherAI3/Nano/labels/good%20first%20issue),
 not omissions.
 
