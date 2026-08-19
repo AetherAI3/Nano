@@ -74,7 +74,7 @@ def frame_from_document(document: Mapping[str, Any]) -> MarketFrame:
             timestamps=tuple(timestamps),
             signals=normalized_signals,
         )
-    except (AttributeError, KeyError, TypeError, ValueError) as error:
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError) as error:
         raise WatchdogReplayMismatch(
             f"Receipt 'input_frame' is not a readable frame: {error}"
         ) from error

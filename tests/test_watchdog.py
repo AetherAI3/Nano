@@ -40,6 +40,7 @@ from nano.watchdog import (
     canonical_json,
     compile_watchdog,
     evaluate_watchdog,
+    frame_from_document,
     referenced_signals,
     replay_watchdog,
     validate_watchdog,
@@ -348,6 +349,24 @@ def test_nonfinite_current_input_fails_closed_as_canonical_absence(value):
     encoded = canonical_json(document)
     assert "NaN" not in encoded and "Infinity" not in encoded
     assert replay_watchdog(artifact, receipt).to_dict() == document
+
+
+def test_oversized_integer_input_fails_closed_as_canonical_absence():
+    artifact = sample_artifact()
+    receipt = evaluate_watchdog(artifact, frame(41.0, 10**1000))
+
+    assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
+    assert receipt.missing_inputs == ("QUEUE_SATURATION_PCT",)
+    assert receipt.proposed_intents == ()
+    assert receipt.input_frame["signals"]["QUEUE_SATURATION_PCT"][-1] is None
+    assert replay_watchdog(artifact, receipt).to_dict() == receipt.to_dict()
+
+
+def test_replay_rejects_an_oversized_integer_without_leaking_overflow():
+    with pytest.raises(WatchdogReplayMismatch, match="not a readable frame"):
+        frame_from_document(
+            {"timestamps": [0], "signals": {"QUEUE_SATURATION_PCT": [10**1000]}}
+        )
 
 
 def test_missing_input_a_frame_with_no_observation_at_all_is_unavailable():

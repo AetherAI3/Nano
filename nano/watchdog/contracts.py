@@ -169,7 +169,11 @@ def _snapshot_frame(frame: MarketFrame) -> _FrameSnapshot:
                 raise WatchdogContractError(
                     f"Watchdog frame '/signals/{name}/{position}' must be numeric or null"
                 )
-            number = float(value)
+            try:
+                number = float(value)
+            except OverflowError:
+                values.append(None)
+                continue
             if not math.isfinite(number):
                 values.append(None)
             else:
