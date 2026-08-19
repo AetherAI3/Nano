@@ -155,6 +155,7 @@ def test_the_package_version_is_declared_once_and_agrees_everywhere():
     assert declared[0] == nano.__version__, (
         f"pyproject.toml declares {declared[0]} but nano.__version__ is "
         f"{nano.__version__}. Both are canonical; update them together."
+    )
 
 
 # --------------------------------------------------------------------------
