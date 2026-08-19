@@ -68,6 +68,8 @@ The library holds **two corpora** and you choose one deliberately. A **baseline 
 
 Every strategy addition needs a fire/no-fire test, and a no-fire assertion never ships alone: a rule that can never fire passes one unchanged. Pair it with a positive control on the same strategy, on a frame that differs only in the thing being tested.
 
+If you check that coverage by mutating a rule and re-running, run the **whole test file** — never a `-k` selector. A selector silently excludes any test whose name it does not match, including the one written for the mutation you are checking, so it can report a survivor it has already killed or miss one it has not.
+
 No strategy may carry a performance, win-rate, or profitability claim, and none is a live signal. Document thresholds as the conventions they are, and say where they stop travelling.
 
 ## Add a watchdog rule

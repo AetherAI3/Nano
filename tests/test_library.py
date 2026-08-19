@@ -1045,10 +1045,34 @@ def test_absolute_momentum_reports_risk_off_when_either_window_turns():
         ("OBSERVE", bar) for bar in range(126, 135)
     ]
 
-    # Boundary. A perfectly flat tape makes both returns exactly zero, and zero
-    # is not greater than zero, so the filter reports risk-off. `>` not `>=`:
-    # an instrument that has gone nowhere for six months is not momentum.
-    assert _fires(module, _ohlcv([100.0] * 135)) == [
+    # Boundary, one operator at a time. A flat tape zeroes BOTH returns, so
+    # relaxing either `>` to `>=` on its own leaves the other conjunct false and
+    # the rule still reports risk-off. That frame looks like a boundary pin and
+    # tests nothing: only the simultaneous mutation of both operators is caught,
+    # and nobody writes that mutation. Each operator needs a frame where it alone
+    # decides the bar.
+
+    # short_return exactly zero, long_return +50.48: 114 advancing bars then 21
+    # flat ones, so bar 134 reads back to bar 113 — the last advancing bar — and
+    # the one-month window is flat to the tick while the six-month window is not.
+    # `short_return >= 0` turns that final OBSERVE into a BUY.
+    short_flat = [100.0 + 0.5 * i for i in range(114)] + [156.5] * 21
+    assert _fires(module, _ohlcv(short_flat)) == [
+        ("BUY", bar) for bar in range(126, 134)
+    ] + [("OBSERVE", 134)]
+
+    # The mirror: long_return exactly zero, short_return +110.53. Nine flat bars,
+    # a decline to 47.5, then a recovery that lands bar 134 on exactly the value
+    # of bar 126 bars earlier. Every step is a binary-exact half, so the equality
+    # is real arithmetic and not a rounding coincidence — `close[134] == close[8]`
+    # holds exactly. `long_return >= 0` turns bar 134 into a BUY.
+    mirror = (
+        [100.0] * 9
+        + [100.0 - 0.5 * (i - 8) for i in range(9, 114)]
+        + [47.5 + 2.5 * (i - 113) for i in range(114, 135)]
+    )
+    assert mirror[134] == mirror[8]
+    assert _fires(module, _ohlcv(mirror)) == [
         ("OBSERVE", bar) for bar in range(126, 135)
     ]
 
@@ -1295,3 +1319,47 @@ def test_vwap_reversion_needs_a_discount_not_merely_weakness():
     # the rule must still abstain, which is the only frame that tests the ceiling.
     rally = [100.0 + 0.3 * i for i in range(26)]
     assert _fires(module, _ohlcv(rally + [rally[-1] - 4.2])) == []
+
+
+def test_stochastic_reclaim_fires_when_k_lands_exactly_on_the_threshold():
+    """`k >= oversold` is inclusive, pinned without asserting a float artifact.
+
+    An earlier attempt at this pin was abandoned as unpinnable: a close placed at
+    the 20 percent position of a ragged range produced k = 19.999999999999957,
+    so the frame would have asserted IEEE754 rather than the operator. That was a
+    property of the constants, not of the boundary. With a window whose span is
+    exactly 5.0 — every high 105.0, every low 100.0 — and a close exactly 1.0
+    above the bottom, the kernel computes (101.0 - 100.0) / 5.0 * 100.0, which is
+    exactly 20.0 in binary floating point. The prior bar sits at 100.5, giving
+    k = 10.0, so the reclaim edge is real.
+
+    Mutated to `k > oversold` this frame emits nothing.
+    """
+    module = _module("momentum/stochastic_reclaim.nano")
+    closes = [100.5] * 19 + [101.0]
+    frame = _ohlcv(closes, highs=[105.0] * 20, lows=[100.0] * 20)
+    assert _fires(module, frame) == [("BUY", 19)]
+
+
+def test_volume_climax_fires_when_volume_lands_exactly_on_the_surge_multiple():
+    """`volume >= SMA * surge` is inclusive, pinned exactly.
+
+    The climax bar's own volume sits inside the 20-bar average it is compared
+    against, which does not make the boundary unreachable — it only fixes the
+    divisor. Nineteen quiet bars at V and a climax at 3V satisfy the equality
+    when 17V = 57Q; V = 1700 gives SMA = (19 * 1700 + 5700) / 20 = 1900.0 exactly
+    and 3 * 1900.0 = 5700.0 exactly, with no rounding anywhere.
+
+    Mutated to `volume > SMA * surge` this frame emits nothing.
+    """
+    module = _module("volume/volume_climax_reversal.nano")
+    decline = [150.0 - 0.8 * i for i in range(58)]
+    closes = decline + [decline[-1] - 1.0]
+    frame = _ohlcv(
+        closes,
+        opens=closes,
+        highs=[c + 0.5 for c in decline] + [closes[-1] + 1.0],
+        lows=[c - 0.5 for c in decline] + [closes[-1] - 14.0],
+        volumes=[1700.0] * 58 + [5700.0],
+    )
+    assert _fires(module, frame) == [("BUY", 58)]
