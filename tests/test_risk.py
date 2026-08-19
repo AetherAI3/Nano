@@ -20,6 +20,7 @@ import math
 import pytest
 
 from nano.compiler import compile_module
+from nano.compiler.errors import NanoSyntaxError
 from nano.ir import IRNode, NanoModule, load_module
 from nano.ir.schema import RISK_LIMITS
 from nano.runtime.interpreter import MarketFrame
@@ -27,6 +28,7 @@ from nano.runtime.risk import (
     ACTUATING_ACTIONS,
     ENFORCED_LIMITS,
     HOST_ENFORCED_LIMITS,
+    MEASUREMENT_PREFIX,
     measurement_for,
 )
 from nano.runtime.vm import run_module
@@ -107,9 +109,20 @@ def test_measurement_names_live_in_a_namespace_source_cannot_spell():
     That is what keeps a host measurement from ever colliding with a feed
     signal a strategy reads by name.
     """
+    assert "." in MEASUREMENT_PREFIX
     for rule in ENFORCED_LIMITS:
         if rule.measurement is not None:
-            assert rule.measurement.startswith("risk.")
+            assert rule.measurement.startswith(MEASUREMENT_PREFIX)
+    with pytest.raises(NanoSyntaxError):
+        compile_module(
+            "strategy S {\n"
+            "    every 1m {\n"
+            "        if risk.drawdown > 1 {\n"
+            "            observe()\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
     assert measurement_for("max_drawdown") == "risk.drawdown"
     assert measurement_for("min_confidence") is None
 
@@ -647,3 +660,51 @@ def test_an_unusable_limit_reaching_an_unvalidated_run_still_fails_closed():
     result = run_module(module, _frame(1), validate=False)
     assert result.intents == ()
     assert "not a usable number" in _events(result, "risk.violation")[0].detail
+
+
+def test_min_confidence_makes_execute_unreachable_and_that_is_deliberate():
+    """`execute()` has no confidence slot in the grammar, so it cannot clear one.
+
+    Pinned rather than special-cased. Exempting `EXECUTE` would mean one
+    actuating intent quietly ignores a limit the author declared, which is the
+    exact shape of dishonesty this module exists to remove — and the failure is
+    loud: every `execute()` is withheld, and the log says why on the first bar.
+    """
+    result = _run(
+        _strategy("        min_confidence 0.6", action="execute()"), length=1
+    )
+    assert result.intents == ()
+    assert "no confidence" in _events(result, "risk.violation")[0].detail
+    # Positive control: the same action clears the same gate once the limit that
+    # cannot be expressed for it is not the one declared.
+    permitted = _run(
+        _strategy("        max_drawdown 0.05", action="execute()"),
+        length=1,
+        **{"risk.drawdown": (0.01,)},
+    )
+    assert [i.action for i in permitted.intents] == ["EXECUTE"]
+
+
+def test_an_escalation_is_not_gated_by_a_risk_limit():
+    """Escalation asks for help; a breached limit is a reason to ask, not to stop."""
+    source = (
+        "tier nano+\n"
+        "strategy Escalating {\n"
+        "    risk {\n"
+        "        max_drawdown 0.05\n"
+        "    }\n"
+        "    agent RiskDesk\n"
+        "    every 1m {\n"
+        "        if TRIGGER > 0 {\n"
+        "            buy(BTC, 1.0)\n"
+        "            escalate RiskDesk\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    module = compile_module(source)
+    result = run_module(
+        module, _frame(1, TRIGGER=(1.0,), **{"risk.drawdown": (0.9,)})
+    )
+    assert result.intents == ()
+    assert [e.target for e in result.escalations] == ["RiskDesk"]

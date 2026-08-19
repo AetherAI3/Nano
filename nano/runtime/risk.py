@@ -85,7 +85,6 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
 from ..ir.module import NanoModule
-from ..ir.schema import RISK_LIMITS
 from .effects import LogEntry
 from .interpreter import MarketFrame
 
@@ -198,9 +197,7 @@ class RiskGate:
     declared no limits must behave exactly as it did before this module existed.
     """
 
-    def __init__(
-        self, limits: Mapping[str, Any], frame: MarketFrame
-    ) -> None:
+    def __init__(self, limits: Mapping[str, Any], frame: MarketFrame) -> None:
         self._limits = dict(limits)
         self._frame = frame
         self._rules = tuple(
@@ -352,11 +349,3 @@ __all__ = [
     "Violation",
     "measurement_for",
 ]
-
-# A drift guard that costs one import-time comparison: every name the grammar
-# accepts must appear in exactly one of the two tables above. Adding a keyword to
-# `RISK_LIMITS` without deciding whether the runtime can honour it is the exact
-# failure this module exists to end, so it fails at import rather than at review.
-assert {rule.limit for rule in ENFORCED_LIMITS} | {
-    name for name, _ in HOST_ENFORCED_LIMITS
-} == set(RISK_LIMITS), "every risk limit must be enforced or declared unenforceable"

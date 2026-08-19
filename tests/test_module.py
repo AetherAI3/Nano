@@ -319,6 +319,29 @@ def test_opcode_attributes_are_validated(op, attrs, expected):
         )
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"min_confidence": 5, "max_drawdown": -1},
+        {"max_drawdown": -1, "min_confidence": 5},
+    ],
+    ids=["confidence-first", "drawdown-first"],
+)
+def test_a_document_with_two_bad_limits_names_the_same_one_first(limits):
+    """Which rejection an auditor is shown must not depend on key order.
+
+    A risk block reaches the loader as a JSON object, and object key order is a
+    serialisation accident — the same module round-tripped through two hosts can
+    arrive with its limits spelled in either order. Validation walks them in the
+    schema's order so the diagnostic is a property of the document rather than of
+    whoever last serialised it.
+    """
+    with pytest.raises(IRValidationError, match="max_drawdown"):
+        NanoModule.from_dict(
+            document(nodes=_nodes(("n1", "risk.limits", (), {"limits": limits})))
+        )
+
+
 # -- version dispatch ---------------------------------------------------------
 
 

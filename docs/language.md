@@ -141,7 +141,15 @@ survives, and never sees what did not.
 
 `pause` and `observe` are never suppressed. They are how a strategy asks to be
 stopped and how it reports what it saw — a breaker that silenced its own halt
-because the book was in drawdown would be worse than no breaker.
+because the book was in drawdown would be worse than no breaker. `escalate` is
+not gated either: a breached limit is a reason to ask for help, not to stop
+asking.
+
+One sharp edge follows from the rules rather than from a special case:
+`execute()` has no confidence argument in the grammar, so under a declared
+`min_confidence` **every `execute()` is withheld**. Exempting it would mean one
+actuating intent quietly ignored a limit its author declared. Use `buy` or `sell`
+with a confidence, or do not pair `min_confidence` with `execute`.
 
 ### Units, and the boundary
 
