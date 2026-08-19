@@ -42,7 +42,7 @@ from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
 from ..runtime.interpreter import RuntimeError_
-from ..runtime.receipt import build_receipt, canonical_bytes, canonical_text, differences
+from ..runtime.receipt import build_receipt, canonical_bytes, differences
 from ..runtime.risk import RiskGate
 from ..runtime.vm import run_module
 from ..types.env import KIND_FEED, KIND_INPUT, KIND_LET, KIND_PARAM
@@ -67,6 +67,26 @@ class Console:
 
     def warn(self, message: str) -> None:
         print(message, file=self.err)
+
+    def emit(self, payload: bytes) -> None:
+        """Write exactly `payload` — no encoding, no newline translation.
+
+        `say` goes through a text wrapper, which rewrites every ``\\n`` to
+        ``os.linesep``. On Windows that turns the receipt's single framing byte
+        into ``\\r\\n``, so a consumer following ``docs/receipts.md`` §1 and
+        digesting everything but the last byte gets a mismatch. A receipt is
+        bytes; it has to leave through a byte sink.
+
+        Falls back to the text sink when there is no underlying buffer, which is
+        the case for an in-memory stream a test injected.
+        """
+        buffer = getattr(self.out, "buffer", None)
+        if buffer is None:
+            self.out.write(payload.decode("ascii"))
+            return
+        self.out.flush()  # keep any buffered text output ahead of these bytes
+        buffer.write(payload)
+        buffer.flush()
 
 
 def _read_source(path: Path, console: Console) -> Optional[str]:
@@ -412,10 +432,10 @@ def command_replay(args: Any, console: Console) -> int:
             # passed runs whose serialised form differed.
             again = build_receipt(module, loaded.frame, run_module(module, loaded.frame))
             if canonical_bytes(again) != canonical_bytes(receipt):
-                drift = differences(receipt, again) or ("(byte-level only)",)
                 console.warn(
                     "error: replay is not deterministic — two identical runs "
-                    "produced different results at " + ", ".join(drift)
+                    "produced different results at "
+                    + ", ".join(differences(receipt, again))
                 )
                 return EXIT_DIAGNOSTICS
     except (RuntimeError_, IRValidationError) as exc:
@@ -423,10 +443,11 @@ def command_replay(args: Any, console: Console) -> int:
         return EXIT_DIAGNOSTICS
 
     if args.report == "receipt":
-        # The canonical, versioned artifact -- see docs/receipts.md. One line, so
-        # a stream of runs is valid JSON Lines; `console.say` supplies the single
-        # terminating newline that framing (not the digest) owns.
-        console.say(canonical_text(receipt))
+        # The canonical, versioned artifact -- see docs/receipts.md. Written as
+        # bytes through `emit`, not `say`: exactly the canonical bytes plus the
+        # one LF that frames them, on every platform. One line, so a stream of
+        # runs is valid JSON Lines.
+        console.emit(canonical_bytes(receipt) + b"\n")
         return EXIT_OK
 
     if args.report == "json":
