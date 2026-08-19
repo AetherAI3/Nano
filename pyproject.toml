@@ -1,6 +1,6 @@
 [project]
 name = "aether-nano"
-version = "1.0.7"
+version = "1.0.8"
 description = "A deterministic strategy DSL and reference runtime for host-governed decision rules."
 readme = "README.md"
 license = { text = "MIT" }
