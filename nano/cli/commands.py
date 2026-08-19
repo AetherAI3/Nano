@@ -42,7 +42,7 @@ from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
 from ..runtime.interpreter import RuntimeError_
-from ..runtime.receipt import build_receipt, canonical_bytes, differences
+from ..runtime.receipt import ReceiptError, build_receipt, canonical_bytes, differences
 from ..runtime.risk import RiskGate
 from ..runtime.vm import run_module
 from ..types.env import KIND_FEED, KIND_INPUT, KIND_LET, KIND_PARAM
@@ -438,7 +438,7 @@ def command_replay(args: Any, console: Console) -> int:
                     + ", ".join(differences(receipt, again))
                 )
                 return EXIT_DIAGNOSTICS
-    except (RuntimeError_, IRValidationError) as exc:
+    except (RuntimeError_, IRValidationError, ReceiptError) as exc:
         console.warn(f"error: replay failed: {exc}")
         return EXIT_DIAGNOSTICS
 

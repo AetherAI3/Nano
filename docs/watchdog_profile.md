@@ -72,7 +72,7 @@ This is the rule the rest of the module is built around.
 
 `run_module` treats an absent cell as "not warmed up yet" and skips the bar — correct for a strategy, where a bar with no data is a bar you skip. A control cannot skip. If the number that would have decided whether to hold is not there, the honest answer is `INPUT_UNAVAILABLE` and a list of what was missing, not a silence that reads like calm.
 
-A signal is unavailable when the frame does not carry it, or when its value **at the last bar** is absent. The last bar is the observation the proposal is about. A gap earlier in the frame is history the VM already refuses to fire on and records as `condition.unwarmed` — absence *now* means the rule cannot judge now; absence *then* does not.
+A signal is unavailable when the frame does not carry it, or when its value **at the last bar** is absent. `NaN` and positive or negative infinity are not JSON numbers and are normalized once to that same absence spelling before hashing or evaluation. The last bar is the observation the proposal is about. A gap earlier in the frame is history the VM already refuses to fire on and records as `condition.unwarmed` — absence *now* means the rule cannot judge now; absence *then* does not. A non-finite value therefore cannot turn a failed comparison into a quiet `OK` receipt or leak a bare non-JSON token into an artifact.
 
 The gate covers every signal the contract marks `required`, **and** every signal the rule actually reads. `required=False` describes the host contract, not the rule's dependency — otherwise it would be a way to talk the evaluator into comparing against a value it does not have.
 
@@ -155,7 +155,7 @@ There is no gate decision here and no record of an effect. Those are the host's 
 replayed = replay_watchdog(artifact, receipt)   # raises WatchdogReplayMismatch
 ```
 
-The claim is narrow and total: the same artifact over the same input frame produces a byte-identical receipt — the same proposals, in the same order, with the same ordered log.
+The claim is narrow and total: the same artifact over the canonical input-frame snapshot produces a byte-identical receipt — the same proposals, in the same order, with the same ordered log. Replay compares canonical bytes, not Python dictionary equality (`True == 1` and `0.0 == -0.0` make that weaker than the serialized claim).
 
 Replay **rebuilds the frame from the receipt** rather than reusing the caller's object. Handing the original frame back would prove only that the evaluator is a function, which is already true and already tested. Reading it back out of `input_frame` proves what an audit needs: the receipt on its own reproduces the decision, with no live system standing by to re-answer questions about the inputs.
 
@@ -229,7 +229,7 @@ blind.proposed_intents    # ()  -- and this is NOT the same as normal
 
 ## Frame terminology
 
-`SignalFrame` is an alias of `MarketFrame`, not a second type — `SignalFrame is MarketFrame` holds. A frame is a timeline plus named numeric series, and nothing about that shape is market-specific.
+`SignalFrame` is an alias of `MarketFrame`, not a second type — `SignalFrame is MarketFrame` holds. A frame is a timeline plus named numeric series, and nothing about that shape is market-specific. At the Watchdog boundary, timestamps and series must use exact built-in list/tuple containers and `signals` an exact built-in dict. They are copied once into an immutable snapshot used by the frame hash, receipt, and VM; a subclass cannot return one observation to the digest and another to evaluation.
 
 It is an alias rather than a rename so the class keeps its original `__name__`: reprs, pickles, and existing diagnostics do not shift under any current consumer. New non-market code should reach for `SignalFrame`; every existing import keeps working unchanged.
 

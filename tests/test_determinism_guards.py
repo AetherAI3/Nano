@@ -1,8 +1,10 @@
 """Static and cross-process guards on Nano's determinism claims.
 
-The package documents four properties in prose — no network, no ambient clock, no
-ambient randomness, no mandatory third-party dependency — and until now all four
-held by code review alone. Prose does not go red. These do.
+The package documents four boundaries in prose — no direct network or ambient
+source in deterministic code, and no mandatory third-party dependency. These
+tests are executable regression guards for statically visible imports,
+references, and simple aliases. They are not a whole-program proof for dynamic
+Python; the runtime and receipt tests below cover the externally promised bytes.
 
 The scan is an AST walk rather than a text grep for three reasons a grep cannot
 cover: it does not match comments or docstrings, it resolves import aliases
@@ -116,6 +118,30 @@ def _alias_map(tree: ast.AST) -> dict:
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             for entry in node.names:
                 aliases[entry.asname or entry.name] = f"{node.module}.{entry.name}"
+    # Follow simple name/attribute aliases to a fixed point. Without this,
+    # ``clock = datetime; clock.datetime.now()`` walks around the import resolver
+    # while still being trivial to resolve statically. Complex dataflow
+    # (arguments, containers, conditional assignment) remains outside this
+    # deliberately local guard.
+    assignments = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name):
+                assignments.append((target.id, node.value))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.value is not None:
+                assignments.append((node.target.id, node.value))
+
+    for _ in range(len(assignments) + 1):
+        changed = False
+        for name, value in assignments:
+            resolved = _resolve(value, aliases)
+            if resolved is not None and aliases.get(name) != resolved:
+                aliases[name] = resolved
+                changed = True
+        if not changed:
+            break
     return aliases
 
 
@@ -199,7 +225,13 @@ def test_the_scan_resolves_aliases_and_then_matches_them():
         "b = t.monotonic()\n"
         "c = now()\n"
         "d = urandom(8)\n"
+        "clock = datetime\n"
+        "clock_type = clock.datetime\n"
+        "e = clock_type.now()\n"
     )
+    aliases = _alias_map(tree)
+    assert aliases["clock"] == "datetime"
+    assert aliases["clock_type"] == "datetime.datetime"
     resolved = set(_references(tree))
     assert {
         "datetime.datetime.now",
@@ -259,10 +291,9 @@ def test_nothing_in_nano_imports_dynamically():
     """Dynamic import, or dynamic attribute access, routes around every rule above.
 
     Both reach a banned name as a string, which is invisible to any check that
-    matches on names. This is a partial: `d = datetime; d.datetime.now()` still
-    escapes, and closing that needs dataflow analysis. That is the boundary of
-    the technique, not a defect to chase — this scan is a guard, not a static
-    analyser.
+    matches on names. Simple assignment aliases are resolved above; values that
+    flow through arguments, containers, or branches still require real dataflow
+    analysis. This scan is a guard, not a general Python static analyser.
     """
     offenders = []
     for name, tree in _parsed():

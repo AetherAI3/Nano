@@ -85,9 +85,9 @@ def _check(value: Any, path: str, seen: Set[int]) -> None:
     carries a path. Only ``dict`` counts as an object: a ``MappingProxyType``
     reaching the encoder raised a bare ``TypeError`` pointing at nothing.
     """
-    if value is None or isinstance(value, (bool, int)):
+    if value is None or type(value) in (bool, int):
         return
-    if isinstance(value, str):
+    if type(value) is str:
         # Pure ASCII is the overwhelming case and needs no work. A lone surrogate
         # survives `ensure_ascii` as a `\\udXXX` escape and then fails to decode
         # anywhere else, which breaks the "survives any transport" promise.
@@ -100,7 +100,7 @@ def _check(value: Any, path: str, seen: Set[int]) -> None:
                     "not valid Unicode, so it cannot appear in a receipt"
                 ) from exc
         return
-    if isinstance(value, float):
+    if type(value) is float:
         if not math.isfinite(value):
             raise ReceiptError(
                 f"{path or '/'}: {value!r} is non-finite and has no JSON "
@@ -108,15 +108,21 @@ def _check(value: Any, path: str, seen: Set[int]) -> None:
             )
         return
 
-    if isinstance(value, (dict, list, tuple)):
+    # Exact built-in containers are part of the trust boundary.  Accepting a
+    # subclass here lets validation call one implementation of ``items`` or
+    # ``__iter__`` and ``json.dumps`` call another.  A mutable/hostile subclass
+    # could therefore validate one tree and encode different bytes.  Callers
+    # that own such a container must snapshot it to a built-in before entering
+    # the canonical encoder.
+    if type(value) in (dict, list, tuple):
         if id(value) in seen:
             raise ReceiptError(
                 f"{path or '/'}: contains itself; a receipt must be a finite tree"
             )
         seen.add(id(value))
-        if isinstance(value, dict):
+        if type(value) is dict:
             for key, item in value.items():
-                if not isinstance(key, str):
+                if type(key) is not str:
                     raise ReceiptError(
                         f"{path or '/'}: object keys must be strings, got "
                         f"{_describe(key)} {key!r}"

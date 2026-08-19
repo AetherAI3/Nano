@@ -41,6 +41,7 @@ another.
 | Non-finite floats | **refused** (`ReceiptError`) | `NaN`/`Infinity` are not JSON; Python's encoder emits them anyway as bare tokens no conforming parser accepts |
 | Absent members | **omitted**, never `null` | One spelling for "no value" |
 | Object keys | must be strings | `json.dumps` silently coerces `{1: "a"}` to `{"1": "a"}`, which can collide with a real `"1"` key |
+| Containers | exact built-in `dict`, `list`, or `tuple` | A subclass can expose different contents during validation and encoding; snapshot trusted foreign containers before canonicalization |
 
 This continues the convention `NanoModule.content_hash` has always used
 (`json.dumps(document, sort_keys=True, separators=(",", ":"))` in
@@ -199,10 +200,11 @@ findings.
 ## 3. Timestamps
 
 **A deterministic run embeds no wall clock.** Every timestamp in a receipt came
-out of the injected `MarketFrame`; nothing in `nano/runtime/receipt.py` can reach
-a clock, entropy, the environment, or the network, and
-`tests/test_determinism_guards.py` scans the whole `nano/` package with an AST
-walk to keep that true rather than asserting it in prose.
+out of the injected `MarketFrame`; `nano/runtime/receipt.py` imports no clock,
+entropy, environment, or network source. `tests/test_determinism_guards.py`
+guards direct imports, statically resolvable references, and simple alias chains
+across `nano/`. It is deliberately a regression guard, not a claim that a local
+AST walk proves arbitrary Python free of dataflow or runtime monkeypatching.
 
 A host that wants to record *when* a run happened puts it in `host`, where it is
 visibly a claim.
@@ -316,9 +318,12 @@ explicit act that means `receiptVersion` has to move.
 - **Empty means empty.** `intents`, `escalations`, and `log` are always present,
   possibly as `[]`.
 - **Array order.** Intents, escalations, and log entries are in emission order.
-- **Additive growth within a version.** New *optional* members may appear in an
-  existing object; nothing is removed or retyped without a version bump. Parse
-  permissively.
+- **A fixed member set within a version.** Adding an optional member is still an
+  emitted-shape change and therefore bumps `receiptVersion`, just like removing
+  or retyping one. Conditional v1 members (`host`, `provenance`, `params`, and
+  the timestamp bounds) remain conditional; the set of members that *may* be
+  emitted is fixed. Consumers may ignore unknown members when inspecting a
+  future version, but a v1 producer will not add one silently.
 
 ### You may not depend on
 

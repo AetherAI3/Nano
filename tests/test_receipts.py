@@ -209,6 +209,40 @@ def test_unencodable_values_are_refused_by_path():
         canonical_bytes({"run": {"tags": {"a", "b"}}})
 
 
+def test_container_subclasses_cannot_change_between_validation_and_encoding():
+    """The canonical encoder traverses each exact built-in tree exactly once.
+
+    ``isinstance(value, dict)`` admits a subclass whose ``items`` method can
+    return safe data to the validator and different data to ``json.dumps``.
+    Reject it before invoking any override; a caller may explicitly snapshot a
+    trusted container to ``dict`` if that is the intended boundary.
+    """
+
+    class SwitchingDict(dict):
+        calls = 0
+
+        def items(self):
+            self.calls += 1
+            return super().items()
+
+    hostile = SwitchingDict(value=1)
+    with pytest.raises(ReceiptError, match=r"/: test_receipts\.SwitchingDict"):
+        canonical_bytes(hostile)
+    assert hostile.calls == 0
+
+    class SwitchingList(list):
+        calls = 0
+
+        def __iter__(self):
+            self.calls += 1
+            return super().__iter__()
+
+    nested = SwitchingList([1])
+    with pytest.raises(ReceiptError, match=r"/items: test_receipts\.SwitchingList"):
+        canonical_bytes({"items": nested})
+    assert nested.calls == 0
+
+
 def test_digest_is_over_the_canonical_bytes():
     document = {"b": 2, "a": 1}
     import hashlib
@@ -880,7 +914,8 @@ def test_the_receipt_shape_is_pinned_to_this_version():
     routine — on every Nano version bump, because `identity.nanoVersion` is part
     of the artifact. That makes them the wrong guard against a *shape* change,
     which could ride along in the same regeneration unnoticed. This pins the
-    member names independently of any value in them.
+    member names independently of any value in them. Optional/additive members
+    are shape too: v1's full possible member set is closed.
     """
     module = compile_module(PARAM_SOURCE)
     frame = _frame(close=(1.0, 2.0, 9.0, 9.5, 10.0))
@@ -893,8 +928,8 @@ def test_the_receipt_shape_is_pinned_to_this_version():
         assert set(receipt[section]) == RECEIPT_SHAPE[section], section
 
 
-def test_optional_members_are_the_only_ones_a_minimal_receipt_omits():
-    """The pin above is maximal; this fixes exactly which members may be absent."""
+def test_conditional_members_are_the_only_ones_a_minimal_receipt_omits():
+    """The closed pin is maximal; this fixes which v1 members may be absent."""
     module = compile_module(ZSCORE_SOURCE)
     empty = MarketFrame(timestamps=(), signals={"close": ()})
     receipt = build_receipt(module, empty, run_module(module, empty))

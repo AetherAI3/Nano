@@ -41,9 +41,9 @@ from .contracts import (
     WatchdogReceiptV1,
     WatchdogSignalSpecV1,
     WatchdogState,
+    _snapshot_frame,
     canonical_json,
     content_address,
-    frame_document,
 )
 from .profile import (
     cadence_of,
@@ -130,7 +130,9 @@ def evaluate_watchdog(
     reads a clock, which is what lets ``replay_watchdog`` reproduce a receipt
     byte for byte.
     """
-    document = frame_document(frame)
+    snapshot = _snapshot_frame(frame)
+    frame = snapshot.frame
+    document = snapshot.document
     frame_hash = content_address(canonical_json(document))
     timestamp = frame.timestamps[-1] if frame.timestamps else None
     # A frame with no observation still needs somewhere to hang its log entry.
@@ -181,7 +183,8 @@ def evaluate_watchdog(
                 LogEntry(
                     "input.unavailable",
                     log_timestamp,
-                    f"{', '.join(missing)} not published at the evaluated bar; "
+                    f"{', '.join(missing)} not published as a finite value at "
+                    "the evaluated bar; "
                     f"unavailable_policy={artifact.unavailable_policy}",
                 ),
             ),
