@@ -73,6 +73,7 @@ jobs:
 
           required_modules = {
               "nano/library/__init__.py",
+              "nano/library/catalog.py",
               "nano/library/contribution.py",
           }
           missing_modules = sorted(required_modules - packaged)
@@ -101,8 +102,13 @@ jobs:
                           "from nano.library.contribution import "
                           "baseline_control_frames, module_control_frame, "
                           "source_provenance_issues; "
+                          "from nano.library.catalog import "
+                          "catalog_diagnostics, load_catalog; "
                           "assert baseline_control_frames.__module__ == "
-                          "'nano.library.contribution'"
+                          "'nano.library.contribution'; "
+                          "catalog = load_catalog(); "
+                          "assert catalog['strategyCount'] == 53; "
+                          "assert catalog_diagnostics() == ()"
                       ),
                   ],
                   cwd=outside_checkout,

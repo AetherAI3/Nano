@@ -387,6 +387,98 @@ def test_graph_json_is_consumable_by_a_host_renderer():
     assert document["entries"]
 
 
+# -- nano library -------------------------------------------------------------
+
+
+def test_library_list_is_stable_and_complete(capsys):
+    code, out, err = _run(["library", "list"], capsys)
+    lines = out.splitlines()
+
+    assert code == EXIT_OK
+    assert err == ""
+    assert lines[0] == "ID\tIR\tHOST SIGNALS"
+    assert len(lines) == 54
+    assert lines[1].startswith("event_volatility/cpi_impulse_pullback_long\t0.1.0\t")
+    assert lines[-1].startswith("watchdog/trusted_route_guard\t0.1.0\t")
+
+
+def test_library_show_accepts_a_stable_slug(capsys):
+    code, out, err = _run(
+        ["library", "show", "ema_pullback_continuation"], capsys
+    )
+    document = json.loads(out)
+
+    assert code == EXIT_OK
+    assert err == ""
+    assert document["id"] == "trend/ema_pullback_continuation"
+    assert document["irMaturity"] == "v1"
+    assert document["requiredHostSignals"] == ["close"]
+
+
+def test_library_search_uses_authored_and_derived_metadata(capsys):
+    code, out, err = _run(["library", "search", "trend continuation"], capsys)
+
+    assert code == EXIT_OK
+    assert err == ""
+    assert "trend/ema_pullback_continuation" in out
+    assert "trend/golden_cross" not in out
+
+
+def test_library_search_rejects_an_empty_query(capsys):
+    code, out, err = _run(["library", "search", "  "], capsys)
+
+    assert code == EXIT_USAGE
+    assert out == ""
+    assert "non-empty query" in err
+
+
+def test_library_filters_compose_and_watchdog_count_is_pinned(capsys):
+    code, out, _ = _run(["library", "filter", "--category", "watchdog"], capsys)
+    assert code == EXIT_OK
+    assert len(out.splitlines()) == 9
+
+    code, out, _ = _run(
+        ["library", "filter", "--category", "trend", "--input", "close"],
+        capsys,
+    )
+    assert code == EXIT_OK
+    assert "trend/ema_pullback_continuation" in out
+    assert "trend/golden_cross" not in out
+
+
+def test_library_filter_without_a_dimension_is_a_usage_error(capsys):
+    code, out, err = _run(["library", "filter"], capsys)
+
+    assert code == EXIT_USAGE
+    assert out == ""
+    assert "needs --category, --regime, or --input" in err
+
+
+def test_library_filter_rejects_an_empty_dimension(capsys):
+    code, out, err = _run(["library", "filter", "--regime", " "], capsys)
+
+    assert code == EXIT_USAGE
+    assert out == ""
+    assert "values must not be empty" in err
+
+
+def test_library_unknown_show_is_a_usage_error(capsys):
+    code, out, err = _run(["library", "show", "not_a_strategy"], capsys)
+
+    assert code == EXIT_USAGE
+    assert out == ""
+    assert "unknown library strategy" in err
+
+
+def test_library_check_regenerates_byte_identically(capsys):
+    code, out, err = _run(["library", "check"], capsys)
+
+    assert code == EXIT_OK
+    assert err == ""
+    assert "53 strategies" in out
+    assert "41 baseline + 12 v1" in out
+
+
 # -- nano indicators / version / help ----------------------------------------
 
 
@@ -444,6 +536,7 @@ def test_parser_exposes_every_documented_command():
         "replay",
         "visualize",
         "indicators",
+        "library",
         "version",
     } <= set(choices)
 
