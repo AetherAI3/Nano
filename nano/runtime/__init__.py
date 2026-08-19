@@ -9,7 +9,13 @@ that trades" true across an IR version boundary.
 """
 
 from .effects import Intent, LogEntry
-from .interpreter import ExecutionResult, MarketFrame, RuntimeError_, execute
+from .interpreter import (
+    ExecutionResult,
+    MarketFrame,
+    RuntimeError_,
+    SignalFrame,
+    execute,
+)
 from .scheduler import interval_seconds, ticks
 from .vm import Escalation, ModuleResult, ReasoningProvider, run_frames, run_module
 
@@ -22,6 +28,7 @@ __all__ = [
     "ModuleResult",
     "ReasoningProvider",
     "RuntimeError_",
+    "SignalFrame",
     "execute",
     "interval_seconds",
     "run_frames",
