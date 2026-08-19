@@ -50,6 +50,7 @@ from .schema import (
     TIER_REQUIREMENTS,
     TIERS,
     TierViolation,
+    validate_risk_limit,
 )
 
 COMPILER_NAME = "nnc"
@@ -349,6 +350,7 @@ class NanoModule:
 
         seen: Set[str] = set()
         nodes: list[IRNode] = []
+        risk_declared = False
         for node_data in nodes_raw:
             if not isinstance(node_data, Mapping):
                 raise IRValidationError("Each node must be an object")
@@ -376,6 +378,18 @@ class NanoModule:
                         f"but the module declares {tier!r}"
                     )
             _validate_attrs(node)
+            if node.op == "risk.limits":
+                if risk_declared:
+                    # The parser already refuses two `risk` blocks; without the
+                    # same refusal here, a second node in a hand-written document
+                    # is a fail-open path inside a fail-closed feature — whichever
+                    # block a runtime happened to read last would decide the
+                    # limits, and a looser one could silently replace a tighter.
+                    raise IRValidationError(
+                        f"Node {node.id!r} declares a second risk.limits node; a "
+                        "module has at most one"
+                    )
+                risk_declared = True
             seen.add(node.id)
             nodes.append(node)
 
@@ -491,6 +505,11 @@ class NanoModule:
 # the moment a named opcode is added.
 NAMED_OPS = frozenset({"input.ref", "param.ref", "feed.signal", "let", "agent"})
 
+# Position of each risk limit in the declared vocabulary. Validation walks a
+# document's limits in this order, so which rejection an auditor is shown first
+# does not depend on the order the document happened to serialise its keys in.
+_RISK_LIMIT_ORDER = {name: index for index, name in enumerate(RISK_LIMITS)}
+
 
 def _validate_attrs(node: IRNode) -> None:
     """Check the attributes each opcode's behavior depends on.
@@ -599,14 +618,24 @@ def _validate_attrs(node: IRNode) -> None:
             raise IRValidationError(
                 f"Node {node.id!r} (risk.limits) requires a non-empty 'limits' object"
             )
-        for key, value in limits.items():
-            if key not in RISK_LIMITS:
+        # Both loops walk a fixed order rather than the document's own. Which
+        # rejection an auditor is shown must be a property of the document, not
+        # of whichever host serialised it last: unknown names sort by name, and
+        # known ones follow the declared vocabulary.
+        for key in sorted(k for k in limits if k not in RISK_LIMITS):
+            raise IRValidationError(
+                f"Node {node.id!r} declares unknown risk limit {key!r}"
+            )
+        for key in sorted(limits, key=_RISK_LIMIT_ORDER.__getitem__):
+            # The type checker range-checks a `risk { ... }` block, but raw IR
+            # never passed through it — and both must reject the same values, so
+            # both ask the same function. Without this a hand-built document
+            # could declare `max_drawdown -1`, a limit nothing can satisfy, or
+            # `min_confidence 5`, which suppresses every intent forever.
+            problem = validate_risk_limit(key, limits[key])
+            if problem is not None:
                 raise IRValidationError(
-                    f"Node {node.id!r} declares unknown risk limit {key!r}"
-                )
-            if not isinstance(value, (int, float)) or isinstance(value, bool):
-                raise IRValidationError(
-                    f"Node {node.id!r} risk limit {key!r} must be numeric"
+                    f"Node {node.id!r} risk limit {key!r} {problem}"
                 )
         return
 

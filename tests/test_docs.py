@@ -119,3 +119,39 @@ def test_the_advertised_test_count_is_not_stale():
             "functions, so the collected total is at least that. Update the badge "
             "and the prose together."
         )
+
+
+def test_the_package_version_is_declared_once_and_agrees_everywhere():
+    """`pyproject.toml` and `nano.__version__` must not drift apart.
+
+    They are edited by hand, in separate files, at the end of a release — the
+    exact conditions under which one gets updated and the other does not. A
+    wheel whose metadata says one version while `nano.__version__` says another
+    is the kind of mismatch a host only discovers from a bug report.
+
+    Parsed with a regex rather than `tomllib` because the package supports
+    Python 3.10, where `tomllib` does not exist and a third-party TOML reader
+    would be a dependency this project refuses to take.
+    """
+    import nano
+
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    # Match `version = "..."` only inside the `[project]` table, so a version
+    # pinned under some future `[tool.*]` section cannot be mistaken for it.
+    project_table = re.split(r"^\[", pyproject, flags=re.MULTILINE)
+    declared = [
+        match.group(1)
+        for section in project_table
+        if section.startswith("project]")
+        for match in [re.search(r'^version\s*=\s*"([^"]+)"', section, re.MULTILINE)]
+        if match
+    ]
+
+    assert len(declared) == 1, (
+        f"expected exactly one version in pyproject.toml's [project] table, "
+        f"found {declared}"
+    )
+    assert declared[0] == nano.__version__, (
+        f"pyproject.toml declares {declared[0]} but nano.__version__ is "
+        f"{nano.__version__}. Both are canonical; update them together."
+    )

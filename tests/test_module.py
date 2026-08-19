@@ -298,6 +298,16 @@ def test_ambient_clock_or_entropy_is_refused(key):
         ("risk.limits", {"limits": {}}, "non-empty 'limits'"),
         ("risk.limits", {"limits": {"max_yolo": 1}}, "unknown risk limit"),
         ("risk.limits", {"limits": {"max_daily_loss": "big"}}, "must be numeric"),
+        ("risk.limits", {"limits": {"max_daily_loss": True}}, "must be numeric"),
+        # The type checker range-checks a `risk { ... }` block, but raw IR never
+        # went through it. These four are the shapes that make the *runtime* gate
+        # misbehave rather than merely look odd: a negative ceiling nothing can
+        # satisfy, a confidence floor above 1 that suppresses every intent
+        # forever, a limit no comparison can order, and a fractional count.
+        ("risk.limits", {"limits": {"max_drawdown": -0.1}}, "fraction of equity"),
+        ("risk.limits", {"limits": {"min_confidence": 5}}, r"\[0.0, 1.0\]"),
+        ("risk.limits", {"limits": {"max_drawdown": float("nan")}}, "finite number"),
+        ("risk.limits", {"limits": {"max_open_positions": 2.5}}, "whole number"),
         ("const", {}, "requires a 'value'"),
     ],
 )
@@ -306,6 +316,52 @@ def test_opcode_attributes_are_validated(op, attrs, expected):
     with pytest.raises(IRValidationError, match=expected):
         NanoModule.from_dict(
             document(effects=effects, nodes=_nodes(("n1", op, (), attrs)))
+        )
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"min_confidence": 5, "max_drawdown": -1},
+        {"max_drawdown": -1, "min_confidence": 5},
+    ],
+    ids=["confidence-first", "drawdown-first"],
+)
+def test_a_document_with_two_bad_limits_names_the_same_one_first(limits):
+    """Which rejection an auditor is shown must not depend on key order.
+
+    A risk block reaches the loader as a JSON object, and object key order is a
+    serialisation accident — the same module round-tripped through two hosts can
+    arrive with its limits spelled in either order. Validation walks them in the
+    schema's order so the diagnostic is a property of the document rather than of
+    whoever last serialised it.
+    """
+    with pytest.raises(IRValidationError, match="max_drawdown"):
+        NanoModule.from_dict(
+            document(nodes=_nodes(("n1", "risk.limits", (), {"limits": limits})))
+        )
+
+
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"max_yolo": 1, "max_fomo": 1},
+        {"max_fomo": 1, "max_yolo": 1},
+    ],
+    ids=["yolo-first", "fomo-first"],
+)
+def test_a_document_with_two_unknown_limits_names_the_same_one_first(limits):
+    """The sibling of the test above, for the loop that runs before it.
+
+    Known limits are walked in the schema's order; unknown ones have no place in
+    that order, so they are walked by name. Both loops exist to keep the
+    diagnostic a property of the document rather than of whichever host
+    serialised it last, and leaving one of them on document order would have kept
+    exactly half the defect.
+    """
+    with pytest.raises(IRValidationError, match="max_fomo"):
+        NanoModule.from_dict(
+            document(nodes=_nodes(("n1", "risk.limits", (), {"limits": limits})))
         )
 
 

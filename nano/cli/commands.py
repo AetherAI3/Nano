@@ -42,6 +42,7 @@ from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
 from ..runtime.interpreter import RuntimeError_
+from ..runtime.risk import RiskGate
 from ..runtime.vm import run_module
 from ..types.env import KIND_FEED, KIND_INPUT, KIND_LET, KIND_PARAM
 from .render import render, summarise_run
@@ -285,9 +286,21 @@ class _Collector:
 
 
 def _missing_signals(module, available: Sequence[str]) -> List[str]:
-    """Names the module reads that the data file does not provide."""
+    """Names the module reads that the data file does not provide.
+
+    Risk measurements count. A `risk { max_drawdown 0.05 }` whose `risk.drawdown`
+    column is absent does not run unguarded — it fails closed and withholds every
+    actuating intent — so a replay against the wrong file would otherwise report
+    zero proposals, exit 0, and look like a strategy that simply found no setup.
+    The gate is asked what it needs before any data exists, which is why it takes
+    the module alone.
+    """
     have = set(available)
-    needed = [i.name for i in module.inputs] + list(module.signals)
+    needed = (
+        [i.name for i in module.inputs]
+        + list(module.signals)
+        + list(RiskGate.for_module(module).required_measurements())
+    )
     return [name for name in needed if name not in have]
 
 
@@ -306,6 +319,16 @@ def _print_text_report(
     )
     if verified:
         console.say("  replay    deterministic (verified over two runs)")
+
+    withheld = [e for e in result.log if e.event == "intent.suppressed"]
+    if withheld:
+        # The text report otherwise shows only what survived, so a run that was
+        # gated reads exactly like a run that found nothing. The log has the full
+        # account; this line is what makes a reader go looking for it.
+        console.say(
+            f"  risk      {len(withheld)} intent(s) withheld by risk limits "
+            "(--report json for the log)"
+        )
 
     if result.intents:
         console.say("")

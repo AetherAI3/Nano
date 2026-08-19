@@ -14,6 +14,7 @@ import json
 
 import pytest
 
+import nano
 from nano.cli.commands import (
     EXIT_DIAGNOSTICS,
     EXIT_IO,
@@ -404,7 +405,7 @@ def test_empty_indicator_name_does_not_silently_list_everything(capsys):
 def test_version_reports_both_ir_versions(capsys):
     code, out, _ = _run(["version"], capsys)
     assert code == EXIT_OK
-    assert "nano 1.0.1" in out
+    assert f"nano {nano.__version__}" in out
     assert "0.1.0, 1.0.0" in out
 
 
