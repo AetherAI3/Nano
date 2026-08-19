@@ -96,6 +96,8 @@ def test_checked_in_catalog_is_byte_identical_and_counts_the_landed_corpus():
     document = json.loads(first)
 
     assert first == second
+    assert first.startswith("{\n\n")
+    assert first.endswith("}\n")
     assert catalog_path(LIBRARY).read_bytes() == first.encode("utf-8")
     assert document["strategyCount"] == 53
     assert document["irMaturityCounts"] == {"baseline": 41, "v1": 12}
