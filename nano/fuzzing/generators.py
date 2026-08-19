@@ -13,7 +13,16 @@ import json
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence, Tuple
 
-from ..compiler import compile_module, compile_source, compile_to_dict, parse
+from ..compiler import (
+    LookaheadError,
+    NanoCompileError,
+    NanoSyntaxError,
+    NanoTypeError,
+    compile_module,
+    compile_source,
+    compile_to_dict,
+    parse,
+)
 from ..compiler.ast import (
     ActionAst,
     AgentAst,
@@ -274,7 +283,8 @@ class InvalidProgram:
     source: str
     base_source: str
     mutation: str
-    expected_location: Optional[Tuple[int, int]] = None
+    expected_error: type[NanoCompileError]
+    expected_location: Tuple[int, int]
 
     def compile(self) -> dict:
         return compile_to_dict(self.source)
@@ -581,138 +591,349 @@ def _location(source: str, marker: str) -> Tuple[int, int]:
     return line, column
 
 
-_INVALID_BASES = {
-    "action": (
-        "strategy S {\n"
-        "    every 5m {\n"
-        "        if RSI < 30 {\n"
-        "            observe()\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "confidence": (
-        "strategy S {\n"
-        "    every 5m {\n"
-        "        if RSI < 30 {\n"
-        "            buy(BTC, 0.5)\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "interval": (
-        "strategy S {\n"
-        "    every 5m {\n"
-        "        if RSI < 30 {\n"
-        "            observe()\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "series": (
-        "strategy S {\n"
-        "    input close: series<float>\n"
-        "    every 1m {\n"
-        "        if close > close[1] {\n"
-        "            buy(BTC)\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "period": (
-        "strategy S {\n"
-        "    input close: series<float>\n"
-        "    let mean = SMA(close, 2)\n"
-        "    every 1m {\n"
-        "        if close > mean {\n"
-        "            observe()\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "tier": (
-        "tier nano+\n"
-        "strategy S {\n"
-        "    agent Desk { role research }\n"
-        "    every 1m {\n"
-        "        if confidence < 0.5 {\n"
-        "            escalate Desk\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-    "type": (
-        "strategy S {\n"
-        "    every 1m {\n"
-        "        if (1 + 2) > 0 {\n"
-        "            observe()\n"
-        "        }\n"
-        "    }\n"
-        "}\n"
-    ),
-}
-
-
 def _invalid_case(seed: int, index: int, family: str) -> InvalidProgram:
     case_id = f"invalid-{seed}-{index}-{family}"
+    rng = DeterministicRng(seed ^ ((index + 1) * 0x9E3779B97F4A7C15))
+    tag = f"{seed & 0xFFFF}{index}"
+
     if family == "unknown_action":
-        base = _INVALID_BASES["action"]
-        source = _replace_once(base, "observe()", "jump()")
+        action = rng.choice(("OBSERVE", "PAUSE", "EXECUTE"))
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidAction{tag}",
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    rng.choice(("<", ">")),
+                                    _name(rng.choice(_FEEDS)),
+                                    _number(rng.randint(1, 99)),
+                                ),
+                                then=(_action(action),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, f"{action.lower()}()", "jump()")
         return InvalidProgram(
             case_id,
             family,
             source,
             base,
-            "observe -> jump",
+            f"{action.lower()} -> jump",
+            NanoSyntaxError,
             _location(source, "jump"),
         )
     if family == "confidence":
-        base = _INVALID_BASES["confidence"]
-        source = _replace_once(base, "0.5", "1.5")
+        confidence = round(0.1 + (index % 80) / 100.0, 2)
+        invalid = round(1.001 + index / 1000.0, 3)
+        asset = rng.choice(_ASSETS)
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidConfidence{tag}",
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    "<", _name(rng.choice(_FEEDS)), _number(100 + index)
+                                ),
+                                then=(
+                                    _action(
+                                        rng.choice(("BUY", "SELL")),
+                                        asset=asset,
+                                        confidence=confidence,
+                                    ),
+                                ),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(
+            base, _format_number(confidence), _format_number(invalid)
+        )
         return InvalidProgram(
             case_id,
             family,
             source,
             base,
-            "0.5 -> 1.5",
-            _location(source, "1.5"),
+            f"{confidence} -> {invalid}",
+            NanoSyntaxError,
+            _location(source, _format_number(invalid)),
         )
     if family == "interval":
-        base = _INVALID_BASES["interval"]
-        source = _replace_once(base, "5m", "5x")
+        interval = f"{index + 1}{rng.choice(('s', 'm', 'h', 'd'))}"
+        malformed = f"{index + 1}x"
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidInterval{tag}",
+                schedules=(
+                    ScheduleAst(
+                        interval=interval,
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    ">", _name(rng.choice(_FEEDS)), _number(index + 1)
+                                ),
+                                then=(_action("OBSERVE"),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, interval, malformed)
         return InvalidProgram(
-            case_id, family, source, base, "5m -> 5x", _location(source, "5x")
+            case_id,
+            family,
+            source,
+            base,
+            f"{interval} -> {malformed}",
+            NanoSyntaxError,
+            _location(source, malformed),
         )
     if family == "negative_lookahead":
-        base = _INVALID_BASES["series"]
-        source = _replace_once(base, "close[1]", "close[-1]")
+        input_name = f"close{tag}"
+        offset = 1 + index % 9
+        target = f"{input_name}[{offset}]"
+        mutated_target = f"{input_name}[-{offset}]"
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidNegativeLookahead{tag}",
+                inputs=(
+                    InputAst(name=input_name, declared_type="series<float>", **_P),
+                ),
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    ">",
+                                    _name(input_name),
+                                    Index(
+                                        target=_name(input_name),
+                                        offset=_number(offset),
+                                        **_P,
+                                    ),
+                                ),
+                                then=(_action("BUY", asset=rng.choice(_ASSETS)),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, target, mutated_target)
         return InvalidProgram(
-            case_id, family, source, base, "1 -> -1", _location(source, "-1")
+            case_id,
+            family,
+            source,
+            base,
+            f"{offset} -> -{offset}",
+            LookaheadError,
+            _location(source, f"-{offset}"),
         )
     if family == "dynamic_lookahead":
-        base = _INVALID_BASES["series"]
-        source = _replace_once(base, "close[1]", "close[t+1]")
+        input_name = f"series{tag}"
+        dynamic_name = f"future{tag}"
+        offset = 1 + index % 9
+        target = f"{input_name}[{offset}]"
+        mutated_target = f"{input_name}[{dynamic_name}+1]"
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidDynamicLookahead{tag}",
+                inputs=(
+                    InputAst(name=input_name, declared_type="series<float>", **_P),
+                ),
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    ">",
+                                    _name(input_name),
+                                    Index(
+                                        target=_name(input_name),
+                                        offset=_number(offset),
+                                        **_P,
+                                    ),
+                                ),
+                                then=(_action("OBSERVE"),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, target, mutated_target)
         # The non-constant operation is the `+`, and the checker deliberately
-        # pins the diagnostic to that operator rather than to the valid name `t`.
+        # pins the diagnostic there before an unbounded name can reach runtime.
         return InvalidProgram(
-            case_id, family, source, base, "1 -> t+1", _location(source, "+")
+            case_id,
+            family,
+            source,
+            base,
+            f"{offset} -> {dynamic_name}+1",
+            LookaheadError,
+            _location(source, "+"),
         )
     if family == "period":
-        base = _INVALID_BASES["period"]
-        source = _replace_once(base, "SMA(close, 2)", "SMA(close, 0)")
-        return InvalidProgram(case_id, family, source, base, "period 2 -> 0")
-    if family == "tier_capability":
-        base = _INVALID_BASES["tier"]
-        source = _replace_once(base, "tier nano+\n", "")
-        return InvalidProgram(case_id, family, source, base, "remove tier grant")
-    if family == "type_operand_order":
-        base = _INVALID_BASES["type"]
-        occurrence = index // len(_INVALID_FAMILIES)
-        old, new = (
-            ("1 + 2", '"bad" + 2') if occurrence % 2 == 0 else ("1 + 2", '1 + "bad"')
+        input_name = f"close{tag}"
+        mean_name = f"mean{tag}"
+        period = 2 + index % 50
+        callee = rng.choice(("SMA", "EMA"))
+        valid_call = f"{callee}({input_name}, {period})"
+        invalid_call = f"{callee}({input_name}, 0)"
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidPeriod{tag}",
+                inputs=(
+                    InputAst(name=input_name, declared_type="series<float>", **_P),
+                ),
+                lets=(
+                    LetAst(
+                        name=mean_name,
+                        declared_type=None,
+                        expr=Call(
+                            callee=callee,
+                            args=(_name(input_name), _number(period)),
+                            **_P,
+                        ),
+                        **_P,
+                    ),
+                ),
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(">", _name(input_name), _name(mean_name)),
+                                then=(_action("OBSERVE"),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
         )
-        source = _replace_once(base, old, new)
-        return InvalidProgram(case_id, family, source, base, f"{old} -> {new}")
+        source = _replace_once(base, valid_call, invalid_call)
+        return InvalidProgram(
+            case_id,
+            family,
+            source,
+            base,
+            f"period {period} -> 0",
+            NanoTypeError,
+            _location(source, "0)"),
+        )
+    if family == "tier_capability":
+        agent = f"Desk{tag}"
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidTier{tag}",
+                tier="nano+",
+                agents=(
+                    AgentAst(
+                        name=agent,
+                        role=rng.choice(("research", "validation")),
+                        **_P,
+                    ),
+                ),
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary("<", _name("confidence"), _number(0.5)),
+                                then=(EscalateStmt(target=agent, is_name=True, **_P),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, "tier nano+\n", "")
+        return InvalidProgram(
+            case_id,
+            family,
+            source,
+            base,
+            "remove tier grant",
+            NanoTypeError,
+            _location(source, "escalate"),
+        )
+    if family == "type_operand_order":
+        left = 1 + index
+        right = 2 + index
+        valid_expr = f"({left} + {right})"
+        occurrence = index // len(_INVALID_FAMILIES)
+        invalid_expr = (
+            f'("bad{tag}" + {right})'
+            if occurrence % 2 == 0
+            else f'({left} + "bad{tag}")'
+        )
+        base = render_strategy(
+            StrategyAst(
+                name=f"InvalidType{tag}",
+                schedules=(
+                    ScheduleAst(
+                        interval=rng.choice(_INTERVALS),
+                        rules=(
+                            RuleAst(
+                                when=_binary(
+                                    ">",
+                                    _binary("+", _number(left), _number(right)),
+                                    _number(0),
+                                ),
+                                then=(_action("OBSERVE"),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        source = _replace_once(base, valid_expr, invalid_expr)
+        return InvalidProgram(
+            case_id,
+            family,
+            source,
+            base,
+            f"{valid_expr} -> {invalid_expr}",
+            NanoTypeError,
+            _location(source, "+"),
+        )
     raise AssertionError(f"Unknown invalid family {family}")
 
 
@@ -729,77 +950,129 @@ _INVALID_FAMILIES = (
 
 
 def generate_invalid_programs(*, seed: int, count: int) -> Tuple[InvalidProgram, ...]:
-    # Rotate the fixed mutation families by seed while still guaranteeing broad
-    # coverage once count reaches the family count.
+    # Rotate mutation families by seed while guaranteeing broad coverage. Every
+    # case has its own grammar-derived valid base and exactly one labelled edit.
     shift = seed % len(_INVALID_FAMILIES)
     families = _INVALID_FAMILIES[shift:] + _INVALID_FAMILIES[:shift]
-    return tuple(
+    generated = tuple(
         _invalid_case(seed, index, families[index % len(families)])
         for index in range(count)
     )
+    if len({case.source for case in generated}) != len(generated):
+        raise AssertionError("invalid generator emitted duplicate mutated sources")
+    if len({case.base_source for case in generated}) != len(generated):
+        raise AssertionError("invalid generator emitted duplicate valid bases")
+    return generated
 
 
-def _equivalent_sources(index: int, family: str) -> Tuple[str, ...]:
+def _equivalent_sources(seed: int, index: int, family: str) -> Tuple[str, ...]:
+    rng = DeterministicRng(seed ^ ((index + 1) * 0xD1B54A32D192ED03))
+    tag = f"{seed & 0xFFFF}{index}"
+    threshold = 10 + index
+    interval = f"{1 + index % 30}{rng.choice(('s', 'm', 'h'))}"
+
+    def simple_base(*, name: str, action: ActionAst) -> tuple[str, str]:
+        condition = _binary(
+            rng.choice(("<", ">", "<=")),
+            _name(rng.choice(_FEEDS)),
+            _number(threshold),
+        )
+        source = render_strategy(
+            StrategyAst(
+                name=name,
+                schedules=(
+                    ScheduleAst(
+                        interval=interval,
+                        rules=(
+                            RuleAst(
+                                when=condition,
+                                then=(action,),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
+        )
+        return source, _render_expr(condition)
+
     if family == "comments_whitespace":
-        base = (
-            "strategy Equivalent {\n"
-            "    every 1m {\n"
-            "        if RSI < 50 {\n"
-            "            buy(BTC, 0.5)\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
+        base, _ = simple_base(
+            name=f"EquivalentComments{tag}",
+            action=_action(
+                "BUY",
+                asset=rng.choice(_ASSETS),
+                confidence=round(0.1 + (index % 80) / 100.0, 2),
+            ),
         )
         return (
             base,
-            "// equivalent comment\n" + base,
-            base.replace("    every", "\n        every").replace(
-                "        if", "            if"
+            f"// equivalent comment {tag}\n" + base,
+            base.replace("    every", "\n        every", 1).replace(
+                "        if", "            if", 1
             ),
         )
     if family == "parentheses":
-        base = (
-            "strategy Equivalent {\n"
-            "    every 1m {\n"
-            "        if RSI < 50 {\n"
-            "            observe()\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
+        base, condition = simple_base(
+            name=f"EquivalentParentheses{tag}", action=_action("OBSERVE")
         )
-        return (base, base.replace("if RSI < 50", "if ((RSI < 50))"))
+        return (
+            base,
+            _replace_once(base, f"if {condition}", f"if ({condition})"),
+        )
     if family == "numeric_spelling":
-        base = (
-            "strategy Equivalent {\n"
-            "    every 1m {\n"
-            "        if RSI < 50 {\n"
-            "            buy(BTC, 0.5)\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
+        confidence = round(0.1 + (index % 80) / 100.0, 2)
+        base, _ = simple_base(
+            name=f"EquivalentNumeric{tag}",
+            action=_action("BUY", asset=rng.choice(_ASSETS), confidence=confidence),
         )
-        return (base, base.replace("0.5", "0.50"))
+        spelling = _format_number(confidence)
+        return (
+            base,
+            _replace_once(base, f", {spelling})", f", {spelling}0)"),
+        )
     if family == "declaration_order":
-        prefix = "strategy Equivalent {\n"
-        declarations = (
-            "    param threshold: float = 50.0\n"
-            "    input close: series<float>\n"
-            "    agent Watcher { role observer }\n"
+        param_name = f"threshold{tag}"
+        input_name = f"close{tag}"
+        agent_name = f"Watcher{tag}"
+        base = render_strategy(
+            StrategyAst(
+                name=f"EquivalentOrder{tag}",
+                params=(
+                    ParamAst(
+                        name=param_name,
+                        declared_type="float",
+                        value=float(threshold),
+                        **_P,
+                    ),
+                ),
+                inputs=(
+                    InputAst(name=input_name, declared_type="series<float>", **_P),
+                ),
+                agents=(AgentAst(name=agent_name, role="observer", **_P),),
+                schedules=(
+                    ScheduleAst(
+                        interval=interval,
+                        rules=(
+                            RuleAst(
+                                when=_binary("<", _name(input_name), _name(param_name)),
+                                then=(_action("OBSERVE"),),
+                                otherwise=(),
+                                **_P,
+                            ),
+                        ),
+                        **_P,
+                    ),
+                ),
+            )
         )
+        lines = base.splitlines()
         reordered = (
-            "    agent Watcher { role observer }\n"
-            "    input close: series<float>\n"
-            "    param threshold: float = 50.0\n"
+            "\n".join((lines[0], lines[3], lines[2], lines[1], *lines[4:])) + "\n"
         )
-        body = (
-            "    every 1m {\n"
-            "        if close < threshold {\n"
-            "            observe()\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
-        )
-        return (prefix + declarations + body, prefix + reordered + body)
+        return (base, reordered)
     raise AssertionError(f"Unknown equivalent family {family}")
 
 
@@ -816,14 +1089,17 @@ def generate_equivalent_programs(
 ) -> Tuple[EquivalentPrograms, ...]:
     shift = seed % len(_EQUIVALENT_FAMILIES)
     families = _EQUIVALENT_FAMILIES[shift:] + _EQUIVALENT_FAMILIES[:shift]
-    return tuple(
+    generated = tuple(
         EquivalentPrograms(
             id=f"equivalent-{seed}-{index}",
             family=families[index % len(families)],
-            sources=_equivalent_sources(index, families[index % len(families)]),
+            sources=_equivalent_sources(seed, index, families[index % len(families)]),
         )
         for index in range(count)
     )
+    if len({case.sources for case in generated}) != len(generated):
+        raise AssertionError("equivalent generator emitted duplicate variant groups")
+    return generated
 
 
 __all__ = [

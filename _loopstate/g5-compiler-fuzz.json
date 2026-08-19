@@ -2,13 +2,14 @@
   "schemaVersion": 2,
   "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
   "status": "pass",
-  "generatedAt": "2026-08-19T22:58:45.962428+00:00",
+  "generatedAt": "2026-08-19T23:13:38.116186+00:00",
   "repository": {
     "branch": "codex/g5-compiler-fuzz-merge",
-    "head": "6a7f36d7bb0beb49fcb13785543b82642cdc30fe",
+    "head": "76b8c85e0598e0cd2762883513ff95fa507d3225",
     "mainMergeBase": "121f7b6d8ee7c73bbc0d48fe03bd6e45722321a4",
     "status": [
-      "M scripts/compiler_fuzz.py",
+      "M nano/fuzzing/campaign.py",
+      " M nano/fuzzing/generators.py",
       " M tests/test_compiler_fuzz.py"
     ]
   },
@@ -58,12 +59,12 @@
   "targets": [
     {
       "ref": "HEAD",
-      "resolvedSha": "6a7f36d7bb0beb49fcb13785543b82642cdc30fe",
+      "resolvedSha": "76b8c85e0598e0cd2762883513ff95fa507d3225",
       "stableAcrossHashSeeds": true,
       "workers": [
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -92,14 +93,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "0",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -128,14 +129,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "1",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -164,14 +165,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "7",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -200,14 +201,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "42",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -236,7 +237,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "4294967295",
           "exitCode": 0
@@ -251,7 +252,7 @@
       "workers": [
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -280,14 +281,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "0",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -316,14 +317,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "1",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -352,14 +353,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "7",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -388,14 +389,14 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "42",
           "exitCode": 0
         },
         {
           "campaign": {
-            "corpusDigest": "sha256:95289ec3293041dee5188d0e9fdfca7a7fe959c042df1269e57392cf82562a47",
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
             "coverage": {
               "catalog": {
                 "baselineIr": 41,
@@ -424,7 +425,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:e093d8518a83f7b6b0a43baca8628c083650eae7c7212235c6c492718cd328c9"
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
           },
           "pythonHashSeed": "4294967295",
           "exitCode": 0

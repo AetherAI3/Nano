@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from nano.compiler import NanoCompileError, NanoTypeError, check_source, compile_module
+from nano.compiler import (
+    NanoTypeError,
+    check_source,
+    compile_module,
+    compile_to_dict,
+    parse,
+)
 from nano.fuzzing import (
     audit_catalog_corpus,
     audit_receipt_boundaries,
@@ -111,12 +117,18 @@ def test_one_mutation_invalid_programs_are_rejected_at_the_mutated_construct():
         "type_operand_order",
         "unknown_action",
     }
+    assert len({case.source for case in cases}) == len(cases)
+    assert len({case.base_source for case in cases}) == len(cases)
 
     for case in cases:
-        with pytest.raises(NanoCompileError) as excinfo:
+        parse(case.base_source)
+        check_source(case.base_source)
+        compile_to_dict(case.base_source)
+        assert case.source != case.base_source
+        with pytest.raises(case.expected_error) as excinfo:
             case.compile()
-        if case.expected_location is not None:
-            assert (excinfo.value.line, excinfo.value.column) == case.expected_location
+        assert type(excinfo.value) is case.expected_error
+        assert (excinfo.value.line, excinfo.value.column) == case.expected_location
 
 
 def test_type_errors_do_not_become_valid_when_operand_order_changes():
@@ -126,15 +138,17 @@ def test_type_errors_do_not_become_valid_when_operand_order_changes():
         if case.family == "type_operand_order"
     ]
     assert len(ordered) >= 2
-    assert any('"bad" + 2' in case.source for case in ordered)
-    assert any('1 + "bad"' in case.source for case in ordered)
+    assert any('("bad' in case.source and '" + ' in case.source for case in ordered)
+    assert any(' + "bad' in case.source for case in ordered)
     for case in ordered:
         with pytest.raises(NanoTypeError):
             check_source(case.source)
 
 
 def test_semantically_equivalent_source_variants_execute_identically():
-    for case in generate_equivalent_programs(seed=0xE011, count=18):
+    cases = generate_equivalent_programs(seed=0xE011, count=18)
+    assert len({case.sources for case in cases}) == len(cases)
+    for case in cases:
         summaries = [execution_summary(source, case.frame()) for source in case.sources]
         assert summaries[1:] == summaries[:-1]
 

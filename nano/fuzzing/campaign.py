@@ -7,7 +7,13 @@ import json
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Mapping, Tuple
 
-from ..compiler import NanoCompileError, check_source, compile_module
+from ..compiler import (
+    NanoCompileError,
+    check_source,
+    compile_module,
+    compile_to_dict,
+    parse,
+)
 from ..ir.graph import StrategyGraph
 from ..ir.module import NanoModule
 from ..ir.schema import IRValidationError
@@ -108,6 +114,12 @@ _PROPERTY_METADATA = {
         "high",
         "types.checker",
         "Repair the smallest checker rule that rejects this grammar-valid typed AST.",
+    ),
+    "invalid-base-valid": (
+        "high",
+        "fuzz.generator / compiler.frontend",
+        "Restore the grammar-derived base program to a parseable, typed, "
+        "compilable state before applying its one labelled mutation.",
     ),
     "compile-deterministic": (
         "high",
@@ -318,16 +330,36 @@ def _observe_valid(
 
 def _observe_invalid(case: InvalidProgram, defects: list[Defect]) -> None:
     try:
+        parse(case.base_source)
+        check_source(case.base_source)
+        compile_to_dict(case.base_source)
+    except Exception as error:
+        defects.append(
+            _defect(
+                property_name="invalid-base-valid",
+                case_id=case.id,
+                reproducer=case.base_source,
+                observed=error,
+            )
+        )
+        return
+
+    try:
         document = case.compile()
     except NanoCompileError as error:
-        if (
-            case.expected_location is not None
-            and (
-                error.line,
-                error.column,
+        if type(error) is not case.expected_error:
+            defects.append(
+                _defect(
+                    property_name="invalid-rejected",
+                    case_id=case.id,
+                    reproducer=case.source,
+                    observed=(
+                        f"expected {case.expected_error.__name__}, got "
+                        f"{type(error).__name__}: {error}"
+                    ),
+                )
             )
-            != case.expected_location
-        ):
+        if (error.line, error.column) != case.expected_location:
             defects.append(
                 _defect(
                     property_name="diagnostic-location",
