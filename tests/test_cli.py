@@ -15,6 +15,7 @@ import json
 import pytest
 
 import nano
+
 from nano.cli.commands import (
     EXIT_DIAGNOSTICS,
     EXIT_IO,
