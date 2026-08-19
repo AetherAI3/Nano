@@ -259,9 +259,17 @@ def build_receipt(
         # Unauthenticated, and filed apart from identity for that reason.
         receipt["provenance"] = {"sourceHash": source_hash}
     if host is not None:
-        # Deep, not shallow: a nested structure the caller keeps mutating would
-        # otherwise alias into a receipt that has already been digested.
-        receipt["host"] = copy.deepcopy(dict(host))
+        # Validated *before* it is copied. `copy.deepcopy` on an uncopyable value
+        # — a lock, a socket, an open file — raises a bare TypeError naming
+        # nothing, which is exactly the failure `_check` exists to replace, and
+        # `host` is the one section where arbitrary caller data lands. After
+        # `_check` only canonical types remain, and all of them copy trivially.
+        #
+        # Deep rather than shallow: a nested structure the caller keeps mutating
+        # would otherwise alias into a receipt that has already been digested.
+        snapshot = dict(host)
+        _check(snapshot, "/host", set())
+        receipt["host"] = copy.deepcopy(snapshot)
     return receipt
 
 

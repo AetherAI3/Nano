@@ -78,7 +78,13 @@ AMBIENT_READS = frozenset(
     }
 )
 
-# Dynamic import is a hole straight through every module-level rule above.
+# Reading the host by another door. `platform.node()` and `getpass.getuser()`
+# are ambient environment reads wearing a different name, and `subprocess` is a
+# door to everything above it at once.
+HOST_ESCAPE_MODULES = frozenset({"subprocess", "platform", "getpass", "pwd", "grp"})
+
+# Dynamic import is a hole straight through every module-level rule above, and
+# `getattr(module, "name")` is the same evasion one level down.
 DYNAMIC_IMPORTS = frozenset({"__import__", "importlib.import_module"})
 
 # The single permitted third-party import, and the single file allowed to make
@@ -177,11 +183,12 @@ def test_the_scan_actually_reads_the_package():
     assert any(name.endswith("runtime/receipt.py") for name, _ in _parsed())
 
 
-def test_the_scan_resolves_aliases_and_dotted_chains():
-    """A guard on the guard: prove the resolver sees each shape it claims to.
+def test_the_scan_resolves_aliases_and_then_matches_them():
+    """A guard on the guard: prove both halves of the scan actually work.
 
-    Without this, a resolver that silently returned None for everything would
-    make every scan below pass on an empty offender list.
+    A resolver that returned None for everything, or a matcher that returned
+    False for everything, would make every scan below pass on an empty offender
+    list. Both halves are exercised here with positive and negative controls.
     """
     tree = ast.parse(
         "import datetime\n"
@@ -200,6 +207,16 @@ def test_the_scan_resolves_aliases_and_dotted_chains():
         "time.time",
         "os.urandom",
     } <= resolved
+
+    # And the MATCHER, not just the resolver. Guarding only the resolver left
+    # both ambient scans vacuous by a one-word edit: `_banned_prefix -> False`
+    # turned them into `[] == []` while the whole suite stayed green.
+    assert _banned_prefix("datetime.datetime.now", AMBIENT_READS)
+    assert _banned_prefix("os.environ.get", AMBIENT_READS)  # prefix, not equality
+    assert _banned_prefix("importlib.import_module", DYNAMIC_IMPORTS)
+    # Negative controls, so "always True" is not a passing implementation either.
+    assert not _banned_prefix("datetime.date", AMBIENT_READS)
+    assert not _banned_prefix("json.dumps", AMBIENT_READS)
 
 
 def test_nothing_in_nano_can_reach_the_network():
@@ -229,11 +246,24 @@ def test_nothing_in_nano_reads_an_ambient_clock_or_environment():
         for resolved in _references(tree)
         if _banned_prefix(resolved, AMBIENT_READS)
     ]
+    offenders += [
+        (name, module)
+        for name, tree in _parsed()
+        for module in _imports(tree)
+        if module in HOST_ESCAPE_MODULES
+    ]
     assert offenders == []
 
 
 def test_nothing_in_nano_imports_dynamically():
-    """A dynamic import routes straight around every module-level rule above."""
+    """Dynamic import, or dynamic attribute access, routes around every rule above.
+
+    Both reach a banned name as a string, which is invisible to any check that
+    matches on names. This is a partial: `d = datetime; d.datetime.now()` still
+    escapes, and closing that needs dataflow analysis. That is the boundary of
+    the technique, not a defect to chase — this scan is a guard, not a static
+    analyser.
+    """
     offenders = []
     for name, tree in _parsed():
         aliases = _alias_map(tree)
@@ -242,6 +272,18 @@ def test_nothing_in_nano_imports_dynamically():
                 continue
             if isinstance(node.func, ast.Name) and node.func.id == "__import__":
                 offenders.append((name, "__import__"))
+                continue
+            # `getattr(time, "time")()` reaches a banned member by string, which
+            # every rule above matches by name. Only flagged when the target
+            # resolves to an import -- `getattr(self.out, "buffer", None)` and
+            # `getattr(result, "escalations", ())` are ordinary duck typing.
+            if (
+                isinstance(node.func, ast.Name)
+                and node.func.id == "getattr"
+                and node.args
+                and _resolve(node.args[0], aliases) is not None
+            ):
+                offenders.append((name, f"getattr({ast.unparse(node.args[0])}, ...)"))
                 continue
             resolved = _resolve(node.func, aliases)
             if resolved is not None and _banned_prefix(resolved, DYNAMIC_IMPORTS):

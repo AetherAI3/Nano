@@ -350,7 +350,11 @@ explicit act that means `receiptVersion` has to move.
   there is no first timestamp to report, and `0` is a placeholder rather than
   data. `inputs.bars` is `0` and `firstTimestamp` is absent, which is the
   reliable signal.
-- **`host` is not validated** beyond being canonically encodable.
+- **`host` is not validated** beyond the canonical encoding rules in §1.
+  It is checked against those rules and then snapshotted with a deep copy, in
+  that order, so an uncopyable value (a lock, a socket, an open file) is refused
+  as `ReceiptError: /host/... is not canonically encodable` rather than escaping
+  as a bare `TypeError` from the copy. Nothing interprets what is in there.
 
 ---
 

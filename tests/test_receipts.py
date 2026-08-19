@@ -11,6 +11,7 @@ either way, it is written against ``canonical_bytes``.
 import json
 import subprocess
 import sys
+import threading
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -806,6 +807,31 @@ def test_the_effect_manifest_keeps_declared_order_not_sorted_order():
     ]
     assert effects == ["intent.emit", "sign.emit", "log.append"]
     assert effects != sorted(effects)
+
+
+def test_an_uncopyable_host_value_is_refused_with_a_path():
+    """Validation has to run BEFORE the defensive copy, not after.
+
+    `host` is the one section where arbitrary caller data lands, so it is the
+    one place the path-naming validator matters most. Copying first inverts
+    that: `copy.deepcopy` on a lock raises a bare `TypeError` naming nothing,
+    and `_check` never gets to run. That regression is invisible to every other
+    test, because every other section is built from canonical types already.
+    """
+    module, frame = _drift_run()
+    result = run_module(module, frame)
+
+    with pytest.raises(ReceiptError, match=r"/host/lock"):
+        build_receipt(module, frame, result, host={"lock": threading.Lock()})
+
+    # Uncopyable and un-encodable are different faults; both must name a path.
+    with pytest.raises(ReceiptError, match=r"/host/cfg"):
+        build_receipt(module, frame, result, host={"cfg": MappingProxyType({"a": 1})})
+
+    # The same value at a non-host path was always reported correctly -- that
+    # asymmetry is exactly what made the regression easy to miss.
+    with pytest.raises(ReceiptError, match=r"/run/cfg"):
+        canonical_bytes({"run": {"cfg": MappingProxyType({"a": 1})}})
 
 
 def test_host_context_is_deep_copied_out_of_the_caller():
