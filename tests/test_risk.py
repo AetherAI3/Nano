@@ -30,6 +30,7 @@ from nano.ir.schema import (
     IRValidationError,
     validate_risk_limit,
 )
+from nano.runtime.effects import Intent
 from nano.runtime.interpreter import MarketFrame
 from nano.runtime.risk import (
     ACTUATING_ACTIONS,
@@ -236,6 +237,47 @@ def test_max_orders_per_day_accounts_for_intents_already_emitted_this_frame():
     ]
     assert len(_events(result, "intent.suppressed")) == 1
     assert "max_orders_per_day" in _events(result, "intent.suppressed")[0].detail
+
+
+@pytest.mark.parametrize(
+    "hostile",
+    [True, -1, 1.5, float("nan"), float("inf"), "1", None, 10**1000],
+    ids=[
+        "bool",
+        "negative",
+        "fractional",
+        "nan",
+        "inf",
+        "string",
+        "none",
+        "oversized",
+    ],
+)
+def test_max_orders_per_day_rejects_malformed_emitted_capacity(hostile):
+    gate = RiskGate(
+        {"max_orders_per_day": 5},
+        _frame(1, **{"risk.orders_today": (0.0,)}),
+    )
+
+    violations = gate.review(
+        Intent("BUY", 0, "BTC", 1.0), 0, emitted_capacity=hostile
+    )
+
+    assert [violation.limit for violation in violations] == ["max_orders_per_day"]
+    assert "accepted intent capacity outside valid domain" in violations[0].detail
+    assert "nonnegative integer" in violations[0].detail
+    assert "fail-closed" in violations[0].detail
+
+
+def test_emitted_capacity_is_irrelevant_to_rules_that_do_not_count_orders():
+    gate = RiskGate(
+        {"max_drawdown": 0.05},
+        _frame(1, **{"risk.drawdown": (0.01,)}),
+    )
+
+    assert gate.review(
+        Intent("BUY", 0, "BTC", 1.0), 0, emitted_capacity=float("nan")
+    ) == ()
 
 
 def test_stop_trading_after_losses_breaches_at_the_count_not_after_it():

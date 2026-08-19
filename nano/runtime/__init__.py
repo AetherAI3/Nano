@@ -9,7 +9,9 @@ that trades" true across an IR version boundary.
 
 ``risk`` holds the one thing the VM does *not* do freely: a module's declared
 risk limits are evaluated there, and a breach withholds an actuating intent and
-says so in the log. Every number it compares against comes from the host's frame,
+says so in the log. Measurements come from the host's frame; the daily order cap
+also adds actuating intents already accepted at the same timestamp. That local,
+deterministic capacity never carries across frames,
 so enforcement stays as replayable as the rest of the run — see that module for
 which limits are enforced, which two are the host's to apply, and why.
 """

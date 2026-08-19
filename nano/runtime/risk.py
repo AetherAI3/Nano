@@ -334,7 +334,26 @@ class RiskGate:
                 f">= {rule.minimum_observation}",
             )
         if rule.includes_emitted_capacity:
-            observed += emitted_capacity
+            if type(emitted_capacity) is not int or emitted_capacity < 0:
+                return (
+                    None,
+                    "accepted intent capacity outside valid domain: "
+                    "expected a nonnegative integer within finite numeric range",
+                )
+            try:
+                observed += emitted_capacity
+            except OverflowError:
+                return (
+                    None,
+                    "accepted intent capacity outside valid domain: "
+                    "expected a nonnegative integer within finite numeric range",
+                )
+            if not math.isfinite(observed):
+                return (
+                    None,
+                    "accepted intent capacity outside valid domain: "
+                    "expected a nonnegative integer within finite numeric range",
+                )
         return observed, None
 
     def suppression_log(
