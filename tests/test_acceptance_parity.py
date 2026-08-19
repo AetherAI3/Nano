@@ -260,3 +260,88 @@ def test_integer_validation_never_mutates_the_process_wide_digit_guard(monkeypat
                 params=({"name": "p", "type": "int", "value": 10**640},)
             )
         )
+
+
+def test_source_float_overflow_is_rejected_on_every_numeric_surface():
+    overflow = "1" + ("0" * 309) + ".0"
+    cases = {
+        "param": lambda value: (
+            "strategy S {\n"
+            f"    param p: float = {value}\n"
+            "    agent Desk\n"
+            "}\n"
+        ),
+        "risk": lambda value: (
+            "strategy S {\n"
+            f"    risk {{ max_drawdown {value} }}\n"
+            "    every 1m {}\n"
+            "}\n"
+        ),
+        "action": lambda value: (
+            "strategy S {\n"
+            "    every 1m {\n"
+            f"        buy(BTC, {value})\n"
+            "    }\n"
+            "}\n"
+        ),
+        "expression": lambda value: (
+            "strategy S {\n"
+            "    every 1m {\n"
+            f"        if RSI < {value} {{ observe() }}\n"
+            "    }\n"
+            "}\n"
+        ),
+    }
+
+    for make_source in cases.values():
+        for literal in (overflow, "-" + overflow):
+            source = make_source(literal)
+            digits = literal.lstrip("-")
+            source_line = next(
+                (index, line)
+                for index, line in enumerate(source.splitlines(), start=1)
+                if digits in line
+            )
+            expected_line, line_text = source_line
+            expected_column = line_text.index(digits) + 1
+
+            for compile_entry in (check_source, compile_to_dict):
+                with pytest.raises(
+                    NanoTypeError, match="Floating-point literal .* must be finite"
+                ) as error:
+                    compile_entry(source)
+                assert (error.value.line, error.value.column) == (
+                    expected_line,
+                    expected_column,
+                )
+
+
+def test_largest_finite_decimal_scale_reaches_normal_semantic_checks():
+    finite = "1" + ("0" * 308) + ".0"
+
+    for literal in (finite, "-" + finite):
+        module = compile_module(
+            f"strategy S {{ param p: float = {literal} agent Desk }}"
+        )
+        assert isinstance(module.params[0].value, float)
+        assert module.params[0].value == float(literal)
+
+        expression = compile_to_dict(
+            "strategy S { every 1m { "
+            f"if RSI < {literal} {{ observe() }}"
+            " } }"
+        )
+        assert expression["nodes"]
+
+    with pytest.raises(NanoTypeError, match="fraction of equity"):
+        check_source(
+            "strategy S { "
+            f"risk {{ max_drawdown {finite} }} "
+            "every 1m {} }"
+        )
+    with pytest.raises(NanoSyntaxError, match=r"out of range \[0, 1\]"):
+        check_source(
+            "strategy S { every 1m { "
+            f"buy(BTC, {finite})"
+            " } }"
+        )

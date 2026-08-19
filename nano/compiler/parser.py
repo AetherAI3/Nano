@@ -56,6 +56,7 @@ Comparisons do not chain: `a < b < c` is rejected rather than silently parsed as
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 from .ast import (
@@ -201,6 +202,20 @@ class _Parser:
                 token.column,
             )
         return int(significant)
+
+    def _parse_float_token(self, token: Token, what: str) -> float:
+        """Convert one decimal token and keep non-finite values out of the AST."""
+        try:
+            value = float(token.value)
+        except (OverflowError, ValueError):
+            value = math.inf
+        if not math.isfinite(value):
+            raise NanoTypeError(
+                f"Floating-point literal for {what} must be finite",
+                token.line,
+                token.column,
+            )
+        return value
 
     # -- program -----------------------------------------------------------
 
@@ -812,7 +827,7 @@ class _Parser:
                 value=(
                     self._parse_integer_token(token, "expression")
                     if token.type == "INT"
-                    else float(token.value)
+                    else self._parse_float_token(token, "expression")
                 ),
             )
         if token.type == "STRING":
@@ -879,7 +894,7 @@ class _Parser:
             value: Number = self._parse_integer_token(token, what)
         elif token.type == "FLOAT":
             self._advance()
-            value = float(token.value)
+            value = self._parse_float_token(token, what)
         else:
             raise self._error(
                 f"Expected numeric {what}, got {self._describe(token)}", token
