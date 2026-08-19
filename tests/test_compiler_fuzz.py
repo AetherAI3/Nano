@@ -52,6 +52,7 @@ def test_receipt_fuzz_covers_replay_nonfinite_and_canonical_limits():
     assert first.oversized_cases == 6
     assert first.semantic_digest == second.semantic_digest
     assert first.defects == second.defects
+    assert first.defects == ()
 
 
 def test_risk_fuzz_covers_actuating_equality_and_malformed_capacity():
