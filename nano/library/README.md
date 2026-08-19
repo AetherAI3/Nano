@@ -94,6 +94,10 @@ the publicly described idea and say where it came from. Authorship itself is
 already recorded by git and by the pull request, so there is no author field to
 fill in.
 
+Every idea here comes from published technical-analysis or academic literature that predates this repository by decades — moving-average crossovers and channel breakouts from Donchian's trading guidelines, RSI and ATR from Wilder, the stochastic oscillator from Lane, MACD from Appel, standard-deviation bands from Bollinger, time-series momentum from the academic momentum literature, and gap and climax patterns from classical bar-reading. Concepts are not copyrightable and none of these is proprietary.
+
+What was **not** done: no Pine, MQL, or other platform source was copied, adapted, or translated. Each entry was written from the described concept against Nano's own grammar and indicator registry, which is why the shapes differ from any particular platform's idiom. Indicator *names* such as Bollinger Bands are referenced nominatively to say which well-known calculation is meant; no affiliation or endorsement is implied. If you contribute an entry, contribute the idea, not somebody else's code.
+
 ## Signal conventions (baseline entries)
 
 Baseline entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable v0.1.0 IR. A v1 entry does the opposite — it declares its inputs and lets Nano compute the indicator from the 35 deterministic kernels, which is what puts it on v1.0 IR; see [Data contract (v1 entries)](#data-contract-v1-entries). Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
