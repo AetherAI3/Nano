@@ -97,26 +97,14 @@
     },
     {
       "id": "n6",
-      "op": "compare.gt",
-      "inputs": [
-        "n3",
-        "n5"
-      ],
-      "type": "series<bool>"
+      "op": "schedule",
+      "inputs": [],
+      "attrs": {
+        "interval": "1d"
+      }
     },
     {
       "id": "n7",
-      "op": "let",
-      "inputs": [
-        "n6"
-      ],
-      "attrs": {
-        "name": "uptrend"
-      },
-      "type": "series<bool>"
-    },
-    {
-      "id": "n8",
       "op": "compare.le",
       "inputs": [
         "n1",
@@ -125,7 +113,7 @@
       "type": "series<bool>"
     },
     {
-      "id": "n9",
+      "id": "n8",
       "op": "compare.gt",
       "inputs": [
         "n1",
@@ -134,44 +122,16 @@
       "type": "series<bool>"
     },
     {
-      "id": "n10",
-      "op": "logic.and",
-      "inputs": [
-        "n8",
-        "n9"
-      ],
-      "type": "series<bool>"
-    },
-    {
-      "id": "n11",
-      "op": "let",
-      "inputs": [
-        "n10"
-      ],
-      "attrs": {
-        "name": "pullback"
-      },
-      "type": "series<bool>"
-    },
-    {
-      "id": "n12",
-      "op": "schedule",
-      "inputs": [],
-      "attrs": {
-        "interval": "1d"
-      }
-    },
-    {
-      "id": "n13",
+      "id": "n9",
       "op": "logic.and",
       "inputs": [
         "n7",
-        "n11"
+        "n8"
       ],
       "type": "series<bool>"
     },
     {
-      "id": "n14",
+      "id": "n10",
       "op": "intent.emit",
       "inputs": [],
       "attrs": {
@@ -181,31 +141,31 @@
       }
     },
     {
-      "id": "n15",
+      "id": "n11",
       "op": "block",
       "inputs": [
-        "n14"
+        "n10"
       ]
     },
     {
-      "id": "n16",
+      "id": "n12",
       "op": "rule",
       "inputs": [
-        "n12",
-        "n13",
-        "n15"
+        "n6",
+        "n9",
+        "n11"
       ]
     }
   ],
   "entries": [
-    "n16"
+    "n12"
   ],
   "provenance": {
     "compiler": {
       "name": "nnc",
       "version": "1.0.0"
     },
-    "sourceHash": "sha256:6e15145d24d31a09f27a9dcd9ae5c20dd81b22fcc8fe327a741e2bee4859f32f"
+    "sourceHash": "sha256:998e25f03fa369193c64f8d7b5c4daf2e871277ea3fe3d504ffbdabc2d4976d8"
   },
-  "moduleHash": "sha256:3b1a6a49db55cf55d783b264cff0193ed1437005759d32b62c4e784e2ab38d8b"
+  "moduleHash": "sha256:b17b9644d0c144f3dca13fe2060de2aa5d5e98b3d78c3b2bd672cc8962ad1756"
 }

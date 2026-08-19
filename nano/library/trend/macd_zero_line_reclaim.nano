@@ -7,9 +7,12 @@
 // fire inside an established trend - the line is already well above zero there
 // and the crossing happened bars or months ago.
 // INPUTS: close (series<float>). No other host signal.
-// CONDITIONS: the line above zero this bar, at or below zero last bar, and the
-// histogram positive so the line is above its own signal rather than merely
-// above zero on a spike that is already fading.
+// CONDITIONS: the line above zero this bar and at or below zero last bar. A
+// third condition, `MACD_HIST > 0`, was written here and removed: the line
+// crosses up through zero only after a negative stretch, and its signal EMA is
+// still below it at that moment, so a positive histogram is implied by the
+// crossing rather than confirming it. No frame can separate the two, which is
+// the test for whether a conjunct is doing work.
 // INVALIDATION: the line falling back under zero. A reclaim that does not hold
 // is a failed turn; the rule cannot re-fire until the line goes negative again
 // and comes back, which is the behaviour you want.
@@ -20,7 +23,7 @@
 // magnitude apart in fire rate. NOT golden_cross: same idea in a different
 // coordinate system - golden_cross reads a host-supplied SMA spread on a much
 // slower pair, this computes an EMA spread on a fast one.
-// CALIBRATED ON: liquid US equity index proxies, daily. 12/26/9 is Appel's
+// CALIBRATED ON: liquid US equity index proxies, daily. 12/26 is Appel's
 // published default and is a convention rather than a fitted value; the zero
 // crossing itself is scale-free, so the rule travels across instruments in a
 // way that an absolute MACD threshold would not.
@@ -28,16 +31,14 @@ strategy MacdZeroLineReclaim {
 
     param fast: int = 12
     param slow: int = 26
-    param smoothing: int = 9
 
     input close: series<float>
 
     let line = MACD_LINE(close, fast, slow)
-    let hist = MACD_HIST(close, fast, slow, smoothing)
 
     every 1d {
 
-        if line > 0 and line[1] <= 0 and hist > 0 {
+        if line > 0 and line[1] <= 0 {
 
             buy(QQQ, 0.6)
 

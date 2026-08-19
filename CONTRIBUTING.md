@@ -64,9 +64,11 @@ The [strategy library](nano/library/README.md) is the easiest way to learn and e
 CI runs `python scripts/check_contribution.py --all` on every pull request, so a
 clean local run is a clean CI run.
 
-Library entries are deliberately written in the v0.1.0 subset — one `every` block, one `if` rule, AND-chained numeric conditions — so they compile to byte-stable baseline IR. The v1.0 grammar allows more (multiple rules, `else`, arithmetic, `or`/`not`, declarations, computed indicators); reaching for it moves the entry to v1.0 IR, which is fine for `nano/examples/` but changes the library's pinned fixtures. The host supplies every signal and still owns every real-world action. See the [language reference](docs/language.md).
+The library holds **two corpora** and you choose one deliberately. A **baseline entry** stays in the v0.1.0 subset — one `every` block, one `if` rule, AND-chained numeric conditions — and compiles to byte-stable v0.1.0 IR; the existing 35 are pinned and must not be converted. A **v1 entry** declares `param`/`input`/`let` and may use arithmetic, `or`/`not`, offsets and `else`; it compiles to v1.0 IR carrying a `sourceHash`, which means editing even a comment requires regenerating the fixture. Reach for v1 when the idea genuinely needs it — an indicator of an indicator, a two-bar pattern, a second branch — and not to demonstrate syntax. The host supplies the data and still owns every real-world action. See [the library README](nano/library/README.md) for the full split and [the language reference](docs/language.md) for the grammar.
 
-For a normal strategy addition, the library tests automatically discover the source/IR pair and verify compilation, validation, and replay. Add a focused fire/no-fire test only when the new example covers a meaningful runtime edge not already represented.
+Every strategy addition needs a fire/no-fire test, and a no-fire assertion never ships alone: a rule that can never fire passes one unchanged. Pair it with a positive control on the same strategy, on a frame that differs only in the thing being tested.
+
+No strategy may carry a performance, win-rate, or profitability claim, and none is a live signal. Document thresholds as the conventions they are, and say where they stop travelling.
 
 ## Add a watchdog rule
 

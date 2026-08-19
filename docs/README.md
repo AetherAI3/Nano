@@ -9,7 +9,7 @@ For questions about what Nano does today, start with the reference documents bel
 | Document | Purpose |
 | --- | --- |
 | [Architecture](architecture.md) | The actual source -> IR -> interpreter -> host-gate flow and module boundaries. |
-| [Language reference](language.md) | The locked v0.1.0 grammar, IR shape, and execution semantics. |
+| [Language reference](language.md) | The locked grammar, IR shape, and execution semantics. **Known gap:** this document still describes only the v0.1.0 subset; the shipped compiler implements the v1.0 superset (declarations, expressions, offsets, `else`, computed indicators). Until it is rewritten, `nano/compiler/parser.py` carries the authoritative v1.0 grammar and `nano/indicators/registry.py` the indicator set. |
 | [Watchdog profile](watchdog_profile.md) | The restricted subset for host-governed controls: signal contracts, missing-input semantics, artifacts, receipts, and replay. |
 | [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |

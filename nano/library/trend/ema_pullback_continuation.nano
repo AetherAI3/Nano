@@ -1,18 +1,18 @@
 // EMA pullback continuation. Nano computes both averages from a declared
-// `close` input: EMA(close, 20) over EMA(close, 50) is the trend, and a close
-// that has fallen back to the fast average while still holding the slow one is
-// the pullback. Nothing here is host-derived except the price series itself.
+// `close` input: the rule buys a close that has fallen back to the twenty-bar
+// average while the fifty-bar average still holds underneath it.
 // REGIME: an established uptrend that breathes. Do NOT fire in a downtrend or
-// in a range - when the fast average sits under the slow one this rule is
-// silent by construction, and in a range the two averages braid together so
-// "pullback" and "breakdown" become the same bar.
+// in a range - in a range the two averages braid together, so the band between
+// them narrows to nothing and "pullback" and "breakdown" become the same bar.
 // INPUTS: close (series<float>). No other host signal.
-// CONDITIONS: fast EMA above slow EMA, and the close inside the band between
-// them. Both halves are load-bearing - the trend test alone buys extension,
-// the pullback test alone buys every decline.
-// INVALIDATION: a close below the slow average. The pullback thesis assumes
-// the slow average is support; once it is not, this is a failed trend, and the
-// rule goes silent on its own because the second condition inverts.
+// CONDITIONS: the close at or below the fast average and above the slow one.
+// That pair IS the trend test: requiring slow < close <= fast forces the two
+// averages into uptrend order, so a separate `fast_ma > slow_ma` condition is
+// implied by the band and cannot change the outcome on any frame. One was
+// written here first and removed - a conjunct no test can isolate is
+// decoration, and this file would rather be short than look thorough.
+// INVALIDATION: a close below the slow average, which is also what disarms the
+// rule - the second condition inverts, so the rule stops on its own.
 // SHAPE: 1d; a stair-step advance that keeps returning to the 20-day line.
 // NOT golden_cross: that fires once, on the crossing bar, and says the trend
 // began. This fires repeatedly, inside a trend that already exists, and says
@@ -32,12 +32,10 @@ strategy EmaPullbackContinuation {
 
     let fast_ma = EMA(close, fast)
     let slow_ma = EMA(close, slow)
-    let uptrend = fast_ma > slow_ma
-    let pullback = close <= fast_ma and close > slow_ma
 
     every 1d {
 
-        if uptrend and pullback {
+        if close <= fast_ma and close > slow_ma {
 
             buy(SPY, 0.65)
 

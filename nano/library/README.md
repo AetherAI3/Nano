@@ -1,17 +1,33 @@
 # Nano strategy library
 
-This directory is Nano's contribution-ready, trading-oriented **strategy library and conformance corpus** for the v0.1.0 language. It is a place to learn from familiar ideas, compare clear signal contracts, and contribute new source/IR pairs—not a live-strategy service or investment advice.
+This directory is Nano's contribution-ready, trading-oriented **strategy library and conformance corpus**. It is a place to learn from familiar ideas, compare clear signal contracts, and contribute new source/IR pairs—not a live-strategy service, a performance claim, or investment advice.
 
 Every entry has two files:
 
 - `<name>.nano` - source written in the locked Nano grammar
-- `<name>_ir.json` - the canonical strategy IR expected from that source
+- `<name>_ir.json` - the canonical IR expected from that source
 
-`tests/test_library.py` verifies that each pair compiles to the expected IR, round-trips through `StrategyGraph`, and produces deterministic reference-runtime results. The library gives quant researchers a concrete way to meet the language: start with an idea they already recognize, make its host signal contract explicit, then let the tests preserve that contract.
+`tests/test_library.py` verifies that each pair compiles to exactly that IR, round-trips through its loader, and replays deterministically.
+
+## Two corpora, one directory
+
+The library holds two kinds of entry, and the difference is worth understanding before you add one.
+
+| | **Baseline entries** | **v1 entries** |
+| --- | --- | --- |
+| Count | 41 | 12 |
+| Source shape | one `every`, one `if`, AND-chained comparisons of a named signal against a literal | `param`/`input`/`let` declarations, arithmetic, `else`, offsets |
+| Where the numbers come from | the **host** computes every indicator and injects it as a named series | the host supplies **OHLCV**; Nano computes the indicators |
+| Compiled IR | `0.1.0`, byte-stable | `1.0.0`, carries `sourceHash` and `moduleHash` |
+| Runs on | `nano.runtime.interpreter.execute` | `nano.runtime.vm.run_module` |
+
+Both are first-class and neither is deprecated. Baseline entries are the older artifacts and hosts have pinned their fixtures, so `tests/test_library.py::test_baseline_entries_stay_on_baseline_ir` fails if one ever drifts up a version. v1 entries exist because some ideas cannot be written any other way: a ratio of an indicator to a moving average of *itself*, a two-bar reclaim, or a channel breakout that must read `HIGHEST(high, 20)[1]` rather than the unshifted channel that includes the current bar.
+
+The practical difference for a host is the size of the contract. A baseline entry asks the host to implement and agree on `DONCHIAN_POS`; a v1 entry asks for `high`, `low`, and `close`.
 
 ## Learn, compare, contribute
 
-The current library contains 41 strategies across eight categories — seven trading, one for deterministic watchdog controls. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 53 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 41 baseline and 12 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
@@ -23,13 +39,15 @@ python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
 
 ## Categories
 
+**v1 entries are marked with a dagger (†).**
+
 | Category | Strategies |
 | --- | --- |
-| `momentum/` | `rsi_oversold_reversal`, `stochastic_oversold`, `williams_r_reversal`, `roc_momentum` |
-| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme` |
-| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long` |
-| `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout` |
-| `volume/` | `volume_spike_confirmation`, `obv_trend` |
+| `momentum/` | `rsi_oversold_reversal`, `stochastic_oversold`, `williams_r_reversal`, `roc_momentum`, `absolute_momentum_filter`†, `stochastic_reclaim`† |
+| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme`, `bollinger_lower_reclaim`†, `zscore_fade_trend_filtered`†, `opening_gap_fade`† |
+| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long`, `ema_pullback_continuation`†, `macd_zero_line_reclaim`†, `donchian_high_breakout`† |
+| `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout`, `squeeze_release_expansion`†, `atr_regime_halt`† |
+| `volume/` | `volume_spike_confirmation`, `obv_trend`, `volume_climax_reversal`†, `vwap_band_reversion`† |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
 | `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
 | `watchdog/` | `trusted_route_guard`, `credential_age_alert`, `aether_release_notes_coverage`, `aether_release_notes_batch_unaccounted`, `aether_release_notes_proof_missing`, `aether_release_notes_copy_unvalidated`, `aether_release_notes_uncovered_merge`, `aether_release_notes_candidate_unattached` |
@@ -76,9 +94,9 @@ the publicly described idea and say where it came from. Authorship itself is
 already recorded by git and by the pull request, so there is no author field to
 fill in.
 
-## Signal conventions
+## Signal conventions (baseline entries)
 
-Library entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable baseline IR. Nano v1.0 *can* compute indicators — `RSI(close, 14)` and 34 others — but a library entry that did so would emit v1.0 IR and change its pinned fixture. Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
+Baseline entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable v0.1.0 IR. A v1 entry does the opposite — it declares its inputs and lets Nano compute the indicator from the 35 deterministic kernels, which is what puts it on v1.0 IR; see [Data contract (v1 entries)](#data-contract-v1-entries). Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
 
 | Pine-style expression | Nano signal | Feed convention |
 | --- | --- | --- |
@@ -233,10 +251,33 @@ Event strategies consume a **host event engine** rather than bar indicators: the
 | spread stress | `SPREAD_STRESS` | 0 = baseline, 1+ = severely stressed |
 | tape churn | `WHIPSAW_SCORE` | 0..1 normalized anchor crossings in the window |
 
-Two v0.1 details matter:
+Two baseline details matter:
 
-1. Baseline IR cannot carry a negative literal. The v1.0 grammar supports unary minus, but a library entry using it would leave baseline IR — so signals with negative natural ranges are still shifted (`WILLR_POS`) or negated (`ZSCORE_NEG`) by the feed. Document the transform in a `//` comment.
-2. The parenthesized integer is documentation only. `RSI(14)` and `RSI` compile to the same `ConditionNode(signal="RSI", ...)`; the feed owns the actual lookback calculation.
+1. Baseline IR cannot carry a negative literal, so signals with negative natural ranges are shifted (`WILLR_POS`) or negated (`ZSCORE_NEG`) by the feed. Document the transform in a `//` comment. A v1 entry has unary minus and writes `-entry_z` directly — compare `zscore_reversion` with `zscore_fade_trend_filtered`.
+2. The parenthesized integer is documentation only. `RSI(14)` and `RSI` compile to the same `ConditionNode(signal="RSI", ...)`; the feed owns the actual lookback calculation. In a v1 entry `RSI(close, 14)` is the opposite: the `14` is a real period and Nano computes the series.
+
+## Data contract (v1 entries)
+
+A v1 entry declares what it needs and Nano derives the rest, so the host contract is raw bars rather than a vocabulary of agreed indicator names. Every declared `input` must be present in the `MarketFrame` under exactly that name.
+
+| Entry | Declared inputs | Computed from them |
+| --- | --- | --- |
+| `trend/ema_pullback_continuation` | `close` | `EMA(close, 20)`, `EMA(close, 50)` |
+| `trend/macd_zero_line_reclaim` | `close` | `MACD_LINE(close, 12, 26)` and its prior bar |
+| `trend/donchian_high_breakout` | `high`, `low`, `close` | `HIGHEST(high, 20)[1]`, `LOWEST(low, 20)[1]` |
+| `momentum/absolute_momentum_filter` | `close` | `ROC(close, 126)`, `ROC(close, 21)` |
+| `momentum/stochastic_reclaim` | `high`, `low`, `close` | `STOCH_K(high, low, close, 14)` and its prior bar |
+| `mean_reversion/bollinger_lower_reclaim` | `close` | `BB_LOWER(close, 20, 2.0)` and its prior bar |
+| `mean_reversion/zscore_fade_trend_filtered` | `close` | `ZSCORE(close, 20)`, `SMA(close, 200)` |
+| `mean_reversion/opening_gap_fade` | `open`, `high`, `low`, `close` | `ATR(high, low, close, 14)[1]`, `open - close[1]` |
+| `volatility/squeeze_release_expansion` | `close` | `BB_WIDTH`, `LOWEST(BB_WIDTH, 50)`, `BB_MIDDLE` |
+| `volatility/atr_regime_halt` | `high`, `low`, `close` | `ATR(…, 14)` over `SMA(ATR(…, 14), 100)` |
+| `volume/volume_climax_reversal` | `high`, `low`, `close`, `volume` | `SMA(volume, 20)`, `ATR`, `(close - low) / (high - low)` |
+| `volume/vwap_band_reversion` | `close`, `volume` | `VWAP(close, volume, 20)`, `RSI(close, 14)` |
+
+Only indicators in `nano/indicators/registry.py` may be used — 35 of them. If an idea needs one that is not there, express it with the existing kernels and arithmetic or leave it out; inventing a name silently turns a computed call back into a feed signal the host must supply.
+
+Warm-up is a consequence of the periods, not a setting: `zscore_fade_trend_filtered` cannot emit anything for its first 199 bars, and the VM reports how many bars it discarded rather than counting them as no-signal.
 
 ## Intent boundary
 
@@ -254,10 +295,11 @@ An intent carries an action, an asset, and a confidence — and nothing else. Th
 [`docs/first-contribution.md`](../../docs/first-contribution.md) walks the whole
 path once, with a real rule. The short version:
 
-1. Choose an existing category or propose a new one.
-2. Add `<name>.nano` using the [v0.1.0 subset](../../docs/language.md): one `every` block, one `if` rule, AND-chained conditions, and supported intent actions. Staying inside it is what keeps the checked-in IR byte-stable.
+1. Choose an existing category or propose a new one, and decide which corpus the entry belongs to. If the host already publishes the number, write a baseline entry. If the idea needs arithmetic, an offset, a second branch, or an indicator of an indicator, write a v1 entry.
+2. Add `<name>.nano`. A baseline entry stays inside the [v0.1.0 subset](../../docs/language.md) — one `every` block, one `if` rule, AND-chained conditions, and supported intent actions — which is what keeps its checked-in IR byte-stable. A v1 entry may declare `param`/`input`/`let` and use expressions, offsets, and `else`.
 3. Write the [comment header](#the-comment-header) — five fields, plus a `NOT` line, plus any new signal's definition.
-4. Generate the `_ir.json` partner and check everything at once:
+4. Keep the file at `nano/library/<category>/<name>.nano`. Packaging globs exactly one directory deep, so a strategy in a nested subdirectory is silently dropped from the wheel.
+5. Generate the `_ir.json` partner and check everything at once:
 
    ```bash
    python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
@@ -265,7 +307,39 @@ path once, with a real rule. The short version:
 
    `--write` produces the IR in the library's format, so nothing has to be
    hand-reflowed to match its neighbours. Re-run without `--write` and it should
-   print `1 entry ready for review.`
-5. Run `python -m pytest tests/test_library.py -q`.
+   print `1 entry ready for review.` A hand-edited fixture no longer describes its
+   source, and a v1 entry's IR carries a `sourceHash` over the whole file, so
+   **editing even a comment means regenerating it**.
+6. Add a fire/no-fire test in `tests/test_library.py`. **Never a no-fire assertion alone.** A rule that can never fire passes one unchanged, so every silence assertion ships beside a positive control on the same strategy, ideally on a frame that differs only in the term being tested.
+7. Run `python -m pytest tests/test_library.py -q`, then the full suite.
 
 The pair must compile to the checked-in IR, round-trip through the validator, and replay deterministically under the test frames before it is ready to merge. CI runs the same checker over the whole library on every pull request.
+
+## What this library does not claim
+
+No entry here carries a performance, win-rate, or profitability claim, and none is a live signal. Thresholds are conventions from published technical-analysis literature, not fitted values, and the `CALIBRATED ON` line in each header says which instrument and cadence the numbers were written against and where they stop travelling. Treat every entry as an executable specification of an idea, not as advice.
+
+An example of the v1 shape, in full:
+
+```nano
+strategy DocExample {
+
+    param window: int = 20
+    param mult: float = 2.0
+
+    input close: series<float>
+
+    let lower = BB_LOWER(close, window, mult)
+
+    every 1d {
+
+        if close > lower and close[1] <= lower[1] {
+
+            buy(SPY, 0.6)
+
+        }
+
+    }
+
+}
+```

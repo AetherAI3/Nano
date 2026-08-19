@@ -16,6 +16,7 @@ which is the point: an example that cannot compile should say so rather than
 quietly being one nobody checks.
 """
 
+import json
 import re
 from pathlib import Path
 
@@ -154,4 +155,81 @@ def test_the_package_version_is_declared_once_and_agrees_everywhere():
     assert declared[0] == nano.__version__, (
         f"pyproject.toml declares {declared[0]} but nano.__version__ is "
         f"{nano.__version__}. Both are canonical; update them together."
+
+
+# --------------------------------------------------------------------------
+# Library-shape guards.
+#
+# The *count* claims — the library total, the root README's per-category row,
+# and that every category on disk is listed — are guarded in
+# tests/test_library.py, next to the corpus. What is left here is the part that
+# lives in the docs and nowhere else: the packaging depth the wheel can reach,
+# and the baseline/v1 split the README advertises.
+# --------------------------------------------------------------------------
+
+LIBRARY = ROOT / "nano" / "library"
+
+
+def _strategy_paths():
+    """Every published strategy source. One level deep, matching packaging.
+
+    `pyproject.toml` ships `library/*/*.nano`, exactly one directory deep, while
+    the CI wheel verifier builds its expected set with a recursive glob. A
+    strategy in a nested subdirectory would therefore be demanded by CI and
+    excluded by packaging, so this guard counts what packaging can actually see
+    and the assertion below catches anything hiding deeper.
+    """
+    return sorted(LIBRARY.glob("*/*.nano"))
+
+
+def _ir_version(path):
+    return json.loads(
+        path.with_name(f"{path.stem}_ir.json").read_text(encoding="utf-8")
+    )["nanoIrVersion"]
+
+
+def test_no_strategy_hides_below_the_packaged_depth():
+    shallow = {p.resolve() for p in _strategy_paths()}
+    everywhere = {p.resolve() for p in LIBRARY.glob("**/*.nano")}
+    assert everywhere == shallow, (
+        "these strategies sit deeper than nano/library/<category>/<name>.nano, "
+        "so setuptools package-data will drop them from the wheel while CI's "
+        f"recursive expected-set still demands them: {sorted(everywhere - shallow)}"
+    )
+
+
+def test_the_library_readme_states_the_real_baseline_v1_split():
+    """The split is a claim about the corpus, so derive it from the fixtures.
+
+    The total is guarded in tests/test_library.py; this is the half nothing else
+    checks. A reader deciding whether an entry needs a vocabulary of agreed
+    indicator names or just OHLCV is relying on these two numbers.
+    """
+    text = (LIBRARY / "README.md").read_text(encoding="utf-8")
+    paths = _strategy_paths()
+    versions = [_ir_version(p) for p in paths]
+    baseline = versions.count("0.1.0")
+    v1 = versions.count("1.0.0")
+    assert baseline + v1 == len(paths), "an entry pins an unexpected IR version"
+
+    split_claim = re.search(r"(\d+) baseline and (\d+) v1", text)
+    assert split_claim, "library README no longer states the baseline/v1 split"
+    assert (int(split_claim.group(1)), int(split_claim.group(2))) == (baseline, v1), (
+        f"the README claims {split_claim.group(0)!r}; the directory holds "
+        f"{baseline} baseline and {v1} v1 entries"
+    )
+
+
+def test_the_dagger_marks_exactly_the_v1_entries():
+    """The category table marks v1 entries with a dagger; the mark must be true.
+
+    Without this the dagger is decoration a reader cannot rely on — and a reader
+    checking which entries need only OHLCV is relying on exactly that.
+    """
+    text = (LIBRARY / "README.md").read_text(encoding="utf-8")
+    marked = set(re.findall(r"`([a-z0-9_]+)`†", text))
+    expected = {p.stem for p in _strategy_paths() if _ir_version(p) == "1.0.0"}
+    assert marked == expected, (
+        f"daggered but baseline: {sorted(marked - expected)}; "
+        f"v1 but undaggered: {sorted(expected - marked)}"
     )

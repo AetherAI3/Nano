@@ -131,6 +131,7 @@ def test_every_category_is_listed_in_the_readme():
             "not list it"
         )
 
+
 def test_both_corpora_are_populated():
     """Neither half of the split may quietly empty out.
 
@@ -1034,6 +1035,11 @@ def test_bollinger_reclaim_needs_the_excursion_to_end():
     # the second bar fires: entering on bar 28 would be bollinger_band_touch.
     assert _fires(module, _ohlcv(base + [92.0, 99.5])) == [("BUY", 29)]
 
+    # Two bars outside in a row. The excursion has not ended, so the reclaim
+    # has not happened — this is what `close > lower` is for, and without the
+    # frame the term is unfalsifiable.
+    assert _fires(module, _ohlcv(base + [92.0, 91.0, 99.0])) == [("BUY", 30)]
+
     # A calm tape never leaves the bands, so there is no excursion to reclaim.
     assert _fires(module, _ohlcv(base + base)) == []
 
@@ -1078,8 +1084,14 @@ def test_gap_fade_needs_the_gap_to_fail_not_merely_to_exist():
     # a breakout.
     assert _fires(module, _session(108.0, 110.0)) == []
 
-    # No gap at all.
-    assert _fires(module, _ohlcv(base + base)) == []
+    # The down-gap that holds — the mirror of the case above, and the reason
+    # the else arm carries its own `close > open` term.
+    assert _fires(module, _session(92.0, 90.0)) == []
+
+    # An ordinary red bar: opens where yesterday closed, closes lower. The
+    # direction test is satisfied and the size test is not, which is the whole
+    # job of the ATR threshold.
+    assert _fires(module, _session(base[-1], base[-1] - 1.0)) == []
 
 
 def _contracting(count: int, amplitude: float = 6.0, decay: float = 0.94):
@@ -1107,6 +1119,11 @@ def test_squeeze_release_fires_on_the_expansion_not_the_squeeze():
     # The release. Bar 80 fires; bar 81 does not, because by then the *prior*
     # bar's width is no longer the fifty-bar minimum.
     assert _fires(module, _ohlcv(squeezed + [104.0, 108.0])) == [("BUY", 80)]
+
+    # The same release, resolving downward. Width expands identically out of an
+    # identically-tight squeeze; only the side differs, which is what the middle
+    # band test decides. A squeeze is directionless until something picks a side.
+    assert _fires(module, _ohlcv(squeezed + [96.0, 92.0])) == []
 
 
 def test_atr_regime_halt_trips_on_relative_expansion_only():
@@ -1163,6 +1180,26 @@ def test_volume_climax_needs_all_three_measurements():
     # Same shape, ordinary volume. Without participation it is just a wide bar.
     assert _fires(module, _final_bar(top, bottom, 1200.0)) == []
 
+    # Enormous volume, close three-quarters of the way up the bar, still below
+    # trend — but a range of 2.0 against an ATR of ~1.39, so under the 2x bar.
+    # Volume without range is churn, not capitulation, and this is the only
+    # frame in the pair that can tell the range term from the others.
+    assert _fires(module, _final_bar(closes[-1] + 0.5, closes[-1] - 1.5, 9000.0)) == []
+
+    # The identical climax bar at the end of an *advance*. Every term but the
+    # trend location is satisfied, so this is the frame that separates a
+    # capitulation from a breakout, and the rule must decline it.
+    advance = [100.0 + 0.8 * i for i in range(58)]
+    rising_closes = advance + [advance[-1] - 1.0]
+    rising = _ohlcv(
+        rising_closes,
+        opens=rising_closes,
+        highs=[c + 0.5 for c in advance] + [rising_closes[-1] + 1.0],
+        lows=[c - 0.5 for c in advance] + [rising_closes[-1] - 14.0],
+        volumes=quiet_volume + [9000.0],
+    )
+    assert _fires(module, rising) == []
+
 
 def test_vwap_reversion_needs_a_discount_not_merely_weakness():
     module = _module("volume/vwap_band_reversion.nano")
@@ -1176,3 +1213,15 @@ def test_vwap_reversion_needs_a_discount_not_merely_weakness():
 
     # A steady advance — no discount at any point.
     assert _fires(module, _ohlcv([100.0 + 0.6 * i for i in range(26)])) == []
+
+    # A slow drift lower: RSI is pinned at zero, so the RSI gate is wide open,
+    # and the discount settles at roughly 0.77 percent — under the one-percent
+    # threshold. Without this frame the discount term is unfalsifiable, because
+    # every other frame here has the two terms agreeing.
+    assert _fires(module, _ohlcv([100.0 - 0.08 * i for i in range(30)])) == []
+
+    # The converse: an advance broken by one sharp bar that opens a 1.36 percent
+    # discount to rolling VWAP while RSI is still 48. The discount qualifies and
+    # the rule must still abstain, which is the only frame that tests the ceiling.
+    rally = [100.0 + 0.3 * i for i in range(26)]
+    assert _fires(module, _ohlcv(rally + [rally[-1] - 4.2])) == []
