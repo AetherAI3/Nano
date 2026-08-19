@@ -10,6 +10,7 @@ For questions about what Nano does today, start with the reference documents bel
 | --- | --- |
 | [Architecture](architecture.md) | The actual source -> IR -> interpreter -> host-gate flow and module boundaries. |
 | [Language reference](language.md) | The locked v0.1.0 grammar, IR shape, and execution semantics. |
+| [Watchdog profile](watchdog_profile.md) | The restricted subset for host-governed controls: signal contracts, missing-input semantics, artifacts, receipts, and replay. |
 | [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |
 | [Build notes](../BUILD_ORDER.md) | Historical sequencing and the project's architectural constraints. |

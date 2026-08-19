@@ -40,6 +40,19 @@ class MarketFrame:
         return float(self.signals[signal][index])
 
 
+# A frame is a timeline plus named numeric series. Nothing about that shape is
+# market-specific, and non-market callers (see ``nano/watchdog/``) read queue
+# depth or credential age through exactly the same contract. ``SignalFrame`` is
+# the name to reach for in that code.
+#
+# It is an alias rather than a rename, deliberately: the class keeps its original
+# ``__name__``, so reprs, pickles, and the "not present in market frame"
+# diagnostic above do not shift under any existing consumer. One type, two names
+# — a parallel frame class would eventually want a parallel evaluator, and two
+# evaluators disagree.
+SignalFrame = MarketFrame
+
+
 @dataclass(frozen=True)
 class ExecutionResult:
     intents: Tuple[Intent, ...]
