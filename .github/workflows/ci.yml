@@ -70,4 +70,42 @@ jobs:
 
           missing = sorted(expected - packaged)
           assert not missing, f"wheel is missing documented strategy assets: {missing}"
+
+          required_modules = {
+              "nano/library/__init__.py",
+              "nano/library/contribution.py",
+          }
+          missing_modules = sorted(required_modules - packaged)
+          assert not missing_modules, (
+              f"wheel is missing library validation modules: {missing_modules}"
+          )
+          PY
+      - name: Verify installed library validation imports
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          wheel = next(Path("dist").glob("*.whl")).resolve()
+          with tempfile.TemporaryDirectory() as outside_checkout:
+              subprocess.run(
+                  [
+                      sys.executable,
+                      "-I",
+                      "-c",
+                      (
+                          "import sys; "
+                          f"sys.path.insert(0, {str(wheel)!r}); "
+                          "from nano.library.contribution import "
+                          "baseline_control_frames, module_control_frame, "
+                          "source_provenance_issues; "
+                          "assert baseline_control_frames.__module__ == "
+                          "'nano.library.contribution'"
+                      ),
+                  ],
+                  cwd=outside_checkout,
+                  check=True,
+              )
           PY

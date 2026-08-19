@@ -2,20 +2,49 @@
 
 Mirrors tests/test_conformance.py but globs nano/library/** — every published
 library strategy is a `.nano`/`_ir.json` pair that must compile bit-identically
-and round-trip through StrategyGraph. Representative strategies also get
+and round-trip through its IR loader. Representative strategies also get
 execution tests against crafted MarketFrames asserting exact fire/no-fire
 behavior.
+
+The library holds **two** corpora and the split is deliberate:
+
+* **baseline entries** compare host-supplied named signals with numeric
+  literals. They compile to v0.1.0 IR, they are the oldest artifacts in the
+  repository, and their checked-in fixtures are byte-stable — a change to one is
+  a compiler regression, not a library edit. ``test_baseline_entries_stay_on_
+  baseline_ir`` is the guard that makes that claim testable rather than assumed.
+* **v1 entries** declare their own `input`s and let Nano compute the indicators.
+  They compile to 1.0.0 IR, carry a `sourceHash`, and run on the VM rather than
+  the reference interpreter.
+
+The partition is read from the *checked-in* fixture, not from the compiler. If
+the compiler ever started emitting a different version for an existing entry,
+deriving the partition from it would quietly re-route the entry to the other set
+of tests; reading the fixture instead turns that into a visible failure.
+
+Every no-fire assertion below is paired with a positive control on the **same**
+strategy. A no-fire test alone passes just as well against a rule that can never
+fire at all, which is the one way a library test stays green while being worthless.
 """
 
 import json
+import math
 import re
 from pathlib import Path
 
 import pytest
 
-from nano.compiler import compile_source, compile_to_dict
+from nano.compiler import compile_module, compile_source, compile_to_dict
 from nano.ir.graph import StrategyGraph
+from nano.ir.module import NanoModule
+from nano.library import contribution
+from nano.library.contribution import (
+    baseline_control_frames,
+    module_control_frame,
+    source_provenance_issues,
+)
 from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
+from nano.runtime.vm import run_module
 
 LIBRARY = Path(__file__).resolve().parent.parent / "nano" / "library"
 
@@ -39,6 +68,25 @@ def _ir_path(nano_path: Path) -> Path:
 
 def _id(path: Path) -> str:
     return f"{path.parent.name}/{path.stem}"
+
+
+def _pinned_ir_version(nano_path: Path) -> str:
+    return json.loads(_ir_path(nano_path).read_text())["nanoIrVersion"]
+
+
+BASELINE_SOURCES = [p for p in NANO_SOURCES if _pinned_ir_version(p) == "0.1.0"]
+V1_SOURCES = [p for p in NANO_SOURCES if _pinned_ir_version(p) == "1.0.0"]
+
+
+def test_contribution_controls_are_in_the_packaged_namespace():
+    """Collection must not depend on the repository-only ``scripts`` tree."""
+    helpers = (
+        baseline_control_frames,
+        module_control_frame,
+        source_provenance_issues,
+    )
+    assert contribution.__package__ == "nano.library"
+    assert {helper.__module__ for helper in helpers} == {"nano.library.contribution"}
 
 
 def test_library_is_nonempty_and_paired():
@@ -101,6 +149,21 @@ def test_every_category_is_listed_in_the_readme():
         )
 
 
+def test_both_corpora_are_populated():
+    """Neither half of the split may quietly empty out.
+
+    Every parametrised test below is keyed off one of these two lists, and a
+    parametrisation over an empty list collects zero cases and reports success.
+    If a refactor ever mis-detected the version, one of these lists would go to
+    zero and a whole family of assertions would vanish without a failure — so the
+    lists are asserted directly, and their sum is asserted against the file count
+    so an entry cannot fall out of both.
+    """
+    assert BASELINE_SOURCES, "no baseline (v0.1.0) library entries were detected"
+    assert V1_SOURCES, "no v1.0 library entries were detected"
+    assert len(BASELINE_SOURCES) + len(V1_SOURCES) == len(NANO_SOURCES)
+
+
 def test_no_orphan_ir_files():
     for ir_path in LIBRARY.glob("**/*_ir.json"):
         partner = ir_path.with_name(ir_path.name[: -len("_ir.json")] + ".nano")
@@ -114,14 +177,48 @@ def test_compiled_ir_matches_handwritten_ir(nano_path: Path):
     assert compiled == handwritten
 
 
-@pytest.mark.parametrize("nano_path", NANO_SOURCES, ids=_id)
+@pytest.mark.parametrize("nano_path", BASELINE_SOURCES, ids=_id)
+def test_baseline_entries_stay_on_baseline_ir(nano_path: Path):
+    """A v0.1.0 entry must keep compiling to v0.1.0.
+
+    Byte-stability of the baseline corpus is the library's oldest promise: hosts
+    pinned these fixtures. The compiler emits the lowest version that can express
+    a program, so an entry drifting up to `1.0.0` means either the source gained
+    a v1 construct or version inference regressed. Both are worth failing on.
+    """
+    assert compile_to_dict(nano_path.read_text())["nanoIrVersion"] == "0.1.0"
+
+
+@pytest.mark.parametrize("nano_path", BASELINE_SOURCES, ids=_id)
 def test_ir_round_trips(nano_path: Path):
     data = json.loads(_ir_path(nano_path).read_text())
     assert StrategyGraph.from_dict(data).to_dict() == data
     assert data["effects"] == ["intent.emit", "log.append"]
 
 
-@pytest.mark.parametrize("nano_path", NANO_SOURCES, ids=_id)
+@pytest.mark.parametrize("nano_path", V1_SOURCES, ids=_id)
+def test_v1_module_round_trips(nano_path: Path):
+    data = json.loads(_ir_path(nano_path).read_text())
+    assert NanoModule.from_dict(data).to_dict() == data
+    assert data["effects"] == ["intent.emit", "log.append"]
+
+
+@pytest.mark.parametrize("nano_path", V1_SOURCES, ids=_id)
+def test_v1_fixture_matches_its_source_hash(nano_path: Path):
+    """The pinned fixture must belong to the pinned source text.
+
+    v1 IR carries a `sourceHash` over the whole `.nano` file, comments included.
+    Editing a strategy's documentation without regenerating its fixture leaves a
+    document that still loads and still round-trips but no longer describes the
+    file beside it — a drift the version and node checks cannot see.
+    """
+    data = json.loads(_ir_path(nano_path).read_text())
+    recompiled = compile_to_dict(nano_path.read_text())
+    assert data["provenance"]["sourceHash"] == recompiled["provenance"]["sourceHash"]
+    assert data["moduleHash"] == recompiled["moduleHash"]
+
+
+@pytest.mark.parametrize("nano_path", BASELINE_SOURCES, ids=_id)
 def test_compiled_graph_replays_identically(nano_path: Path):
     graph = compile_source(nano_path.read_text())
     signals = {c.signal: (0.0, 1e9) for c in graph.conditions}
@@ -131,6 +228,74 @@ def test_compiled_graph_replays_identically(nano_path: Path):
     assert first == second
 
 
+@pytest.mark.parametrize("nano_path", V1_SOURCES, ids=_id)
+def test_v1_module_replays_identically(nano_path: Path):
+    module = compile_module(nano_path.read_text())
+    frame = _ohlcv(_wave(260))
+    first = run_module(module, frame).to_dict()
+    second = run_module(module, frame).to_dict()
+    assert first == second
+
+
+@pytest.mark.parametrize("nano_path", BASELINE_SOURCES, ids=_id)
+def test_contribution_checker_uses_paired_baseline_controls(nano_path: Path):
+    graph = compile_source(nano_path.read_text())
+    firing, silent = baseline_control_frames(graph)
+    assert execute(graph, firing).intents
+    assert execute(graph, silent).intents == ()
+    assert firing != silent
+
+
+def test_contribution_checker_solves_repeated_signal_constraints():
+    graph = StrategyGraph.from_dict(
+        {
+            "type": "Strategy",
+            "nanoIrVersion": "0.1.0",
+            "name": "BoundedControl",
+            "effects": ["intent.emit", "log.append"],
+            "nodes": [
+                {"type": "Schedule", "interval": "1m"},
+                {"type": "Condition", "signal": "SCORE", "operator": ">", "value": 0},
+                {"type": "Condition", "signal": "SCORE", "operator": "<", "value": 1},
+                {"type": "Intent", "action": "OBSERVE"},
+            ],
+        }
+    )
+    firing, silent = baseline_control_frames(graph)
+    assert execute(graph, firing).intents
+    assert execute(graph, silent).intents == ()
+
+
+@pytest.mark.parametrize("nano_path", V1_SOURCES, ids=_id)
+def test_contribution_checker_reaches_past_each_module_warmup(nano_path: Path):
+    module = compile_module(nano_path.read_text())
+    frame = module_control_frame(module)
+    result = run_module(module, frame)
+
+    assert len(frame.timestamps) == module.warmup + 2
+    assert any(entry.event == "condition.evaluated" for entry in result.log)
+    assert any(len(set(series)) > 1 for series in frame.signals.values())
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        (["// REGIME: range"], ()),
+        (["// SOURCE: public paper"], ()),
+        (["// SOURCE:"], ("empty",)),
+        (
+            ["// SOURCE: public paper", "// SOURCE: another account"],
+            ("more than one",),
+        ),
+    ],
+)
+def test_source_provenance_policy_is_precise_and_non_inventive(header, expected):
+    issues = source_provenance_issues(header)
+    assert len(issues) == len(expected)
+    for phrase in expected:
+        assert phrase in issues[0]
+
+
 # --------------------------------------------------------------------------
 # Execution tests: crafted MarketFrames with exact fire / no-fire assertions.
 # --------------------------------------------------------------------------
@@ -138,6 +303,66 @@ def test_compiled_graph_replays_identically(nano_path: Path):
 
 def _load(rel: str) -> StrategyGraph:
     return compile_source((LIBRARY / rel).read_text())
+
+
+def _module(rel: str) -> NanoModule:
+    return compile_module((LIBRARY / rel).read_text())
+
+
+def _ohlcv(closes, *, opens=None, highs=None, lows=None, volumes=None):
+    """Build a five-series OHLCV frame from a close path.
+
+    Bars are spaced one full day apart so every cadence in the library — 5m
+    through 1d — fires on every bar: the scheduler fires at the first timestamp
+    and at any timestamp at least one interval after the previous firing.
+
+    Unstated series are derived rather than invented. The open is the close, and
+    the high/low straddle the bar by half a point so no bar has a zero range — a
+    zero-range bar makes `(close - low) / (high - low)` absent, which would
+    silently disarm any rule reading where the close sits inside its bar.
+    """
+    closes = tuple(float(c) for c in closes)
+    count = len(closes)
+    opens = tuple(float(v) for v in opens) if opens is not None else closes
+    if highs is None:
+        highs = tuple(max(o, c) + 0.5 for o, c in zip(opens, closes))
+    else:
+        highs = tuple(float(v) for v in highs)
+    if lows is None:
+        lows = tuple(min(o, c) - 0.5 for o, c in zip(opens, closes))
+    else:
+        lows = tuple(float(v) for v in lows)
+    volumes = (
+        tuple(float(v) for v in volumes) if volumes is not None else (1000.0,) * count
+    )
+    return MarketFrame(
+        timestamps=tuple(i * 86400 for i in range(count)),
+        signals={
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        },
+    )
+
+
+def _wave(count: int):
+    """A deterministic, non-degenerate price path.
+
+    Drift plus two out-of-phase cycles: moving averages separate, rolling
+    dispersion is non-zero, and no bar has a zero range. Nothing random — the
+    same path on every machine, which is the premise of every replay assertion.
+    """
+    return [
+        100.0 + 0.05 * i + 6.0 * math.sin(i / 7.0) + 2.0 * math.sin(i / 3.0)
+        for i in range(count)
+    ]
+
+
+def _fires(module: NanoModule, frame: MarketFrame):
+    """(action, bar index) for every intent — `_ohlcv` lays out one bar per day."""
+    return [(i.action, i.timestamp // 86400) for i in run_module(module, frame).intents]
 
 
 def test_rsi_oversold_reversal_fires_only_when_oversold():
@@ -578,7 +803,6 @@ def test_every_watchdog_entry_is_admissible_under_the_watchdog_profile():
         )
         assert artifact.watchdog_id == nano_path.stem
 
-
 # --------------------------------------------------------------------------
 # the release-note publication family
 # --------------------------------------------------------------------------
@@ -783,3 +1007,473 @@ def test_every_release_note_hold_states_the_boundary_it_must_not_cross():
             "Say so in the header: these rules gate publication, never a branch, "
             "a deploy, or an engineering merge."
         )
+
+# --------------------------------------------------------------------------
+# v1 execution tests. Each strategy computes its own indicators from a declared
+# OHLCV input, so the frames below are price paths rather than signal levels.
+#
+# Every one of these is a *pair*: a frame the rule must fire on and a frame it
+# must stay silent on. The silent half is the interesting assertion and it is
+# also the worthless one on its own — a rule that can never fire passes it
+# unchanged — so neither half ships without the other.
+# --------------------------------------------------------------------------
+
+
+def test_ema_pullback_fires_on_a_dip_and_not_in_a_downtrend():
+    module = _module("trend/ema_pullback_continuation.nano")
+
+    # Sixty bars of advance, then a four-point-a-day dip that reaches the fast
+    # average while the slow one still holds underneath.
+    advance = [100.0 + i for i in range(60)]
+    dip = [advance[-1] - 4.0 * step for step in range(1, 6)]
+    assert _fires(module, _ohlcv(advance + dip)) == [
+        ("BUY", 62),
+        ("BUY", 63),
+        ("BUY", 64),
+    ]
+
+    # The mirror regime. The fast average is under the slow one on every warm
+    # bar, so the first condition is false throughout — the rule is structurally
+    # unable to buy a decline, which is the property worth pinning.
+    assert _fires(module, _ohlcv([200.0 - i for i in range(65)])) == []
+
+
+def test_macd_zero_reclaim_fires_once_at_the_crossing():
+    module = _module("trend/macd_zero_line_reclaim.nano")
+
+    decline = [200.0 - 2.0 * i for i in range(45)]
+    recovery = [decline[-1] + 4.0 * step for step in range(1, 31)]
+    # Thirty bars of recovery, one intent. `line[1] <= 0` is what makes the
+    # difference between an edge and a level: without it every bar of the
+    # recovery would qualify, since the line stays positive for all of them.
+    assert _fires(module, _ohlcv(decline + recovery)) == [("BUY", 55)]
+
+    # No crossing, no intent.
+    assert _fires(module, _ohlcv([200.0 - 2.0 * i for i in range(75)])) == []
+
+
+def test_macd_zero_reclaim_ignores_a_second_cross_under_its_own_signal():
+    """The frame that proves `MACD_HIST > 0` is load-bearing, not decoration.
+
+    A revision of this strategy deleted that term, arguing that a line crossing
+    up through zero necessarily sits above its own signal EMA. That holds for the
+    *first* cross out of a sustained negative stretch and fails for a second one:
+    after a rally and a retrace the signal EMA still carries the earlier high
+    line values, so it sits above the line at the crossing.
+
+    Here bar 53 is the clean first cross and bar 78 is the second, with
+    line = +0.3243, line[1] = -0.0980 and hist = -3.6859 — above zero, below its
+    own signal, which is the fading spike the term exists to reject. Without the
+    histogram condition this frame fires twice.
+    """
+    module = _module("trend/macd_zero_line_reclaim.nano")
+    closes = [200.0 - 2.0 * i for i in range(45)]
+    for step, count in ((6.0, 19), (-6.0, 11), (6.0, 4)):
+        for _ in range(count):
+            closes.append(closes[-1] + step)
+    assert _fires(module, _ohlcv(closes)) == [("BUY", 53)]
+
+
+def test_donchian_breakout_arms_are_symmetric_and_ranges_are_silent():
+    module = _module("trend/donchian_high_breakout.nano")
+
+    base = [100.0 + (1.0 if i % 2 else 0.0) for i in range(30)]
+    assert _fires(module, _ohlcv(base + [112.0])) == [("BUY", 30)]
+    # The mirror. Asserting only the long arm would leave the short arm — which
+    # lives in the else branch and is the newer half of this rule — proven by
+    # nothing at all.
+    assert _fires(module, _ohlcv(base + [88.0])) == [("SELL", 30)]
+
+    # Sixty bars of a repeating five-bar sawtooth: the channel is exactly the
+    # range, so neither arm can ever clear it.
+    assert _fires(module, _ohlcv([100.0 + (i % 5) * 0.4 for i in range(60)])) == []
+
+    # Boundary. `_ohlcv` puts the high half a point above the close, so the prior
+    # channel top is exactly 101.5. A close *at* the top does not break it —
+    # `>` not `>=` — and one tick above does. The baseline corpus pins its
+    # boundaries this way (`0 is NOT > 0`); the v1 corpus should too.
+    assert _fires(module, _ohlcv(base + [101.5])) == []
+    assert _fires(module, _ohlcv(base + [101.6])) == [("BUY", 30)]
+    # The same distinction on the short arm: the floor is exactly 99.5.
+    assert _fires(module, _ohlcv(base + [99.5])) == []
+    assert _fires(module, _ohlcv(base + [99.4])) == [("SELL", 30)]
+
+    # Two bars beyond the channel in a row. Bar 30 breaks out and raises the
+    # channel top to its own high of 105.5, so bar 31's close of 105.2 is inside
+    # the *new* channel and must not re-fire. Reading the channel at [2] instead
+    # of [1] would compare bar 31 against the stale pre-breakout top of 101.5 and
+    # signal the same breakout twice — which is how an offset that is off by one
+    # bar hides: it stays silent on every frame where nothing changed in between.
+    assert _fires(module, _ohlcv(base + [105.0, 105.2])) == [("BUY", 30)]
+    # The short arm's mirror, so both offsets are pinned rather than one.
+    assert _fires(module, _ohlcv(base + [95.0, 94.8])) == [("SELL", 30)]
+
+
+def test_absolute_momentum_reports_risk_off_when_either_window_turns():
+    module = _module("momentum/absolute_momentum_filter.nano")
+
+    advance = [100.0 + 0.5 * i for i in range(135)]
+    assert _fires(module, _ohlcv(advance)) == [("BUY", bar) for bar in range(126, 135)]
+
+    # Both windows negative: the else arm, every period, and never a BUY.
+    decline = [200.0 - 0.5 * i for i in range(135)]
+    assert _fires(module, _ohlcv(decline)) == [
+        ("OBSERVE", bar) for bar in range(126, 135)
+    ]
+
+    # Boundary, one operator at a time. A flat tape zeroes BOTH returns, so
+    # relaxing either `>` to `>=` on its own leaves the other conjunct false and
+    # the rule still reports risk-off. That frame looks like a boundary pin and
+    # tests nothing: only the simultaneous mutation of both operators is caught,
+    # and nobody writes that mutation. Each operator needs a frame where it alone
+    # decides the bar.
+
+    # short_return exactly zero, long_return +50.48: 114 advancing bars then 21
+    # flat ones, so bar 134 reads back to bar 113 — the last advancing bar — and
+    # the one-month window is flat to the tick while the six-month window is not.
+    # `short_return >= 0` turns that final OBSERVE into a BUY.
+    short_flat = [100.0 + 0.5 * i for i in range(114)] + [156.5] * 21
+    assert _fires(module, _ohlcv(short_flat)) == [
+        ("BUY", bar) for bar in range(126, 134)
+    ] + [("OBSERVE", 134)]
+
+    # The mirror: long_return exactly zero, short_return +110.53. Nine flat bars,
+    # a decline to 47.5, then a recovery that lands bar 134 on exactly the value
+    # of bar 126 bars earlier. Every step is a binary-exact half, so the equality
+    # is real arithmetic and not a rounding coincidence — `close[134] == close[8]`
+    # holds exactly. `long_return >= 0` turns bar 134 into a BUY.
+    mirror = (
+        [100.0] * 9
+        + [100.0 - 0.5 * (i - 8) for i in range(9, 114)]
+        + [47.5 + 2.5 * (i - 113) for i in range(114, 135)]
+    )
+    assert mirror[134] == mirror[8]
+    assert _fires(module, _ohlcv(mirror)) == [
+        ("OBSERVE", bar) for bar in range(126, 135)
+    ]
+
+    # The case the short window exists for: a six-month return still positive
+    # only because of where it started, with the last month falling. A filter
+    # reading the long window alone would report risk-on across this whole tail.
+    rolled_over = [100.0 + 0.8 * i for i in range(110)] + [
+        100.0 + 0.8 * 109 - 0.9 * step for step in range(1, 26)
+    ]
+    assert _fires(module, _ohlcv(rolled_over)) == [
+        ("OBSERVE", bar) for bar in range(126, 135)
+    ]
+
+
+def test_stochastic_reclaim_fires_on_the_crossing_bar_only():
+    module = _module("momentum/stochastic_reclaim.nano")
+
+    decline = [100.0 - 1.0 * i for i in range(25)]
+    recovery = [decline[-1] + 1.5 * step for step in range(1, 11)]
+    # Ten bars of recovery, one intent — %K crosses 20 once and then stays above
+    # it, which is exactly the fire-rate difference from stochastic_oversold.
+    assert _fires(module, _ohlcv(decline + recovery)) == [("BUY", 26)]
+
+    # %K never goes under 20 on a one-way advance, so there is nothing to reclaim.
+    assert _fires(module, _ohlcv([100.0 + 1.0 * i for i in range(35)])) == []
+
+
+def test_bollinger_reclaim_needs_the_excursion_to_end():
+    module = _module("mean_reversion/bollinger_lower_reclaim.nano")
+
+    base = [100.0 + (0.3 if i % 2 else -0.3) for i in range(28)]
+    # Bar 28 closes far below the lower band; bar 29 closes back inside. Only
+    # the second bar fires: entering on bar 28 would be bollinger_band_touch.
+    assert _fires(module, _ohlcv(base + [92.0, 99.5])) == [("BUY", 29)]
+
+    # Two bars outside in a row. The excursion has not ended, so the reclaim
+    # has not happened — this is what `close > lower` is for, and without the
+    # frame the term is unfalsifiable.
+    assert _fires(module, _ohlcv(base + [92.0, 91.0, 99.0])) == [("BUY", 30)]
+
+    # Offset consistency. On a flat tape, bar 28 closes at 94.1 against a lower
+    # band of 97.13, and bar 29's violent reclaim to 122.0 widens the band so far
+    # that the *current* lower band falls to 90.75. The excursion is therefore
+    # real against its own bar's band and not against this one, so comparing
+    # `close[1]` with the unshifted `lower` would mix two different band widths
+    # and lose the signal. A margin of three points either side, not a knife edge.
+    assert _fires(module, _ohlcv([100.0] * 28 + [94.1, 122.0])) == [("BUY", 29)]
+
+    # A calm tape never leaves the bands, so there is no excursion to reclaim.
+    assert _fires(module, _ohlcv(base + base)) == []
+
+
+def test_zscore_fade_is_disarmed_by_the_trend_filter():
+    module = _module("mean_reversion/zscore_fade_trend_filtered.nano")
+
+    advance = [100.0 + 0.4 * i for i in range(210)]
+    flush = [advance[-1] - 6.0 * step for step in range(1, 4)]
+    # All three flush bars deepen the z-score. Cheapness that is still getting
+    # cheaper is the rule's stated invalidation, so none may emit an intent.
+    deepening = _ohlcv(advance + flush)
+    assert _fires(module, deepening) == []
+
+    # A one-point reclaim leaves z below -2 while making it less negative than
+    # the prior bar. This is the first honest entry bar, and only this bar fires.
+    reclaim = _ohlcv(advance + flush + [flush[-1] + 1.0])
+    assert _fires(module, reclaim) == [("BUY", 213)]
+
+    # Mutation control: deleting only the anti-deepening conjunct resurrects
+    # the falling-knife behavior. The adversarial frame above must kill exactly
+    # that mutation rather than passing because some unrelated term is false.
+    source = (LIBRARY / "mean_reversion/zscore_fade_trend_filtered.nano").read_text()
+    mutant_source = source.replace(" and z > z[1]", "")
+    assert mutant_source != source
+    assert _fires(compile_module(mutant_source), deepening) == [
+        ("BUY", 211),
+        ("BUY", 212),
+    ]
+
+    # The identical flush, grafted onto a downtrend. The z-score reaches the same
+    # place; the 200-bar filter is the entire reason the rule abstains, and this
+    # is the pair that proves the filter does work rather than decorate.
+    decline = [200.0 - 0.4 * i for i in range(210)]
+    bear_flush = [decline[-1] - 6.0 * step for step in range(1, 4)]
+    assert _fires(module, _ohlcv(decline + bear_flush)) == []
+
+
+def test_gap_fade_needs_the_gap_to_fail_not_merely_to_exist():
+    module = _module("mean_reversion/opening_gap_fade.nano")
+
+    base = [100.0 + (0.5 if i % 2 else -0.5) for i in range(25)]
+
+    def _session(gap_open: float, gap_close: float):
+        closes = base + [gap_close]
+        opens = base + [gap_open]
+        return _ohlcv(
+            closes,
+            opens=opens,
+            highs=[max(o, c) + 0.5 for o, c in zip(opens, closes)],
+            lows=[min(o, c) - 0.5 for o, c in zip(opens, closes)],
+        )
+
+    assert _fires(module, _session(108.0, 104.0)) == [("SELL", 25)]
+    # The down-gap mirror, so the else arm is proven rather than assumed.
+    assert _fires(module, _session(92.0, 96.0)) == [("BUY", 25)]
+
+    # Same gap, held into the close. This is the breakaway case the header warns
+    # about, and the close-against-open term is the only thing separating a fade
+    # from a chase: without it this frame would fire and the rule would be short
+    # a breakout.
+    assert _fires(module, _session(108.0, 110.0)) == []
+
+    # The down-gap that holds — the mirror of the case above, and the reason
+    # the else arm carries its own `close > open` term.
+    assert _fires(module, _session(92.0, 90.0)) == []
+
+    # An ordinary red bar: opens where yesterday closed, closes lower. The
+    # direction test is satisfied and the size test is not, which is the whole
+    # job of the ATR threshold.
+    assert _fires(module, _session(base[-1], base[-1] - 1.0)) == []
+
+    # A small *up* gap that closes higher — an unremarkable green bar. This is
+    # the frame that falsifies the unary minus: written `gap <= threshold`
+    # instead of `gap <= -threshold`, the else arm buys this bar. Nothing else
+    # in the suite can tell the two spellings apart, and the sign is the whole
+    # reason the down-gap arm is a down-gap arm.
+    assert _fires(module, _session(base[-1] + 0.2, base[-1] + 1.0)) == []
+
+    # A gap of 2.30 against a prior-bar ATR threshold of 2.25 — but the gap bar's
+    # own range lifts the unshifted threshold to 2.39. The rule fires because the
+    # header's claim is true: the threshold is the *prior* bar's ATR. Reading the
+    # current bar's ATR instead would silently raise the bar the gap must clear.
+    assert _fires(module, _session(base[-1] + 2.30, base[-1] + 1.90)) == [("SELL", 25)]
+
+
+def _contracting(count: int, amplitude: float = 6.0, decay: float = 0.94):
+    """An oscillation around 100 whose amplitude shrinks every bar.
+
+    Band width therefore falls monotonically, so each bar's width is its own
+    rolling minimum — a squeeze that keeps getting tighter and never releases.
+    """
+    prices = []
+    for i in range(count):
+        prices.append(100.0 + (amplitude if i % 2 == 0 else -amplitude))
+        amplitude *= decay
+    return prices
+
+
+def test_squeeze_release_fires_on_the_expansion_not_the_squeeze():
+    module = _module("volatility/squeeze_release_expansion.nano")
+
+    squeezed = _contracting(80)
+    # Eighty bars pinned at their own rolling minimum width and not one intent:
+    # a squeeze on its own is not a signal here, which is the difference from a
+    # rule that tests width against an absolute number.
+    assert _fires(module, _ohlcv(squeezed)) == []
+
+    # The release. Bar 80 fires; bar 81 does not, because by then the *prior*
+    # bar's width is no longer the fifty-bar minimum.
+    assert _fires(module, _ohlcv(squeezed + [104.0, 108.0])) == [("BUY", 80)]
+
+    # The same release, resolving downward. Width expands identically out of an
+    # identically-tight squeeze; only the side differs, which is what the middle
+    # band test decides. A squeeze is directionless until something picks a side.
+    assert _fires(module, _ohlcv(squeezed + [96.0, 92.0])) == []
+
+
+def test_atr_regime_halt_trips_on_relative_expansion_only():
+    module = _module("volatility/atr_regime_halt.nano")
+
+    calm = [100.0 + (0.2 if i % 2 else -0.2) for i in range(125)]
+    highs = [c + 0.3 for c in calm]
+    lows = [c - 0.3 for c in calm]
+    assert _fires(module, _ohlcv(calm, highs=highs, lows=lows)) == []
+
+    # Three bars whose range is an order of magnitude above the baseline. The
+    # halt emits PAUSE then OBSERVE, in that order, on each of them: a host
+    # reading the log needs the halt before the review flag, not merely both.
+    shocked = _ohlcv(
+        calm + [100.0, 100.0, 100.0],
+        highs=highs + [110.0, 112.0, 114.0],
+        lows=lows + [90.0, 88.0, 86.0],
+    )
+    assert _fires(module, shocked) == [
+        ("PAUSE", 125),
+        ("OBSERVE", 125),
+        ("PAUSE", 126),
+        ("OBSERVE", 126),
+        ("PAUSE", 127),
+        ("OBSERVE", 127),
+    ]
+
+
+def test_volume_climax_needs_all_three_measurements():
+    module = _module("volume/volume_climax_reversal.nano")
+
+    decline = [150.0 - 0.8 * i for i in range(58)]
+    closes = decline + [decline[-1] - 1.0]
+    quiet_volume = [1000.0] * 58
+
+    def _final_bar(high: float, low: float, volume: float):
+        return _ohlcv(
+            closes,
+            opens=closes,
+            highs=[c + 0.5 for c in decline] + [high],
+            lows=[c - 0.5 for c in decline] + [low],
+            volumes=quiet_volume + [volume],
+        )
+
+    top = closes[-1] + 1.0
+    bottom = closes[-1] - 14.0
+    assert _fires(module, _final_bar(top, bottom, 9000.0)) == [("BUY", 58)]
+
+    # Same volume, same range, close at the bottom of it. That is a breakdown
+    # bar wearing a climax bar's dimensions, and the close-position term is the
+    # only thing that tells them apart.
+    assert _fires(module, _final_bar(closes[-1] + 14.0, closes[-1] - 1.0, 9000.0)) == []
+
+    # Same shape, ordinary volume. Without participation it is just a wide bar.
+    assert _fires(module, _final_bar(top, bottom, 1200.0)) == []
+
+    # Enormous volume, close three-quarters of the way up the bar, still below
+    # trend — but a range of 2.0 against an ATR of ~1.39, so under the 2x bar.
+    # Volume without range is churn, not capitulation, and this is the only
+    # frame in the pair that can tell the range term from the others.
+    assert _fires(module, _final_bar(closes[-1] + 0.5, closes[-1] - 1.5, 9000.0)) == []
+
+    # The identical climax bar at the end of an *advance*. Every term but the
+    # trend location is satisfied, so this is the frame that separates a
+    # capitulation from a breakout, and the rule must decline it.
+    advance = [100.0 + 0.8 * i for i in range(58)]
+    rising_closes = advance + [advance[-1] - 1.0]
+    rising = _ohlcv(
+        rising_closes,
+        opens=rising_closes,
+        highs=[c + 0.5 for c in advance] + [rising_closes[-1] + 1.0],
+        lows=[c - 0.5 for c in advance] + [rising_closes[-1] - 14.0],
+        volumes=quiet_volume + [9000.0],
+    )
+    assert _fires(module, rising) == []
+
+
+def test_vwap_reversion_needs_a_discount_not_merely_weakness():
+    module = _module("volume/vwap_band_reversion.nano")
+
+    base = [100.0 + (0.2 if i % 2 else -0.2) for i in range(26)]
+    # Both selloff bars qualify on discount and RSI, but the discount is still
+    # widening. That is the header's invalidation, so entry must wait.
+    deepening = _ohlcv(base + [98.0, 96.5])
+    assert _fires(module, deepening) == []
+
+    # The next close reclaims half a point. The discount remains above one
+    # percent and RSI remains weak, but it has finally narrowed: exactly one buy.
+    reclaim = _ohlcv(base + [98.0, 96.5, 97.0])
+    assert _fires(module, reclaim) == [("BUY", 28)]
+
+    # Mutation control: without the narrowing conjunct the same deepening frame
+    # buys both falling bars. This proves the no-fire case exercises the repaired
+    # term rather than succeeding through an unrelated guard.
+    source = (LIBRARY / "volume/vwap_band_reversion.nano").read_text()
+    mutant_source = source.replace(" and discount < discount[1]", "")
+    assert mutant_source != source
+    assert _fires(compile_module(mutant_source), deepening) == [
+        ("BUY", 26),
+        ("BUY", 27),
+    ]
+
+    # Two bars up instead of down: the close is above the rolling VWAP, so the
+    # discount term is negative and the rule cannot fire regardless of RSI.
+    assert _fires(module, _ohlcv(base + [100.5, 101.0])) == []
+
+    # A steady advance — no discount at any point.
+    assert _fires(module, _ohlcv([100.0 + 0.6 * i for i in range(26)])) == []
+
+    # A slow drift lower: RSI is pinned at zero, so the RSI gate is wide open,
+    # and the discount settles at roughly 0.77 percent — under the one-percent
+    # threshold. Without this frame the discount term is unfalsifiable, because
+    # every other frame here has the two terms agreeing.
+    assert _fires(module, _ohlcv([100.0 - 0.08 * i for i in range(30)])) == []
+
+    # The converse: an advance broken by one sharp bar that opens a 1.36 percent
+    # discount to rolling VWAP while RSI is still 48. The discount qualifies and
+    # the rule must still abstain, which is the only frame that tests the ceiling.
+    rally = [100.0 + 0.3 * i for i in range(26)]
+    assert _fires(module, _ohlcv(rally + [rally[-1] - 4.2])) == []
+
+
+def test_stochastic_reclaim_fires_when_k_lands_exactly_on_the_threshold():
+    """`k >= oversold` is inclusive, pinned without asserting a float artifact.
+
+    An earlier attempt at this pin was abandoned as unpinnable: a close placed at
+    the 20 percent position of a ragged range produced k = 19.999999999999957,
+    so the frame would have asserted IEEE754 rather than the operator. That was a
+    property of the constants, not of the boundary. With a window whose span is
+    exactly 5.0 — every high 105.0, every low 100.0 — and a close exactly 1.0
+    above the bottom, the kernel computes (101.0 - 100.0) / 5.0 * 100.0, which is
+    exactly 20.0 in binary floating point. The prior bar sits at 100.5, giving
+    k = 10.0, so the reclaim edge is real.
+
+    Mutated to `k > oversold` this frame emits nothing.
+    """
+    module = _module("momentum/stochastic_reclaim.nano")
+    closes = [100.5] * 19 + [101.0]
+    frame = _ohlcv(closes, highs=[105.0] * 20, lows=[100.0] * 20)
+    assert _fires(module, frame) == [("BUY", 19)]
+
+
+def test_volume_climax_fires_when_volume_lands_exactly_on_the_surge_multiple():
+    """`volume >= SMA * surge` is inclusive, pinned exactly.
+
+    The climax bar's own volume sits inside the 20-bar average it is compared
+    against, which does not make the boundary unreachable — it only fixes the
+    divisor. Nineteen quiet bars at V and a climax at 3V satisfy the equality
+    when 17V = 57Q; V = 1700 gives SMA = (19 * 1700 + 5700) / 20 = 1900.0 exactly
+    and 3 * 1900.0 = 5700.0 exactly, with no rounding anywhere.
+
+    Mutated to `volume > SMA * surge` this frame emits nothing.
+    """
+    module = _module("volume/volume_climax_reversal.nano")
+    decline = [150.0 - 0.8 * i for i in range(58)]
+    closes = decline + [decline[-1] - 1.0]
+    frame = _ohlcv(
+        closes,
+        opens=closes,
+        highs=[c + 0.5 for c in decline] + [closes[-1] + 1.0],
+        lows=[c - 0.5 for c in decline] + [closes[-1] - 14.0],
+        volumes=[1700.0] * 58 + [5700.0],
+    )
+    assert _fires(module, frame) == [("BUY", 58)]

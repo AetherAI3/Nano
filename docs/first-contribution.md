@@ -207,6 +207,7 @@ Both follow from the same design, so they are worth stating plainly.
 `DecisionGate` decides. No ambient I/O, no external actuation, no clock or RNG
 dependency, no path around the gate. This is not a roadmap item.
 
-**Proprietary strategy code, transcribed.** Translate the publicly described
-idea into Nano cleanly and record where it came from in a `SOURCE:` line. Do not
-paste someone's implementation.
+**Proprietary strategy code, transcribed.** Translate only an idea you can
+describe cleanly. If you consulted public material, record it truthfully in one
+non-empty `SOURCE:` line; if provenance is unknown, omit the line rather than
+inventing a citation. Do not paste someone's implementation.
