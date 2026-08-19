@@ -108,17 +108,18 @@ Authorship is already recorded by git and by the pull request, so the library
 has no author field to fill in and no hand-maintained contributors list to fall
 out of date.
 
-What an entry *does* record is where its **idea** came from. `SOURCE:` is an
-optional comment-header field for exactly that:
+`SOURCE:` is an optional, contributor-supplied provenance claim:
 
 ```text
-// SOURCE: Donchian channel breakout, as described publicly in trend-following
-// literature. Translated to Nano; not derived from any proprietary code.
+// SOURCE: <public work or account you actually consulted>
 ```
 
-Use it whenever you are translating a publicly described idea. Leave it out when
-the rule is your own work. Do not transcribe proprietary strategy code — bring
-the publicly described idea across cleanly and say where it came from.
+Use exactly one non-empty `SOURCE:` line when you can truthfully identify the
+public material you consulted. Do not invent a citation to make the header look
+complete. Omitting the line means only **provenance not recorded**; it does not
+claim the rule is original work. The contribution checker enforces that precise
+shape, while review is responsible for verifying the claim itself. Do not
+transcribe proprietary strategy code.
 
 ## Propose a language change
 

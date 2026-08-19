@@ -12,8 +12,9 @@
 
 ### **[→ Browse the Strategy Library](https://aethersystems.net/nano)**
 
-Read every strategy in this repo — source, compiled IR, signals and provenance — in
-your browser. No install, no account. Open any one of them straight into an editor.
+Read every strategy in this repo — source, compiled IR, signals and the corpus
+provenance policy — in your browser. No install, no account. Open any one of them
+straight into an editor.
 
 </div>
 
@@ -41,7 +42,7 @@ That is the risk breaker from the [strategy library](nano/library/risk/max_drawd
 - **Host-governed** — Nano *proposes* an intent; your system disposes. Nano cannot place an order.
 - **Small** — few moving parts to audit, and it embeds in a Python stack you already have.
 
-**Beta reference implementation, v1.0.0** — `Development Status :: 4 - Beta`. The examples are trading-oriented, but Nano fits any system where a host supplies numeric signals and must retain control over what happens next — see [deterministic watchdogs and compliance controls](#deterministic-watchdogs-and-compliance-controls).
+**Beta reference implementation for Nano IR/language v1.0.0** — `Development Status :: 4 - Beta`. This is the language and IR version, not the independently versioned installable package; `pyproject.toml` is authoritative for the package release. The examples are trading-oriented, but Nano fits any system where a host supplies numeric signals and must retain control over what happens next — see [deterministic watchdogs and compliance controls](#deterministic-watchdogs-and-compliance-controls).
 
 ## Why Nano
 
@@ -102,7 +103,11 @@ That table holds **two corpora**. A **baseline rule** compares a host-supplied n
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
-Strategy names and indicator names such as Bollinger Bands are used nominatively, to identify the well-known calculation each entry implements. No affiliation with or endorsement by any trademark holder is implied, and no third-party platform source was copied, adapted, or translated — see the [library README](nano/library/README.md#provenance).
+Strategy names and indicator names such as Bollinger Bands are used nominatively,
+to identify the calculation each entry implements. No affiliation with or
+endorsement by any trademark holder is implied. The contribution policy forbids
+copying proprietary platform source and treats absent provenance as unspecified,
+not original — see the [library README](nano/library/README.md#provenance).
 
 [Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Your first contribution →](docs/first-contribution.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml)
 
@@ -244,7 +249,10 @@ This architecture makes Nano suitable for environments where automation is valua
 
 ### Current status
 
-Nano v1.0.0 provides the small scheduled-threshold foundation used by these examples. Broader watchdog and compliance deployments require host integrations, domain-specific signal contracts, durable persistence, authorization gates, and security review.
+Nano IR/language v1.0.0 provides the small scheduled-threshold foundation used
+by these examples. Broader watchdog and compliance deployments require host
+integrations, domain-specific signal contracts, durable persistence,
+authorization gates, and security review.
 
 Nano itself remains intentionally narrow: it evaluates declared rules and proposes intents. The host observes the world, owns the policy boundary, and performs any action with consequences.
 

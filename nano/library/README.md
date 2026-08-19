@@ -81,22 +81,25 @@ convention — because the host has to implement it.
 
 ### Provenance
 
-`SOURCE:` is optional and is how an entry credits an idea it did not invent:
+`SOURCE:` is an optional, contributor-supplied provenance claim:
 
 ```text
-// SOURCE: Donchian channel breakout, as described publicly in trend-following
-// literature. Translated to Nano; not derived from any proprietary code.
+// SOURCE: <public work or account you actually consulted>
 ```
 
-Use it whenever you are translating a publicly described idea. Leave it out when
-the rule is your own. Do not transcribe proprietary strategy code — translate
-the publicly described idea and say where it came from. Authorship itself is
-already recorded by git and by the pull request, so there is no author field to
-fill in.
+Use exactly one non-empty `SOURCE:` line when you can truthfully identify the
+public material you consulted. Do not invent a citation to make the header look
+complete. Omitting the line means only **provenance not recorded**; it does not
+claim the rule is original work. `scripts/check_contribution.py` checks that
+mechanical rule, while review must verify the claim itself. Existing entries
+without a `SOURCE:` line remain explicitly unspecified rather than receiving
+guessed attributions after the fact.
 
-Every idea here comes from published technical-analysis or academic literature that predates this repository by decades — moving-average crossovers and channel breakouts from Donchian's trading guidelines, RSI and ATR from Wilder, the stochastic oscillator from Lane, MACD from Appel, standard-deviation bands from Bollinger, time-series momentum from the academic momentum literature, and gap and climax patterns from classical bar-reading. Concepts are not copyrightable and none of these is proprietary.
-
-What was **not** done: no Pine, MQL, or other platform source was copied, adapted, or translated. Each entry was written from the described concept against Nano's own grammar and indicator registry, which is why the shapes differ from any particular platform's idiom. Indicator *names* such as Bollinger Bands are referenced nominatively to say which well-known calculation is meant; no affiliation or endorsement is implied. If you contribute an entry, contribute the idea, not somebody else's code.
+Authorship is recorded by git and the pull request, so there is no author field.
+The contribution policy forbids copying, adapting, or translating Pine, MQL, or
+other proprietary platform source. Indicator names such as Bollinger Bands are
+used nominatively to identify a calculation; no affiliation or endorsement is
+implied.
 
 ## Signal conventions (baseline entries)
 
@@ -321,7 +324,11 @@ The pair must compile to the checked-in IR, round-trip through the validator, an
 
 ## What this library does not claim
 
-No entry here carries a performance, win-rate, or profitability claim, and none is a live signal. Thresholds are conventions from published technical-analysis literature, not fitted values, and the `CALIBRATED ON` line in each header says which instrument and cadence the numbers were written against and where they stop travelling. Treat every entry as an executable specification of an idea, not as advice.
+No entry here carries a performance, win-rate, or profitability claim, and none
+is a live signal. The `CALIBRATED ON` line in each header says which instrument
+and cadence its numbers were written against and where they stop travelling;
+the optional `SOURCE:` line is the only per-entry provenance claim. Treat every
+entry as an executable specification of an idea, not as advice.
 
 An example of the v1 shape, in full:
 

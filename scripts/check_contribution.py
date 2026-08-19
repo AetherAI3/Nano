@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
+from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -53,9 +55,9 @@ REQUIRED_HEADER_FIELDS = (
     ("CALIBRATED ON:", "where the numbers came from, and what does not travel"),
 )
 
-# Optional, and the convention for provenance. A rule translating a publicly
-# described idea should say where the idea comes from; a rule that is original
-# work can leave it out.
+# Optional provenance supplied by the contributor. If present it is one
+# non-empty header line. Absence means "not recorded", not "original work";
+# the checker can validate that shape but cannot certify a historical claim.
 PROVENANCE_FIELD = "SOURCE:"
 
 # The only effects a library entry may declare. Nano proposes intents and writes
@@ -96,6 +98,125 @@ def ir_path(nano_path: Path) -> Path:
     return nano_path.with_name(f"{nano_path.stem}_ir.json")
 
 
+def _comparison_candidates(conditions: list[Any]) -> tuple[float, ...]:
+    """Boundary, adjacent, midpoint, and exterior values for linear guards."""
+    thresholds = sorted({float(condition.value) for condition in conditions})
+    span = max(1.0, *(abs(value) for value in thresholds))
+    candidates = {
+        value
+        for threshold in thresholds
+        for value in (
+            threshold,
+            math.nextafter(threshold, -math.inf),
+            math.nextafter(threshold, math.inf),
+        )
+    }
+    candidates.update(
+        (left + right) / 2.0
+        for left, right in zip(thresholds, thresholds[1:])
+    )
+    candidates.update((thresholds[0] - span, thresholds[-1] + span))
+    return tuple(sorted(candidates))
+
+
+def baseline_control_frames(graph: StrategyGraph) -> tuple[MarketFrame, MarketFrame]:
+    """Return paired fire/no-fire frames for an AND-only baseline graph.
+
+    Repeated constraints on one signal are solved together. An impossible
+    conjunction is rejected instead of being replayed as a deterministic no-op.
+    """
+    if not graph.conditions:
+        raise ValueError("baseline control requires at least one condition")
+
+    conditions_by_signal: dict[str, list[Any]] = defaultdict(list)
+    for condition in graph.conditions:
+        conditions_by_signal[condition.signal].append(condition)
+
+    passing_values: dict[str, float] = {}
+    for name, conditions in conditions_by_signal.items():
+        value = next(
+            (
+                candidate
+                for candidate in _comparison_candidates(conditions)
+                if all(condition.evaluate(candidate) for condition in conditions)
+            ),
+            None,
+        )
+        if value is None:
+            raise ValueError(f"constraints on signal {name!r} cannot all be true")
+        passing_values[name] = value
+
+    passing = {name: (value,) * 2 for name, value in passing_values.items()}
+    failing = dict(passing)
+    first_name = graph.conditions[0].signal
+    first_conditions = conditions_by_signal[first_name]
+    failing_value = next(
+        candidate
+        for candidate in _comparison_candidates(first_conditions)
+        if not all(condition.evaluate(candidate) for condition in first_conditions)
+    )
+    failing[first_name] = (failing_value,) * 2
+    timestamps = (0, 86400)
+    return (
+        MarketFrame(timestamps=timestamps, signals=passing),
+        MarketFrame(timestamps=timestamps, signals=failing),
+    )
+
+
+def module_control_frame(module: NanoModule) -> MarketFrame:
+    """A non-degenerate frame with two scheduled bars beyond module warm-up."""
+    count = module.warmup + 2
+    close = tuple(
+        100.0
+        + 0.05 * index
+        + 6.0 * math.sin(index / 7.0)
+        + 2.0 * math.sin(index / 3.0)
+        for index in range(count)
+    )
+    open_ = tuple(
+        value + (0.1 if index % 2 else -0.1)
+        for index, value in enumerate(close)
+    )
+    candidates = {
+        "open": open_,
+        "high": tuple(max(o, c) + 0.5 for o, c in zip(open_, close)),
+        "low": tuple(min(o, c) - 0.5 for o, c in zip(open_, close)),
+        "close": close,
+        "volume": tuple(1000.0 + 25.0 * (index % 7) for index in range(count)),
+    }
+    signals = {
+        declaration.name: candidates.get(
+            declaration.name,
+            tuple(value + position for value in close),
+        )
+        for position, declaration in enumerate(module.inputs)
+    }
+    return MarketFrame(
+        timestamps=tuple(86400 * bar for bar in range(count)),
+        signals=signals,
+    )
+
+
+def source_provenance_issues(header: list[str]) -> tuple[str, ...]:
+    """Validate only the mechanically knowable part of optional provenance."""
+    source_lines = [
+        line for line in header if line.startswith(f"// {PROVENANCE_FIELD}")
+    ]
+    if len(source_lines) > 1:
+        return (
+            f"comment header has more than one `// {PROVENANCE_FIELD}` line. "
+            "Record one concise provenance claim, or omit it when the source "
+            "is not known.",
+        )
+    if source_lines and not source_lines[0].partition(PROVENANCE_FIELD)[2].strip():
+        return (
+            f"`// {PROVENANCE_FIELD}` is empty. Name a source you can "
+            "truthfully verify, or remove the field; absence means provenance "
+            "was not recorded.",
+        )
+    return ()
+
+
 def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
     rel = nano_path.relative_to(ROOT).as_posix()
 
@@ -117,6 +238,8 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
                 f"{rel}: comment header is missing `// {field}` — {why}. "
                 "See nano/library/README.md."
             )
+
+    problems.extend(f"{rel}: {issue}" for issue in source_provenance_issues(header))
 
     try:
         document = compile_to_dict(source)
@@ -197,16 +320,36 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
             "and reloaded to the same rule."
         )
 
-    timestamps = tuple(86400 * bar for bar in range(64))
-    frame = MarketFrame(
-        timestamps=timestamps,
-        signals={name: (1.0,) * len(timestamps) for name in required},
-    )
     if graph is not None:
-        first, second = execute(graph, frame), execute(graph, frame)
+        try:
+            firing_frame, silent_frame = baseline_control_frames(graph)
+        except ValueError as error:
+            problems.append(f"{rel}: cannot build baseline replay controls — {error}.")
+            return
+        first, second = execute(graph, firing_frame), execute(graph, firing_frame)
+        silent = execute(graph, silent_frame)
+        if not first.intents:
+            problems.append(
+                f"{rel}: generated positive control emitted no intent. The "
+                "contribution check must exercise behavior, not replay a no-op."
+            )
+        if silent.intents:
+            problems.append(
+                f"{rel}: generated negative control still emitted an intent. "
+                "At least one condition is not independently falsifiable."
+            )
     else:
         module = NanoModule.from_dict(document)
+        frame = module_control_frame(module)
         first, second = run_module(module, frame), run_module(module, frame)
+        evaluated = [entry for entry in first.log if entry.event == "condition.evaluated"]
+        if not evaluated:
+            problems.append(
+                f"{rel}: replay reached no post-warmup condition evaluation "
+                f"(declared warmup {module.warmup}, frame bars "
+                f"{len(frame.timestamps)}). A deterministic no-op is not a "
+                "meaningful replay control."
+            )
     if first.to_dict() != second.to_dict():
         problems.append(
             f"{rel}: two runs over one frame produced different results. "

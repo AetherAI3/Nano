@@ -10,12 +10,13 @@
 // INPUTS: close, volume (series<float>). Volume must be real traded size; the
 // weighting is the entire point, and a constant-volume feed collapses VWAP to
 // a simple moving average without any error being raised.
-// CONDITIONS: at least a one-percent discount to rolling VWAP, and RSI under
-// 40. The RSI half is a brake, not a trigger - it removes the fastest part of a
-// decline rather than adding conviction.
+// CONDITIONS: at least a one-percent discount to rolling VWAP, that discount
+// narrower than it was one bar ago, and RSI under 40. The narrowing term is the
+// trigger; RSI is a brake that removes the fastest part of a decline.
 // INVALIDATION: a close that keeps making new lows while the discount widens.
 // A widening discount is the rule being wrong, not the rule being early.
-// SHAPE: 15m; a drift below the session's volume-weighted centre that stalls.
+// SHAPE: 15m; a drift below the session's volume-weighted centre whose discount
+// has started to reclaim.
 // NOT bollinger_lower_reclaim: that measures distance in units of dispersion
 // and waits for the excursion to end; this measures distance as a plain
 // percentage of a volume-weighted centre and enters into it. NOT
@@ -42,7 +43,7 @@ strategy VwapBandReversion {
 
     every 15m {
 
-        if discount >= discount_pct and RSI(close, rsi_window) < rsi_ceiling {
+        if discount >= discount_pct and discount < discount[1] and RSI(close, rsi_window) < rsi_ceiling {
 
             buy(BTCUSD, 0.6)
 

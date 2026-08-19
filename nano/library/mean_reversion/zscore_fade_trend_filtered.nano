@@ -9,13 +9,15 @@
 // unfiltered z-score fade in a bear leg buys every step down and each one is
 // cheaper than the last.
 // INPUTS: close (series<float>). No other host signal.
-// CONDITIONS: close above the long average, and the z-score at or beyond two
-// standard deviations below the short mean. The filter is the load-bearing
-// half; the z-score alone is the strategy the filter exists to fix.
+// CONDITIONS: close above the long average, the z-score at or beyond two
+// standard deviations below the short mean, and the z-score higher than one bar
+// ago. The final term waits for the flush to start reclaiming instead of buying
+// each deeper reading.
 // INVALIDATION: a close below the two-hundred-bar average, which disarms the
 // rule outright, or a z-score that keeps falling - dispersion-relative cheapness
 // that gets cheaper is a regime change, not an opportunity.
-// SHAPE: 1d; a sharp two-sigma flush inside an intact uptrend.
+// SHAPE: 1d; a sharp two-sigma flush that starts reclaiming inside an intact
+// uptrend.
 // NOT zscore_reversion: that is the same statistic on baseline IR, using a
 // host-negated ZSCORE_NEG signal and no regime filter. The whole difference is
 // the filter, and it is the difference between a mean-reversion rule and a
@@ -39,7 +41,7 @@ strategy ZscoreFadeTrendFiltered {
 
     every 1d {
 
-        if regime_ok and z <= -entry_z {
+        if regime_ok and z <= -entry_z and z > z[1] {
 
             buy(SPY, 0.6)
 

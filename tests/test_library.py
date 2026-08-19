@@ -39,6 +39,11 @@ from nano.ir.graph import StrategyGraph
 from nano.ir.module import NanoModule
 from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
 from nano.runtime.vm import run_module
+from scripts.check_contribution import (
+    baseline_control_frames,
+    module_control_frame,
+    source_provenance_issues,
+)
 
 LIBRARY = Path(__file__).resolve().parent.parent / "nano" / "library"
 
@@ -218,6 +223,65 @@ def test_v1_module_replays_identically(nano_path: Path):
     first = run_module(module, frame).to_dict()
     second = run_module(module, frame).to_dict()
     assert first == second
+
+
+@pytest.mark.parametrize("nano_path", BASELINE_SOURCES, ids=_id)
+def test_contribution_checker_uses_paired_baseline_controls(nano_path: Path):
+    graph = compile_source(nano_path.read_text())
+    firing, silent = baseline_control_frames(graph)
+    assert execute(graph, firing).intents
+    assert execute(graph, silent).intents == ()
+    assert firing != silent
+
+
+def test_contribution_checker_solves_repeated_signal_constraints():
+    graph = StrategyGraph.from_dict(
+        {
+            "type": "Strategy",
+            "nanoIrVersion": "0.1.0",
+            "name": "BoundedControl",
+            "effects": ["intent.emit", "log.append"],
+            "nodes": [
+                {"type": "Schedule", "interval": "1m"},
+                {"type": "Condition", "signal": "SCORE", "operator": ">", "value": 0},
+                {"type": "Condition", "signal": "SCORE", "operator": "<", "value": 1},
+                {"type": "Intent", "action": "OBSERVE"},
+            ],
+        }
+    )
+    firing, silent = baseline_control_frames(graph)
+    assert execute(graph, firing).intents
+    assert execute(graph, silent).intents == ()
+
+
+@pytest.mark.parametrize("nano_path", V1_SOURCES, ids=_id)
+def test_contribution_checker_reaches_past_each_module_warmup(nano_path: Path):
+    module = compile_module(nano_path.read_text())
+    frame = module_control_frame(module)
+    result = run_module(module, frame)
+
+    assert len(frame.timestamps) == module.warmup + 2
+    assert any(entry.event == "condition.evaluated" for entry in result.log)
+    assert any(len(set(series)) > 1 for series in frame.signals.values())
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        (["// REGIME: range"], ()),
+        (["// SOURCE: public paper"], ()),
+        (["// SOURCE:"], ("empty",)),
+        (
+            ["// SOURCE: public paper", "// SOURCE: another account"],
+            ("more than one",),
+        ),
+    ],
+)
+def test_source_provenance_policy_is_precise_and_non_inventive(header, expected):
+    issues = source_provenance_issues(header)
+    assert len(issues) == len(expected)
+    for phrase in expected:
+        assert phrase in issues[0]
 
 
 # --------------------------------------------------------------------------
@@ -1130,7 +1194,26 @@ def test_zscore_fade_is_disarmed_by_the_trend_filter():
 
     advance = [100.0 + 0.4 * i for i in range(210)]
     flush = [advance[-1] - 6.0 * step for step in range(1, 4)]
-    assert _fires(module, _ohlcv(advance + flush)) == [("BUY", 211), ("BUY", 212)]
+    # All three flush bars deepen the z-score. Cheapness that is still getting
+    # cheaper is the rule's stated invalidation, so none may emit an intent.
+    deepening = _ohlcv(advance + flush)
+    assert _fires(module, deepening) == []
+
+    # A one-point reclaim leaves z below -2 while making it less negative than
+    # the prior bar. This is the first honest entry bar, and only this bar fires.
+    reclaim = _ohlcv(advance + flush + [flush[-1] + 1.0])
+    assert _fires(module, reclaim) == [("BUY", 213)]
+
+    # Mutation control: deleting only the anti-deepening conjunct resurrects
+    # the falling-knife behavior. The adversarial frame above must kill exactly
+    # that mutation rather than passing because some unrelated term is false.
+    source = (LIBRARY / "mean_reversion/zscore_fade_trend_filtered.nano").read_text()
+    mutant_source = source.replace(" and z > z[1]", "")
+    assert mutant_source != source
+    assert _fires(compile_module(mutant_source), deepening) == [
+        ("BUY", 211),
+        ("BUY", 212),
+    ]
 
     # The identical flush, grafted onto a downtrend. The z-score reaches the same
     # place; the 200-bar filter is the entire reason the rule abstains, and this
@@ -1299,7 +1382,26 @@ def test_vwap_reversion_needs_a_discount_not_merely_weakness():
     module = _module("volume/vwap_band_reversion.nano")
 
     base = [100.0 + (0.2 if i % 2 else -0.2) for i in range(26)]
-    assert _fires(module, _ohlcv(base + [98.0, 96.5])) == [("BUY", 26), ("BUY", 27)]
+    # Both selloff bars qualify on discount and RSI, but the discount is still
+    # widening. That is the header's invalidation, so entry must wait.
+    deepening = _ohlcv(base + [98.0, 96.5])
+    assert _fires(module, deepening) == []
+
+    # The next close reclaims half a point. The discount remains above one
+    # percent and RSI remains weak, but it has finally narrowed: exactly one buy.
+    reclaim = _ohlcv(base + [98.0, 96.5, 97.0])
+    assert _fires(module, reclaim) == [("BUY", 28)]
+
+    # Mutation control: without the narrowing conjunct the same deepening frame
+    # buys both falling bars. This proves the no-fire case exercises the repaired
+    # term rather than succeeding through an unrelated guard.
+    source = (LIBRARY / "volume/vwap_band_reversion.nano").read_text()
+    mutant_source = source.replace(" and discount < discount[1]", "")
+    assert mutant_source != source
+    assert _fires(compile_module(mutant_source), deepening) == [
+        ("BUY", 26),
+        ("BUY", 27),
+    ]
 
     # Two bars up instead of down: the close is above the rolling VWAP, so the
     # discount term is negative and the rule cannot fire regardless of RSI.

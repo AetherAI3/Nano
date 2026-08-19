@@ -271,6 +271,14 @@ def test_readme_maturity_matches_the_packaging_classifier():
     )
 
 
+def test_readme_distinguishes_language_ir_version_from_package_release():
+    """The IR compatibility label must not masquerade as a package release."""
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Nano IR/language v1.0.0" in readme
+    assert "independently versioned installable package" in readme
+    assert "`pyproject.toml` is authoritative for the package release" in readme
+
+
 def test_the_trademark_notice_travels_with_the_distribution():
     """The nominative-use notice must live somewhere an installed wheel carries.
 
