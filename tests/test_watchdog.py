@@ -369,6 +369,40 @@ def test_replay_rejects_an_oversized_integer_without_leaking_overflow():
         )
 
 
+def test_watchdog_canonicalization_maps_integer_and_depth_limits():
+    with pytest.raises(
+        WatchdogContractError, match=r"/extra: integer magnitude exceeds .* 640"
+    ):
+        canonical_json({"extra": 10**640})
+
+    nested = 0
+    for _ in range(64):
+        nested = [nested]
+    with pytest.raises(WatchdogContractError, match=r"nesting exceeds .* 64 levels"):
+        canonical_json({"extra": nested})
+
+
+@pytest.mark.parametrize("kind", ["integer", "depth"])
+def test_replay_maps_complete_receipt_limit_failures_without_python_leaks(kind):
+    artifact = sample_artifact()
+    original = evaluate_watchdog(artifact, frame(96.0))
+    if kind == "integer":
+        hostile = 10**640
+    else:
+        hostile = 0
+        for _ in range(64):
+            hostile = [hostile]
+
+    input_frame = dict(original.input_frame)
+    input_frame["extra"] = hostile
+    doctored = dataclasses.replace(original, input_frame=input_frame)
+
+    with pytest.raises(
+        WatchdogReplayMismatch, match=r"canonical bytes: .*canonical limit"
+    ):
+        replay_watchdog(artifact, doctored)
+
+
 def test_missing_input_a_frame_with_no_observation_at_all_is_unavailable():
     empty = MarketFrame(timestamps=(), signals={})
     receipt = evaluate_watchdog(sample_artifact(), empty)

@@ -454,7 +454,16 @@ def command_replay(args: Any, console: Console) -> int:
         # bytes through `emit`, not `say`: exactly the canonical bytes plus the
         # one LF that frames them, on every platform. One line, so a stream of
         # runs is valid JSON Lines.
-        console.emit(canonical_bytes(receipt) + b"\n")
+        try:
+            payload = canonical_bytes(receipt)
+        except ReceiptError as exc:
+            # Keep report-only canonicalization inside the same diagnostic
+            # boundary as verification.  A receipt that exceeds a canonical
+            # input limit is rejected consistently, never as a traceback after
+            # the run itself succeeded.
+            console.warn(f"error: replay failed: {exc}")
+            return EXIT_DIAGNOSTICS
+        console.emit(payload + b"\n")
         return EXIT_OK
 
     if args.report == "json":
