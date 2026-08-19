@@ -132,6 +132,16 @@ Watchdog rules emit `pause` and `observe` only. A rule proposing a direction is
 a trading rule and belongs in another category; `tests/test_library.py` enforces
 this.
 
+This category is the corpus for the [Watchdog profile](../../docs/watchdog_profile.md)
+in `nano/watchdog/`, which is the runtime side of the same idea: it admits a rule
+under a narrower contract — an opcode allow-list, `PAUSE`/`OBSERVE` only, one
+cadence, and a declared signal contract — then evaluates it and issues a receipt.
+Every entry here is admissible under that profile, and a test pins it, so the
+corpus and the runtime cannot drift apart. Nothing extra is required of you when
+contributing: writing an entry that follows the two category rules above is
+enough. The signal contract itself belongs to the host deploying the rule, not to
+the library.
+
 | System measurement | Nano signal | Feed convention |
 | --- | --- | --- |
 | trusted route unavailable | `TRUSTED_ROUTE_DOWN` | 0 while the host's connectivity check verifies the route, 1 while it does not; host owns debouncing |

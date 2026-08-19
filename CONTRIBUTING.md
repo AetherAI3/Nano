@@ -91,6 +91,13 @@ a network, read a key store, or enforce anything; the host measures the state,
 supplies the number, and decides what to do with the proposal. See
 [deterministic watchdogs and compliance controls](README.md#deterministic-watchdogs-and-compliance-controls).
 
+The library category is the corpus; [`nano/watchdog/`](docs/watchdog_profile.md)
+is the runtime side of the same idea, admitting a rule under a narrower contract
+and issuing a receipt for each evaluation. Every library entry is admissible
+under that profile and a test pins it — but contributing one asks nothing extra
+of you. Follow the two rules above and the entry qualifies; the signal contract
+belongs to the host deploying the rule.
+
 ## Attribution and provenance
 
 Authorship is already recorded by git and by the pull request, so the library

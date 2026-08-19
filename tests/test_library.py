@@ -446,3 +446,45 @@ def test_watchdog_rules_never_propose_a_direction():
             f"{nano_path.name} proposes {sorted(actions - {'PAUSE', 'OBSERVE'})}; "
             "watchdog rules emit PAUSE and OBSERVE only"
         )
+
+
+def test_every_watchdog_entry_is_admissible_under_the_watchdog_profile():
+    """The corpus and the runtime profile must not drift apart.
+
+    `nano/watchdog/` admits a rule under a narrower contract than the language
+    allows; `nano/library/watchdog/` is the corpus of rules written for it. They
+    were added by separate changes, so nothing tied them together — this does.
+    The signal specs are synthesised from what each rule actually reads, so the
+    assertion is about the rule's admissibility (opcodes, tier, effects, intents,
+    cadence), not about any one host's feed.
+    """
+    from nano.watchdog import WatchdogSignalSpecV1, compile_watchdog
+    from nano.watchdog.profile import referenced_signals
+
+    from nano.compiler import compile_module
+
+    entries = sorted((LIBRARY / "watchdog").glob("*.nano"))
+    assert entries, "the watchdog category is empty"
+
+    for nano_path in entries:
+        source = nano_path.read_text(encoding="utf-8")
+        specs = [
+            WatchdogSignalSpecV1(
+                name=name,
+                unit="unit",
+                source="host",
+                required=True,
+                freshness_limit_ms=300_000,
+                description="host-published control input",
+                value_domain="NONNEGATIVE",
+            )
+            for name in referenced_signals(compile_module(source))
+        ]
+        artifact = compile_watchdog(
+            source,
+            watchdog_id=nano_path.stem,
+            revision=1,
+            signals=specs,
+            risk_class="LOW",
+        )
+        assert artifact.watchdog_id == nano_path.stem

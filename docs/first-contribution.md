@@ -193,6 +193,7 @@ Everything CI runs, you can run locally first.
 | You want to… | Go to… |
 | --- | --- |
 | Add a rule reading system or policy state, not markets | The [`watchdog/` category](../nano/library/README.md#watchdog-signals-watchdog) — same path, different signal table |
+| Understand how a watchdog is admitted, evaluated, and receipted at runtime | [The Watchdog profile](watchdog_profile.md) — the runtime side; you do not need it to contribute an entry |
 | Propose a category that does not exist | Open a [strategy proposal](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml) first; a new category also updates `EXPECTED_CATEGORIES` in `tests/test_library.py` and the README table |
 | Change the grammar, IR, or runtime | A [language proposal](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml) before any implementation |
 | Report something reproducibly broken | A [bug report](https://github.com/AetherAI3/Nano/issues/new?template=bug-report.yml) |
