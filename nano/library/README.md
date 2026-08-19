@@ -11,7 +11,7 @@ Every entry has two files:
 
 ## Learn, compare, contribute
 
-The current library contains 26 strategies across seven familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 27 strategies across seven familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a strategy proposal →](https://github.com/DBarr3/Nano/issues/new?template=strategy-library.yml)
 
@@ -21,7 +21,7 @@ The current library contains 26 strategies across seven familiar categories. Bro
 | --- | --- |
 | `momentum/` | `rsi_oversold_reversal`, `stochastic_oversold`, `williams_r_reversal`, `roc_momentum` |
 | `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme` |
-| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout` |
+| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long` |
 | `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout` |
 | `volume/` | `volume_spike_confirmation`, `obv_trend` |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
@@ -29,7 +29,7 @@ The current library contains 26 strategies across seven familiar categories. Bro
 
 ## Signal conventions
 
-Library entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable baseline IR. Nano v1.0 *can* compute indicators — `RSI(close, 14)` and 32 others — but a library entry that did so would emit v1.0 IR and change its pinned fixture. Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
+Library entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable baseline IR. Nano v1.0 *can* compute indicators — `RSI(close, 14)` and 34 others — but a library entry that did so would emit v1.0 IR and change its pinned fixture. Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
 
 | Pine-style expression | Nano signal | Feed convention |
 | --- | --- | --- |
@@ -45,6 +45,9 @@ Library entries compare **host-provided named signal series** with numeric liter
 | MACD histogram | `MACD_HIST(9)` | MACD line minus signal line |
 | Donchian breakout | `DONCHIAN_POS(20)` | `(close - lower) / (upper - lower)` |
 | `ta.atr(14) / close` | `ATR_PCT(14)` | ATR as a percentage of price |
+| SuperTrend flip up | `SUPERTREND_FLIP_BULL(10)` | 1 on the bar `SUPERTREND_DIR` turned bullish, else 0 |
+| planned stop distance | `STOP_DISTANCE_ATR(10)` | `(entry - protective stop) / ATR(10)` |
+| planned reward:risk | `TARGET_R` | planned target distance / planned stop distance |
 | `ta.mom(close, 10)` | `MOM(10)` | `close - close[10]` |
 | volume spike | `VOL_RATIO(20)` | `volume / sma(volume, 20)` |
 | OBV trend | `OBV_SLOPE(20)` | Linear-regression slope of OBV |
@@ -101,6 +104,8 @@ host MarketFrame -> Nano reference runtime -> Intent(s)
 ```
 
 A corpus strategy can emit `BUY`, `SELL`, `EXECUTE`, `PAUSE`, or `OBSERVE` intents. It cannot place a trade or call an external API. The host owns policy and any real-world action.
+
+An intent carries an action, an asset, and a confidence — and nothing else. There is no field for a stop price, a target price, or a quantity, in baseline IR or in v1.0. A rule whose setup has a bracket, such as `trend/supertrend_flip_long`, therefore expresses it as *preconditions* the host must already have measured (`STOP_DISTANCE_ATR`, `TARGET_R`) rather than as output. Nano can assert that a plan meeting those floors existed on the bar; it cannot hand the plan to anyone. The host that published those series recomputes the bracket and owns it.
 
 ## Adding a strategy
 

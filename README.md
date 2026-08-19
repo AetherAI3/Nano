@@ -84,7 +84,7 @@ strategy Momentum {
 ```
 <!-- README-EXAMPLE:END -->
 
-`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 33 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
+`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 35 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
 
 ## Start with the strategy library
 
@@ -94,7 +94,7 @@ The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems
 
 | Momentum | Mean reversion | Trend | Volatility | Volume | Risk | Event volatility |
 | --- | --- | --- | --- | --- | --- | --- |
-| 4 strategies | 3 strategies | 3 strategies | 2 strategies | 2 strategies | 7 strategies | 11 strategies |
+| 4 strategies | 3 strategies | 4 strategies | 2 strategies | 2 strategies | 7 strategies | 11 strategies |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 

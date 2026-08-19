@@ -168,6 +168,18 @@ _SPECS: Tuple[IndicatorSpec, ...] = (
         _first_period(),
         "Average true range from (high, low, close), Wilder-smoothed.",
     ),
+    IndicatorSpec(
+        "SUPERTREND", (SERIES_FLOAT, SERIES_FLOAT, SERIES_FLOAT, INT, FLOAT),
+        SERIES_FLOAT, _first_period(),
+        "SuperTrend trailing line from (high, low, close): the ATR(`period`) band, "
+        "`mult` wide, that the current trend is riding.",
+    ),
+    IndicatorSpec(
+        "SUPERTREND_DIR", (SERIES_FLOAT, SERIES_FLOAT, SERIES_FLOAT, INT, FLOAT),
+        SERIES_BOOL, _first_period(),
+        "True while the SuperTrend line sits below price, False while above. "
+        "A flip is this value differing from the previous bar's.",
+    ),
     # -- oscillators over (high, low, close) --------------------------------
     IndicatorSpec(
         "STOCH_K", (SERIES_FLOAT, SERIES_FLOAT, SERIES_FLOAT, INT), SERIES_FLOAT,
