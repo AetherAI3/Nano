@@ -285,6 +285,14 @@ def test_hash_seed_driver_is_fetchless_when_origin_main_is_absent(tmp_path):
     )
     assert missing_main.returncode != 0
 
+    # Keep one harness file dirty so inserting the loopstate into git's sorted
+    # status cannot shift/renormalize the leading status column of another path.
+    dirty_script = isolated / "scripts" / "compiler_fuzz.py"
+    dirty_script.write_text(
+        dirty_script.read_text(encoding="utf-8") + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
     output = isolated / "_loopstate" / "g5-compiler-fuzz.json"
     payloads = []
     for _ in range(2):
@@ -313,6 +321,7 @@ def test_hash_seed_driver_is_fetchless_when_origin_main_is_absent(tmp_path):
     assert state["repository"]["mainMergeBaseStatus"] == (
         "unavailable: origin/main is absent from local checkout"
     )
+    assert state["repository"]["status"] == [" M scripts/compiler_fuzz.py"]
     assert state["summary"] == {
         "requestedTargets": 1,
         "targets": 1,

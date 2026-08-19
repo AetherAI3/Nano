@@ -54,6 +54,17 @@ def _git_optional(*args: str, cwd: Path = ROOT) -> str | None:
     return completed.stdout.strip() if completed.returncode == 0 else None
 
 
+def _git_lines(*args: str, cwd: Path = ROOT) -> list[str]:
+    """Return line-oriented git output without stripping status columns."""
+    completed = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.splitlines()
+
+
 def _parse_hash_seeds(raw: str) -> tuple[str, ...]:
     seeds = tuple(part.strip() for part in raw.split(",") if part.strip())
     if not seeds:
@@ -247,7 +258,7 @@ def _repository_state(output: Path | None = None) -> dict[str, Any]:
         )
     else:
         merge_base_status = "resolved"
-    status = _git(
+    status = _git_lines(
         "status",
         "--short",
         "--",
@@ -255,7 +266,7 @@ def _repository_state(output: Path | None = None) -> dict[str, Any]:
         "scripts/compiler_fuzz.py",
         "tests/test_compiler_fuzz.py",
         "_loopstate/g5-compiler-fuzz.json",
-    ).splitlines()
+    )
     if output is not None:
         try:
             output_relative = output.resolve().relative_to(ROOT.resolve()).as_posix()
