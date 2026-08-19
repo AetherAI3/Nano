@@ -109,11 +109,10 @@ class Backtester:
         first = self.run(graph, frames).to_dict()
         second = self.run(graph, frames).to_dict()
         if canonical_bytes(first) != canonical_bytes(second):
-            drift = differences(first, second) or ("(identical structure, different bytes)",)
             raise ReplayDivergence(
                 f"Backtest of {graph.name!r} did not replay bit-identically: "
                 "the decision gate or environment is nondeterministic; diverged at "
-                + ", ".join(drift)
+                + ", ".join(differences(first, second))
             )
         return True
 
