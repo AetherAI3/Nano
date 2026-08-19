@@ -42,6 +42,7 @@ from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
 from ..runtime.interpreter import RuntimeError_
+from ..runtime.receipt import build_receipt, canonical_bytes, canonical_text, differences
 from ..runtime.risk import RiskGate
 from ..runtime.vm import run_module
 from ..types.env import KIND_FEED, KIND_INPUT, KIND_LET, KIND_PARAM
@@ -399,21 +400,34 @@ def command_replay(args: Any, console: Console) -> int:
 
     try:
         result = run_module(module, loaded.frame)
+        receipt = build_receipt(module, loaded.frame, result)
         if args.verify:
             # Same module, same frame, twice. A divergence means something in the
             # chain is not a pure function of its inputs, which invalidates every
             # number the run produced -- so it fails rather than warns. Inside the
             # same guard as the first run: a fault on the verify pass is a fault.
-            again = run_module(module, loaded.frame)
-            if again.to_dict() != result.to_dict():
+            #
+            # Compared as canonical bytes rather than as dictionaries: Python
+            # holds `True == 1` and `0.0 == -0.0`, so a dictionary comparison
+            # passed runs whose serialised form differed.
+            again = build_receipt(module, loaded.frame, run_module(module, loaded.frame))
+            if canonical_bytes(again) != canonical_bytes(receipt):
+                drift = differences(receipt, again) or ("(byte-level only)",)
                 console.warn(
                     "error: replay is not deterministic — two identical runs "
-                    "produced different results"
+                    "produced different results at " + ", ".join(drift)
                 )
                 return EXIT_DIAGNOSTICS
     except (RuntimeError_, IRValidationError) as exc:
         console.warn(f"error: replay failed: {exc}")
         return EXIT_DIAGNOSTICS
+
+    if args.report == "receipt":
+        # The canonical, versioned artifact -- see docs/receipts.md. One line, so
+        # a stream of runs is valid JSON Lines; `console.say` supplies the single
+        # terminating newline that framing (not the digest) owns.
+        console.say(canonical_text(receipt))
+        return EXIT_OK
 
     if args.report == "json":
         console.say(
