@@ -12,6 +12,7 @@ For questions about what Nano does today, start with the reference documents bel
 | [Language reference](language.md) | The locked grammar, IR shape, and execution semantics. **Known gap:** this document still describes only the v0.1.0 subset; the shipped compiler implements the v1.0 superset (declarations, expressions, offsets, `else`, computed indicators). Until it is rewritten, `nano/compiler/parser.py` carries the authoritative v1.0 grammar and `nano/indicators/registry.py` the indicator set. |
 | [Watchdog profile](watchdog_profile.md) | The restricted subset for host-governed controls: signal contracts, missing-input semantics, artifacts, receipts, and replay. |
 | [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
+| [Run receipts](receipts.md) | The versioned run artifact: canonical bytes, executable identity, and what external consumers may depend on. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |
 | [Build notes](../BUILD_ORDER.md) | Historical sequencing and the project's architectural constraints. |
 | [Security policy](../SECURITY.md) | Reporting process and the boundary of Nano's guarantees. |
