@@ -82,11 +82,12 @@ def _digest(parts: list[str]) -> str:
 def _failure(
     property_name: str, case_id: str, reproducer: str, error: object
 ) -> ProbeFailure:
+    observed = error if isinstance(error, str) else f"{type(error).__name__}: {error}"
     return ProbeFailure(
         property=property_name,
         case_id=case_id,
         minimal_reproducer=reproducer,
-        observed=f"{type(error).__name__}: {error}",
+        observed=observed,
     )
 
 
@@ -266,38 +267,105 @@ def audit_receipt_boundaries(*, seed: int, cases: int) -> ReceiptAudit:
                 )
             )
 
-    # docs/receipts.md promises host integers are emitted faithfully even past
-    # JavaScript's exact range.  This value also crosses CPython's default digit
-    # guard, making interpreter-dependent crashes reachable in one tiny case.
+    # Canonical receipt integers share the compiler/IR significant-digit domain:
+    # +/-640 digits are representable, while +/-641 must fail with a path-aware
+    # ReceiptError independently of CPython's ambient integer-string guard.
+    for value in (10**639, -(10**639)):
+        try:
+            encoded = canonical_bytes({"host": {"limit": value}})
+            if json.loads(encoded)["host"]["limit"] != value:
+                raise AssertionError("640-digit integer did not round-trip")
+            observations.append(hashlib.sha256(encoded).hexdigest())
+        except Exception as error:
+            failures.append(
+                _failure(
+                    "receipt-integer-domain",
+                    "integer-640",
+                    "canonical_bytes({'host': {'limit': 10**639}})",
+                    error,
+                )
+            )
+
+    integer_boundary_errors: list[str] = []
+    for value in (10**640, -(10**640)):
+        sign = "positive" if value > 0 else "negative"
+        try:
+            canonical_bytes({"host": {"limit": value}})
+        except ReceiptError as error:
+            message = str(error)
+            if "/host/limit" not in message:
+                integer_boundary_errors.append(
+                    f"{sign} refusal omitted canonical path: {message}"
+                )
+            else:
+                observations.append(f"integer-refused:{sign}:{message}")
+        except Exception as error:
+            integer_boundary_errors.append(
+                f"{sign} refusal leaked {type(error).__name__}: {error}"
+            )
+        else:
+            integer_boundary_errors.append(f"{sign} 641-digit integer was serialized")
+    if integer_boundary_errors:
+        failures.append(
+            _failure(
+                "receipt-integer-domain",
+                "integer-641",
+                "for value in (10**640, -(10**640)): "
+                "canonical_bytes({'host': {'limit': value}})",
+                "; ".join(integer_boundary_errors),
+            )
+        )
+
+    def nested_containers(depth: int) -> Any:
+        value: Any = 0
+        for _ in range(depth):
+            value = [value]
+        return value
+
     try:
-        oversized_bytes = canonical_bytes({"value": 10**5000})
-        observations.append(hashlib.sha256(oversized_bytes).hexdigest())
+        depth_64 = canonical_bytes(nested_containers(64))
+        observations.append(hashlib.sha256(depth_64).hexdigest())
     except Exception as error:
         failures.append(
             _failure(
-                "receipt-oversized-integer",
-                "oversized-integer",
-                "canonical_bytes({'value': 10**5000})",
+                "receipt-container-depth",
+                "containers-64",
+                "x = 0; repeat 64 times: x = [x]; canonical_bytes(x)",
                 error,
             )
         )
 
-    # A canonical tree may be too deep for the implementation.  A stable
-    # ReceiptError refusal is acceptable; leaking RecursionError is not.
-    nested: Any = 0
-    for _ in range(2000):
-        nested = [nested]
     try:
-        observations.append(hashlib.sha256(canonical_bytes(nested)).hexdigest())
+        canonical_bytes(nested_containers(65))
     except ReceiptError as error:
-        observations.append(f"deep-refused:{error}")
+        message = str(error)
+        if not message.startswith("/"):
+            failures.append(
+                _failure(
+                    "receipt-container-depth",
+                    "containers-65",
+                    "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                    f"refusal omitted canonical path: {message}",
+                )
+            )
+        else:
+            observations.append(f"depth-refused:{message}")
     except Exception as error:
         failures.append(
             _failure(
-                "receipt-oversized-depth",
-                "oversized-depth",
-                "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
+                "receipt-container-depth",
+                "containers-65",
+                "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
                 error,
+            )
+        )
+    else:
+        failures.append(
+            _failure(
+                "receipt-container-depth",
+                "containers-65",
+                "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "65-container tree was serialized",
             )
         )
 
@@ -332,7 +400,7 @@ def audit_receipt_boundaries(*, seed: int, cases: int) -> ReceiptAudit:
         canonical_cases=cases,
         replay_cases=replay_cases,
         nonfinite_cases=len(nonfinite),
-        oversized_cases=2,
+        oversized_cases=6,
         semantic_digest=_digest(observations),
         defects=tuple(failures),
     )

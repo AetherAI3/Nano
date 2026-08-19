@@ -317,14 +317,15 @@ def _parent(args: argparse.Namespace) -> int:
                 "Minimized defects receive separate narrow follow-up commits/PRs."
             ),
             "mergeConstraint": (
-                "Merge entry is frozen behind source/IR acceptance parity 1.0.6 "
-                "and receipt canonical limits 1.0.7. Rebase before provisional "
-                "G5 1.0.8; no version, push, PR, or merge before G0 review."
+                "Source/IR acceptance parity 1.0.7 has landed. Merge entry remains "
+                "frozen behind receipt canonical limits 1.0.8; after they land, "
+                "rebase before provisional G5 1.0.9. No version, push, PR, or merge "
+                "before G0 review."
             ),
             "currentBlocker": (
-                "Receipt oversized integer and depth failures are minimized in the "
-                "G5 ledger and expected until the separately owned 640-digit / "
-                "64-container canonical-limit repair lands."
+                "Receipt 641-digit and 65-container fail-open cases are minimized "
+                "in the G5 ledger and expected until the separately owned 640-digit "
+                "/ 64-container canonical-limit repair lands."
             ),
         },
     }

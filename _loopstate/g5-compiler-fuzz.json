@@ -2,20 +2,17 @@
   "schemaVersion": 2,
   "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
   "status": "defects-found",
-  "generatedAt": "2026-08-19T22:21:45.711311+00:00",
+  "generatedAt": "2026-08-19T22:49:56.751369+00:00",
   "repository": {
     "branch": "codex/g5-compiler-fuzz",
-    "head": "b07182d5857f1e91bb94e3414776f78eb1589f35",
+    "head": "f7f8bad93b0b5dbc6365870ea442e8daabd0475a",
     "mainMergeBase": "b07182d5857f1e91bb94e3414776f78eb1589f35",
     "status": [
-      "A  _loopstate/g5-compiler-fuzz.json",
-      "A  nano/fuzzing/__init__.py",
-      "A  nano/fuzzing/campaign.py",
-      "A  nano/fuzzing/generators.py",
-      "A  nano/fuzzing/probes.py",
-      "A  nano/fuzzing/rng.py",
-      "AM scripts/compiler_fuzz.py",
-      "A  tests/test_compiler_fuzz.py"
+      "M _loopstate/g5-compiler-fuzz.json",
+      " M nano/fuzzing/campaign.py",
+      " M nano/fuzzing/probes.py",
+      " M scripts/compiler_fuzz.py",
+      " M tests/test_compiler_fuzz.py"
     ]
   },
   "configuration": {
@@ -52,7 +49,7 @@
     "receipt": {
       "canonicalCases": 128,
       "nonfiniteCases": 3,
-      "oversizedCases": 2,
+      "oversizedCases": 6,
       "replayCases": 128
     },
     "risk": {
@@ -64,7 +61,7 @@
   "targets": [
     {
       "ref": "HEAD",
-      "resolvedSha": "b07182d5857f1e91bb94e3414776f78eb1589f35",
+      "resolvedSha": "f7f8bad93b0b5dbc6365870ea442e8daabd0475a",
       "stableAcrossHashSeeds": true,
       "workers": [
         {
@@ -81,7 +78,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -92,24 +89,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -119,7 +116,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "0",
           "exitCode": 1
@@ -138,7 +135,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -149,24 +146,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -176,7 +173,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "1",
           "exitCode": 1
@@ -195,7 +192,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -206,24 +203,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -233,7 +230,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "7",
           "exitCode": 1
@@ -252,7 +249,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -263,24 +260,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -290,7 +287,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "42",
           "exitCode": 1
@@ -309,7 +306,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -320,24 +317,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -347,7 +344,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "4294967295",
           "exitCode": 1
@@ -355,24 +352,24 @@
       ],
       "defects": [
         {
-          "case_id": "oversized-integer",
-          "id": "G5-fcdf06f12de8",
-          "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-          "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+          "case_id": "integer-641",
+          "id": "G5-44ff0a6aa5d8",
+          "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+          "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
           "owning_subsystem": "runtime.receipt",
-          "property": "receipt-oversized-integer",
+          "property": "receipt-integer-domain",
           "severity": "high",
-          "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+          "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
         },
         {
-          "case_id": "oversized-depth",
-          "id": "G5-e2bf0a49155d",
-          "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-          "observed": "RecursionError: maximum recursion depth exceeded",
+          "case_id": "containers-65",
+          "id": "G5-5559eb0bbeda",
+          "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+          "observed": "65-container tree was serialized",
           "owning_subsystem": "runtime.receipt",
-          "property": "receipt-oversized-depth",
+          "property": "receipt-container-depth",
           "severity": "high",
-          "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+          "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
         }
       ]
     },
@@ -395,7 +392,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -406,24 +403,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -433,7 +430,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "0",
           "exitCode": 1
@@ -452,7 +449,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -463,24 +460,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -490,7 +487,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "1",
           "exitCode": 1
@@ -509,7 +506,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -520,24 +517,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -547,7 +544,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "7",
           "exitCode": 1
@@ -566,7 +563,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -577,24 +574,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -604,7 +601,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "42",
           "exitCode": 1
@@ -623,7 +620,7 @@
               "receipt": {
                 "canonicalCases": 128,
                 "nonfiniteCases": 3,
-                "oversizedCases": 2,
+                "oversizedCases": 6,
                 "replayCases": 128
               },
               "risk": {
@@ -634,24 +631,24 @@
             },
             "defects": [
               {
-                "case_id": "oversized-integer",
-                "id": "G5-fcdf06f12de8",
-                "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-                "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+                "case_id": "integer-641",
+                "id": "G5-44ff0a6aa5d8",
+                "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+                "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-integer",
+                "property": "receipt-integer-domain",
                 "severity": "high",
-                "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+                "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
               },
               {
-                "case_id": "oversized-depth",
-                "id": "G5-e2bf0a49155d",
-                "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-                "observed": "RecursionError: maximum recursion depth exceeded",
+                "case_id": "containers-65",
+                "id": "G5-5559eb0bbeda",
+                "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+                "observed": "65-container tree was serialized",
                 "owning_subsystem": "runtime.receipt",
-                "property": "receipt-oversized-depth",
+                "property": "receipt-container-depth",
                 "severity": "high",
-                "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+                "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
               }
             ],
             "families": {
@@ -661,7 +658,7 @@
             },
             "requestedCases": 128,
             "seed": 20260819,
-            "semanticDigest": "sha256:ed0448de90be9b50f7b806f12b9fc65b346bd2ea29f1c72c3748917693a8c641"
+            "semanticDigest": "sha256:b9126b9d1119b2382fd80cc5582187ff784e1ce21e168bc12ab15ff75e2559bf"
           },
           "pythonHashSeed": "4294967295",
           "exitCode": 1
@@ -669,48 +666,48 @@
       ],
       "defects": [
         {
-          "case_id": "oversized-integer",
-          "id": "G5-fcdf06f12de8",
-          "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-          "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+          "case_id": "integer-641",
+          "id": "G5-44ff0a6aa5d8",
+          "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+          "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
           "owning_subsystem": "runtime.receipt",
-          "property": "receipt-oversized-integer",
+          "property": "receipt-integer-domain",
           "severity": "high",
-          "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+          "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
         },
         {
-          "case_id": "oversized-depth",
-          "id": "G5-e2bf0a49155d",
-          "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-          "observed": "RecursionError: maximum recursion depth exceeded",
+          "case_id": "containers-65",
+          "id": "G5-5559eb0bbeda",
+          "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+          "observed": "65-container tree was serialized",
           "owning_subsystem": "runtime.receipt",
-          "property": "receipt-oversized-depth",
+          "property": "receipt-container-depth",
           "severity": "high",
-          "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+          "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
         }
       ]
     }
   ],
   "defects": [
     {
-      "case_id": "oversized-integer",
-      "id": "G5-fcdf06f12de8",
-      "minimal_reproducer": "canonical_bytes({'value': 10**5000})",
-      "observed": "ValueError: Exceeds the limit (4300 digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit",
+      "case_id": "integer-641",
+      "id": "G5-44ff0a6aa5d8",
+      "minimal_reproducer": "for value in (10**640, -(10**640)): canonical_bytes({'host': {'limit': value}})",
+      "observed": "positive 641-digit integer was serialized; negative 641-digit integer was serialized",
       "owning_subsystem": "runtime.receipt",
-      "property": "receipt-oversized-integer",
+      "property": "receipt-integer-domain",
       "severity": "high",
-      "suggested_minimal_fix": "Encode documented arbitrary-size integers without CPython's ambient digit guard, preserving the canonical receipt contract."
+      "suggested_minimal_fix": "Accept canonical integers through +/-640 significant digits and reject larger values with a path-aware ReceiptError before encoding."
     },
     {
-      "case_id": "oversized-depth",
-      "id": "G5-e2bf0a49155d",
-      "minimal_reproducer": "x = 0; repeat 2000 times: x = [x]; canonical_bytes(x)",
-      "observed": "RecursionError: maximum recursion depth exceeded",
+      "case_id": "containers-65",
+      "id": "G5-5559eb0bbeda",
+      "minimal_reproducer": "x = 0; repeat 65 times: x = [x]; canonical_bytes(x)",
+      "observed": "65-container tree was serialized",
       "owning_subsystem": "runtime.receipt",
-      "property": "receipt-oversized-depth",
+      "property": "receipt-container-depth",
       "severity": "high",
-      "suggested_minimal_fix": "Validate or encode receipt trees iteratively, or convert the depth boundary to a path-aware ReceiptError before recursion escapes."
+      "suggested_minimal_fix": "Accept at most 64 nested containers and reject the 65th with a path-aware ReceiptError before recursion or encoding."
     }
   ],
   "coordination": {
@@ -722,7 +719,7 @@
       "_loopstate/g5-compiler-fuzz.json"
     ],
     "productionFixPolicy": "Minimized defects receive separate narrow follow-up commits/PRs.",
-    "mergeConstraint": "Merge entry is frozen behind source/IR acceptance parity 1.0.6 and receipt canonical limits 1.0.7. Rebase before provisional G5 1.0.8; no version, push, PR, or merge before G0 review.",
-    "currentBlocker": "Receipt oversized integer and depth failures are minimized in the G5 ledger and expected until the separately owned 640-digit / 64-container canonical-limit repair lands."
+    "mergeConstraint": "Source/IR acceptance parity 1.0.7 has landed. Merge entry remains frozen behind receipt canonical limits 1.0.8; after they land, rebase before provisional G5 1.0.9. No version, push, PR, or merge before G0 review.",
+    "currentBlocker": "Receipt 641-digit and 65-container fail-open cases are minimized in the G5 ledger and expected until the separately owned 640-digit / 64-container canonical-limit repair lands."
   }
 }

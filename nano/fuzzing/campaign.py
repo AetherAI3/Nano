@@ -162,17 +162,17 @@ _PROPERTY_METADATA = {
         "Reject the unsupported value with ReceiptError at its canonical path, "
         "without delegating acceptance to json.dumps.",
     ),
-    "receipt-oversized-integer": (
+    "receipt-integer-domain": (
         "high",
         "runtime.receipt",
-        "Encode documented arbitrary-size integers without CPython's ambient digit "
-        "guard, preserving the canonical receipt contract.",
+        "Accept canonical integers through +/-640 significant digits and reject "
+        "larger values with a path-aware ReceiptError before encoding.",
     ),
-    "receipt-oversized-depth": (
+    "receipt-container-depth": (
         "high",
         "runtime.receipt",
-        "Validate or encode receipt trees iteratively, or convert the depth boundary "
-        "to a path-aware ReceiptError before recursion escapes.",
+        "Accept at most 64 nested containers and reject the 65th with a path-aware "
+        "ReceiptError before recursion or encoding.",
     ),
     "receipt-replay-deterministic": (
         "critical",

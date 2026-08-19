@@ -42,14 +42,14 @@ def test_catalog_corpus_exercises_contribution_controls_and_both_ir_versions():
     assert audit.defects == ()
 
 
-def test_receipt_fuzz_covers_replay_nonfinite_and_oversized_boundaries():
+def test_receipt_fuzz_covers_replay_nonfinite_and_canonical_limits():
     first = audit_receipt_boundaries(seed=0x5ECE17, cases=24)
     second = audit_receipt_boundaries(seed=0x5ECE17, cases=24)
 
     assert first.canonical_cases >= 24
     assert first.replay_cases >= 1
     assert first.nonfinite_cases == 3
-    assert first.oversized_cases >= 2
+    assert first.oversized_cases == 6
     assert first.semantic_digest == second.semantic_digest
     assert first.defects == second.defects
 
