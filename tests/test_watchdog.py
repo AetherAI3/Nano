@@ -37,8 +37,10 @@ from nano.watchdog import (
     WatchdogReplayMismatch,
     WatchdogSignalSpecV1,
     WatchdogState,
+    canonical_json,
     compile_watchdog,
     evaluate_watchdog,
+    frame_from_document,
     referenced_signals,
     replay_watchdog,
     validate_watchdog,
@@ -328,6 +330,45 @@ def test_missing_input_a_blank_cell_at_the_current_bar_is_missing_not_calm():
     assert receipt.proposed_intents == ()
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_nonfinite_current_input_fails_closed_as_canonical_absence(value):
+    """NaN comparisons are false, which used to look like a calm ``OK`` run.
+
+    JSON has no non-finite number spelling. The Watchdog boundary normalizes all
+    three values to absence before hashing or execution, producing the same
+    replayable unavailable receipt as a missing observation.
+    """
+    artifact = sample_artifact()
+    receipt = evaluate_watchdog(artifact, frame(41.0, value))
+    document = receipt.to_dict()
+
+    assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
+    assert receipt.missing_inputs == ("QUEUE_SATURATION_PCT",)
+    assert receipt.proposed_intents == ()
+    assert document["input_frame"]["signals"]["QUEUE_SATURATION_PCT"][-1] is None
+    encoded = canonical_json(document)
+    assert "NaN" not in encoded and "Infinity" not in encoded
+    assert replay_watchdog(artifact, receipt).to_dict() == document
+
+
+def test_oversized_integer_input_fails_closed_as_canonical_absence():
+    artifact = sample_artifact()
+    receipt = evaluate_watchdog(artifact, frame(41.0, 10**1000))
+
+    assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
+    assert receipt.missing_inputs == ("QUEUE_SATURATION_PCT",)
+    assert receipt.proposed_intents == ()
+    assert receipt.input_frame["signals"]["QUEUE_SATURATION_PCT"][-1] is None
+    assert replay_watchdog(artifact, receipt).to_dict() == receipt.to_dict()
+
+
+def test_replay_rejects_an_oversized_integer_without_leaking_overflow():
+    with pytest.raises(WatchdogReplayMismatch, match="not a readable frame"):
+        frame_from_document(
+            {"timestamps": [0], "signals": {"QUEUE_SATURATION_PCT": [10**1000]}}
+        )
+
+
 def test_missing_input_a_frame_with_no_observation_at_all_is_unavailable():
     empty = MarketFrame(timestamps=(), signals={})
     receipt = evaluate_watchdog(sample_artifact(), empty)
@@ -471,6 +512,36 @@ def test_replay_detects_a_doctored_proposal():
         replay_watchdog(artifact, doctored)
 
 
+def test_replay_compares_canonical_bytes_not_python_equality():
+    """Python treats ``True`` and ``1`` as equal; their JSON bytes are not."""
+    artifact = sample_artifact()
+    original = evaluate_watchdog(artifact, frame(96.0, start=1))
+    doctored = dataclasses.replace(original, frame_timestamp=True)
+    assert doctored.to_dict() == original.to_dict()
+    with pytest.raises(WatchdogReplayMismatch, match="/frame_timestamp"):
+        replay_watchdog(artifact, doctored)
+
+
+def test_replay_rejects_nested_container_subclasses_without_iterating_them():
+    class SwitchingList(list):
+        calls = 0
+
+        def __iter__(self):
+            self.calls += 1
+            return super().__iter__()
+
+    artifact = sample_artifact()
+    original = evaluate_watchdog(artifact, frame(96.0))
+    hostile = SwitchingList([96.0])
+    input_frame = dict(original.input_frame)
+    input_frame["signals"] = {"QUEUE_SATURATION_PCT": hostile}
+    doctored = dataclasses.replace(original, input_frame=input_frame)
+
+    with pytest.raises(WatchdogReplayMismatch, match="built-in lists"):
+        replay_watchdog(artifact, doctored)
+    assert hostile.calls == 0
+
+
 # --------------------------------------------------------------------------
 # isolation
 # --------------------------------------------------------------------------
@@ -545,6 +616,41 @@ def test_a_runtime_fault_becomes_a_receipt_rather_than_an_exception(monkeypatch)
     assert receipt.input_state == WatchdogState.WATCHDOG_EVALUATION_FAILED
     assert receipt.proposed_intents == ()
     assert "went away" in receipt.execution_log[-1].detail
+
+
+def test_evaluation_uses_one_snapshot_when_the_caller_mutates_its_frame(monkeypatch):
+    """The bytes and the VM must see the same immutable observation."""
+    from nano.runtime.vm import run_module as real_run_module
+    from nano.watchdog import evaluate as evaluate_module
+
+    live = MarketFrame(
+        timestamps=(0,), signals={"QUEUE_SATURATION_PCT": [96.0]}
+    )
+
+    def mutate_then_run(module, snapshot, **kwargs):
+        live.signals["QUEUE_SATURATION_PCT"][0] = 41.0
+        return real_run_module(module, snapshot, **kwargs)
+
+    monkeypatch.setattr(evaluate_module, "run_module", mutate_then_run)
+    receipt = evaluate_watchdog(sample_artifact(), live)
+    assert receipt.input_frame["signals"]["QUEUE_SATURATION_PCT"] == [96.0]
+    assert [intent.action for intent in receipt.proposed_intents] == ["OBSERVE"]
+
+
+def test_watchdog_rejects_container_subclasses_at_the_snapshot_boundary():
+    class SwitchingDict(dict):
+        calls = 0
+
+        def items(self):
+            self.calls += 1
+            return super().items()
+
+    signals = SwitchingDict(QUEUE_SATURATION_PCT=(96.0,))
+    hostile = MarketFrame(timestamps=(0,), signals=signals)
+    signals.calls = 0  # MarketFrame validates on construction; Watchdog starts here.
+    with pytest.raises(WatchdogContractError, match="built-in dict"):
+        evaluate_watchdog(sample_artifact(), hostile)
+    assert signals.calls == 0
 
 
 # --------------------------------------------------------------------------
@@ -988,6 +1094,48 @@ def test_a_blank_count_at_the_evaluated_bar_is_absent_too():
     receipt = evaluate_watchdog(artifact, blank)
     assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
     assert receipt.missing_inputs == ("UNACCOUNTED_MERGE_COUNT",)
+
+
+@pytest.mark.parametrize(
+    ("stem", "signal"),
+    [
+        (BATCH, "UNACCOUNTED_MERGE_COUNT"),
+        (COVERAGE, "MERGE_COVERAGE_AVAILABLE"),
+        (COVERAGE, "MERGE_COVERAGE_EMPTY"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=("nan", "positive-infinity", "negative-infinity"),
+)
+def test_nonfinite_release_note_inputs_hold_publication_and_replay_canonically(
+    stem, signal, value
+):
+    """#29 publication facts fail closed without losing replay evidence.
+
+    These three signals sit directly on the release-note publication boundary.
+    A non-finite host value must therefore become canonical absence, hold the
+    publication gate, and round-trip through the recorded frame byte-for-byte.
+    """
+    artifact = release_artifact(stem)
+    receipt = evaluate_watchdog(
+        artifact,
+        release_frame(**{signal: value}),
+        created_at=1767225600,
+    )
+
+    assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
+    assert receipt.missing_inputs == (signal,)
+    assert receipt.proposed_intents == ()
+    assert receipt.input_frame["signals"][signal][-1] is None
+    assert not publication_cleared([receipt])
+
+    encoded = canonical_json(receipt.to_dict())
+    assert "NaN" not in encoded and "Infinity" not in encoded
+    replayed = replay_watchdog(artifact, receipt)
+    assert canonical_json(replayed.to_dict()) == encoded
+    assert replayed.evaluation_id == receipt.evaluation_id
 
 
 # --------------------------------------------------------------------------

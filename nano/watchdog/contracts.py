@@ -8,10 +8,10 @@ what the host does next.
 
 Two conventions run through all three.
 
-**Every hash is over canonical bytes.** `json.dumps(..., sort_keys=True,
-separators=(",", ":"))` and SHA-256, the same recipe ``NanoModule.content_hash``
-uses, so two documents share a digest exactly when they would be read
-identically. Field names here are snake_case rather than the IR's camelCase:
+**Every hash is over canonical bytes.** Watchdog uses
+``nano.runtime.receipt.canonical_bytes`` and SHA-256, so hashing and replay share
+one strict encoder and two documents share a digest exactly when their bytes are
+identical. Field names here are snake_case rather than the IR's camelCase:
 these are host-facing records, not IR, and borrowing the IR's spelling would
 imply they travel through the same loader.
 
@@ -25,12 +25,14 @@ the one property the receipt exists to provide.
 from __future__ import annotations
 
 import hashlib
-import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Optional, Tuple
 
 from ..ir.module import NanoModule
 from ..runtime.effects import Intent, LogEntry
+from ..runtime.interpreter import MarketFrame
+from ..runtime.receipt import ReceiptError, canonical_bytes
 
 # Bumped when the shape of these documents changes in a way a reader must
 # notice. It is not the Nano version: a Watchdog record can gain a field without
@@ -91,8 +93,18 @@ BOOLEAN_DOMAIN = "0/1"
 
 
 def canonical_json(document: Mapping[str, Any]) -> str:
-    """The one serialization every Watchdog digest is taken over."""
-    return json.dumps(document, sort_keys=True, separators=(",", ":"))
+    """The one serialization every Watchdog digest and replay is taken over.
+
+    Watchdog predates the general run-receipt encoder, so this compatibility
+    wrapper continues to return text.  The bytes now come from the same strict
+    canonical implementation as ``RunReceipt``: ASCII JSON, sorted keys,
+    compact separators, and no non-finite values or container subclasses.
+    Valid v1 documents therefore retain their exact historical bytes.
+    """
+    try:
+        return canonical_bytes(document).decode("ascii")
+    except ReceiptError as error:
+        raise WatchdogContractError(f"Watchdog document is not canonical: {error}") from error
 
 
 def content_address(text: str) -> str:
@@ -100,20 +112,96 @@ def content_address(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class _FrameSnapshot:
+    """One immutable view shared by hashing, evaluation, and the receipt."""
+
+    frame: MarketFrame
+    document: dict
+
+
+def _snapshot_frame(frame: MarketFrame) -> _FrameSnapshot:
+    """Normalize a frame once without executing container subclass hooks.
+
+    ``MarketFrame`` is intentionally a small injected-data object, not a parser.
+    This is the Watchdog trust boundary: exact built-in containers are copied to
+    immutable tuples once, scalar types are checked before coercion, and the
+    resulting snapshot is used for both the content address and the VM call.
+    A caller-owned mapping can no longer show one series to the hash and another
+    to evaluation.
+
+    Non-finite numeric cells have no JSON representation.  They are normalized
+    to the existing absence spelling (``None``/``null``), so a non-finite value
+    at the evaluated bar follows the ordinary ``INPUT_UNAVAILABLE`` path without
+    ever emitting a bare ``NaN`` or ``Infinity`` token.
+    """
+    if type(frame) is not MarketFrame:
+        raise WatchdogContractError("Watchdog frame must be an exact MarketFrame")
+    if type(frame.timestamps) not in (list, tuple):
+        raise WatchdogContractError(
+            "Watchdog frame 'timestamps' must be a built-in list or tuple"
+        )
+    if type(frame.signals) is not dict:
+        raise WatchdogContractError("Watchdog frame 'signals' must be a built-in dict")
+
+    timestamps = []
+    for position, timestamp in enumerate(frame.timestamps):
+        if type(timestamp) is not int:
+            raise WatchdogContractError(
+                f"Watchdog frame '/timestamps/{position}' must be an integer"
+            )
+        timestamps.append(timestamp)
+
+    normalized_signals = {}
+    for name, series in frame.signals.items():
+        if type(name) is not str:
+            raise WatchdogContractError("Watchdog frame signal names must be strings")
+        if type(series) not in (list, tuple):
+            raise WatchdogContractError(
+                f"Watchdog frame signal {name!r} must be a built-in list or tuple"
+            )
+        values = []
+        for position, value in enumerate(series):
+            if value is None:
+                values.append(None)
+                continue
+            if type(value) not in (bool, int, float):
+                raise WatchdogContractError(
+                    f"Watchdog frame '/signals/{name}/{position}' must be numeric or null"
+                )
+            try:
+                number = float(value)
+            except OverflowError:
+                values.append(None)
+                continue
+            if not math.isfinite(number):
+                values.append(None)
+            else:
+                values.append(number)
+        normalized_signals[name] = tuple(values)
+
+    try:
+        normalized = MarketFrame(
+            timestamps=tuple(timestamps), signals=normalized_signals
+        )
+    except ValueError as error:
+        raise WatchdogContractError(f"Watchdog frame is not aligned: {error}") from error
+    document = {
+        "timestamps": list(normalized.timestamps),
+        "signals": {name: list(series) for name, series in normalized.signals.items()},
+    }
+    return _FrameSnapshot(normalized, document)
+
+
 def frame_document(frame) -> dict:
-    """Serialize a ``SignalFrame`` so a receipt carries the exact observation.
+    """Serialize the canonical ``SignalFrame`` observation for a receipt.
 
     Absence stays absence: a cell the host had no value for is ``null``, never
-    zero. That is the rule ``nano/data/frames.py`` applies when reading a file,
-    held here at the other end of the pipe.
+    zero. Non-finite numbers normalize to that same absence spelling. That is the
+    rule ``nano/data/frames.py`` applies when reading a file, held here at the
+    other end of the pipe.
     """
-    return {
-        "timestamps": [int(t) for t in frame.timestamps],
-        "signals": {
-            name: [None if value is None else float(value) for value in series]
-            for name, series in frame.signals.items()
-        },
-    }
+    return _snapshot_frame(frame).document
 
 
 def declared_signal_names(signals: Iterable["WatchdogSignalSpecV1"]) -> Tuple[str, ...]:
@@ -135,13 +223,13 @@ def declared_signal_names(signals: Iterable["WatchdogSignalSpecV1"]) -> Tuple[st
 
 
 def _require_text(value: Any, what: str) -> str:
-    if not isinstance(value, str) or not value.strip():
+    if type(value) is not str or not value.strip():
         raise WatchdogContractError(f"{what} must be a non-empty string")
     return value
 
 
 def _require_positive_int(value: Any, what: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+    if type(value) is not int or value <= 0:
         raise WatchdogContractError(f"{what} must be a positive integer")
     return value
 
@@ -251,6 +339,16 @@ class WatchdogArtifactV1:
     module: NanoModule = field(repr=False)
 
     def __post_init__(self) -> None:
+        if type(self.signals) is not tuple:
+            raise WatchdogContractError("Watchdog 'signals' must be a built-in tuple")
+        if type(self.allowed_intents) is not tuple:
+            raise WatchdogContractError(
+                "Watchdog 'allowed_intents' must be a built-in tuple"
+            )
+        if any(type(spec) is not WatchdogSignalSpecV1 for spec in self.signals):
+            raise WatchdogContractError(
+                "Watchdog 'signals' must contain exact WatchdogSignalSpecV1 values"
+            )
         _require_text(self.watchdog_id, "Watchdog 'watchdog_id'")
         _require_text(self.name, "Watchdog 'name'")
         _require_positive_int(self.revision, "Watchdog 'revision'")
@@ -356,6 +454,8 @@ class WatchdogReceiptV1:
                 f"Receipt 'input_state' must be one of {', '.join(WATCHDOG_STATES)}, "
                 f"got {self.input_state!r}"
             )
+        if type(self.input_frame) is not dict:
+            raise WatchdogContractError("Receipt 'input_frame' must be a built-in dict")
 
     @property
     def is_evaluated(self) -> bool:

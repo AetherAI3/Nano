@@ -22,10 +22,18 @@ different check with a different failure mode. Neither substitutes for the other
 
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping
 
 from ..runtime.interpreter import MarketFrame
-from .contracts import WatchdogArtifactV1, WatchdogError, WatchdogReceiptV1
+from ..runtime.receipt import differences
+from .contracts import (
+    WatchdogArtifactV1,
+    WatchdogContractError,
+    WatchdogError,
+    WatchdogReceiptV1,
+    canonical_json,
+)
 from .evaluate import evaluate_watchdog
 
 
@@ -42,14 +50,31 @@ def frame_from_document(document: Mapping[str, Any]) -> MarketFrame:
     prevent, reintroduced at the verification step.
     """
     try:
+        if type(document) is not dict:
+            raise TypeError("input_frame must be a built-in object")
+        timestamps, signals = document["timestamps"], document["signals"]
+        if type(timestamps) is not list or type(signals) is not dict:
+            raise TypeError("timestamps must be a list and signals must be an object")
+        if any(type(timestamp) is not int for timestamp in timestamps):
+            raise TypeError("timestamps must contain integers")
+        normalized_signals = {}
+        for name, series in signals.items():
+            if type(name) is not str or type(series) is not list:
+                raise TypeError("signals must map string names to built-in lists")
+            values = []
+            for value in series:
+                if value is None:
+                    values.append(None)
+                elif type(value) in (bool, int, float) and math.isfinite(float(value)):
+                    values.append(float(value))
+                else:
+                    raise ValueError("signal values must be finite numbers or null")
+            normalized_signals[name] = tuple(values)
         return MarketFrame(
-            timestamps=tuple(int(t) for t in document["timestamps"]),
-            signals={
-                name: tuple(None if v is None else float(v) for v in series)
-                for name, series in document["signals"].items()
-            },
+            timestamps=tuple(timestamps),
+            signals=normalized_signals,
         )
-    except (AttributeError, KeyError, TypeError, ValueError) as error:
+    except (AttributeError, KeyError, OverflowError, TypeError, ValueError) as error:
         raise WatchdogReplayMismatch(
             f"Receipt 'input_frame' is not a readable frame: {error}"
         ) from error
@@ -70,17 +95,22 @@ def replay_watchdog(
     frame = frame_from_document(receipt.input_frame)
     replayed = evaluate_watchdog(artifact, frame, created_at=receipt.created_at)
 
-    recorded_document = receipt.to_dict()
-    replayed_document = replayed.to_dict()
-    if replayed_document != recorded_document:
+    recorded_document, replayed_document = receipt.to_dict(), replayed.to_dict()
+    try:
+        recorded_bytes = canonical_json(recorded_document)
+        replayed_bytes = canonical_json(replayed_document)
+    except WatchdogContractError as error:
+        raise WatchdogReplayMismatch(
+            f"Receipt cannot be replayed as canonical bytes: {error}"
+        ) from error
+    if replayed_bytes != recorded_bytes:
         raise WatchdogReplayMismatch(_describe(recorded_document, replayed_document))
     return replayed
 
 
 def _describe(recorded: Mapping[str, Any], replayed: Mapping[str, Any]) -> str:
     """Name every field that diverged, so the alert points somewhere."""
-    fields = sorted(set(recorded) | set(replayed))
-    diverged = [name for name in fields if recorded.get(name) != replayed.get(name)]
+    diverged = differences(recorded, replayed)
     return (
         f"Replay of watchdog {recorded.get('watchdog_id')!r} rev "
         f"{recorded.get('watchdog_revision')} diverged from the receipt on: "

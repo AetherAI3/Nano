@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -85,6 +86,8 @@ def parse_timestamp(raw: Any) -> int:
     if isinstance(raw, int):
         return raw
     if isinstance(raw, float):
+        if not math.isfinite(raw):
+            raise FeedError(f"Timestamp {raw!r} is non-finite")
         return int(raw)
     if not isinstance(raw, str) or not raw.strip():
         raise FeedError(f"Timestamp {raw!r} is empty or not a scalar")
@@ -122,14 +125,20 @@ def _parse_cell(raw: Any) -> Optional[float]:
     if isinstance(raw, bool):
         return 1.0 if raw else 0.0
     if isinstance(raw, (int, float)):
-        return float(raw)
+        value = float(raw)
+        if not math.isfinite(value):
+            raise FeedError(f"Cell {raw!r} is non-finite; expected a finite number")
+        return value
     text = str(raw).strip()
     if text.upper() in _ABSENT_CELLS:
         return None
     try:
-        return float(text)
+        value = float(text)
     except ValueError as exc:
         raise FeedError(f"Cell {raw!r} is not numeric") from exc
+    if not math.isfinite(value):
+        raise FeedError(f"Cell {raw!r} is non-finite; expected a finite number")
+    return value
 
 
 def _timestamp_column(fieldnames: Sequence[str]) -> str:

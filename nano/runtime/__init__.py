@@ -14,6 +14,9 @@ also adds actuating intents already accepted at the same timestamp. That local,
 deterministic capacity never carries across frames,
 so enforcement stays as replayable as the rest of the run — see that module for
 which limits are enforced, which two are the host's to apply, and why.
+
+``receipt`` turns either runtime's result into the versioned, byte-stable audit
+artifact a host or an auditor consumes — see ``docs/receipts.md``.
 """
 
 from .effects import Intent, LogEntry
@@ -24,12 +27,24 @@ from .interpreter import (
     SignalFrame,
     execute,
 )
+from .receipt import (
+    RECEIPT_VERSION,
+    ReceiptError,
+    ReplayDivergence,
+    build_receipt,
+    canonical_bytes,
+    differences,
+    frame_digest,
+    receipt_digest,
+    verify_run,
+)
 from .risk import ENFORCED_LIMITS, HOST_ENFORCED_LIMITS, RiskGate
 from .scheduler import interval_seconds, ticks
 from .vm import Escalation, ModuleResult, ReasoningProvider, run_frames, run_module
 
 __all__ = [
     "ENFORCED_LIMITS",
+    "RECEIPT_VERSION",
     "Escalation",
     "ExecutionResult",
     "HOST_ENFORCED_LIMITS",
@@ -41,9 +56,17 @@ __all__ = [
     "RiskGate",
     "RuntimeError_",
     "SignalFrame",
+    "ReceiptError",
+    "ReplayDivergence",
+    "build_receipt",
+    "canonical_bytes",
+    "differences",
     "execute",
+    "frame_digest",
     "interval_seconds",
+    "receipt_digest",
     "run_frames",
     "run_module",
     "ticks",
+    "verify_run",
 ]

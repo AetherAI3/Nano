@@ -15,6 +15,7 @@ import json
 import pytest
 
 import nano
+
 from nano.cli.commands import (
     EXIT_DIAGNOSTICS,
     EXIT_IO,
@@ -233,6 +234,21 @@ def test_non_utf8_market_data_is_a_diagnostic_not_a_traceback(
     code, _, err = _run(["replay", str(strategy), "--data", str(path)], capsys)
     assert code == EXIT_IO
     assert "not valid UTF-8" in err
+    assert "Traceback" not in err
+
+
+@pytest.mark.parametrize("report", ["text", "json", "receipt"])
+def test_replay_rejects_csv_infinity_consistently_in_every_report_mode(
+    strategy, tmp_path, capsys, report
+):
+    path = tmp_path / "infinite.csv"
+    path.write_text("timestamp,close\n0,Infinity\n", encoding="utf-8")
+    code, out, err = _run(
+        ["replay", str(strategy), "--data", str(path), "--report", report], capsys
+    )
+    assert code == EXIT_IO
+    assert out == ""
+    assert "Cell 'Infinity' is non-finite; expected a finite number" in err
     assert "Traceback" not in err
 
 

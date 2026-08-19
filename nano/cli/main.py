@@ -122,9 +122,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     replay.add_argument(
         "--report",
-        choices=("text", "json"),
+        choices=("text", "json", "receipt"),
         default="text",
-        help="text for a human summary (default), json for the full audit log",
+        help=(
+            "text for a human summary (default), json for the full audit log, "
+            "receipt for the versioned canonical artifact (docs/receipts.md)"
+        ),
     )
     replay.add_argument(
         "--verify",
