@@ -1,0 +1,249 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "1.0.0",
+  "tier": "nano",
+  "name": "VwapBandReversion",
+  "effects": [
+    "intent.emit",
+    "log.append"
+  ],
+  "determinism": {
+    "clock": "injected",
+    "entropy": "injected",
+    "fastmath": false
+  },
+  "params": [
+    {
+      "name": "window",
+      "type": "int",
+      "value": 20
+    },
+    {
+      "name": "discount_pct",
+      "type": "float",
+      "value": 1.0
+    },
+    {
+      "name": "rsi_window",
+      "type": "int",
+      "value": 14
+    },
+    {
+      "name": "rsi_ceiling",
+      "type": "float",
+      "value": 40.0
+    }
+  ],
+  "inputs": [
+    {
+      "name": "close",
+      "type": "series<float>"
+    },
+    {
+      "name": "volume",
+      "type": "series<float>"
+    }
+  ],
+  "warmup": 19,
+  "nodes": [
+    {
+      "id": "n1",
+      "op": "input.ref",
+      "inputs": [],
+      "attrs": {
+        "name": "close"
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n2",
+      "op": "input.ref",
+      "inputs": [],
+      "attrs": {
+        "name": "volume"
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n3",
+      "op": "indicator",
+      "inputs": [
+        "n1",
+        "n2"
+      ],
+      "attrs": {
+        "name": "VWAP",
+        "periods": [
+          20
+        ],
+        "lookback": 19,
+        "lifted": false
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n4",
+      "op": "let",
+      "inputs": [
+        "n3"
+      ],
+      "attrs": {
+        "name": "anchor"
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n5",
+      "op": "arith.sub",
+      "inputs": [
+        "n4",
+        "n1"
+      ],
+      "type": "series<float>"
+    },
+    {
+      "id": "n6",
+      "op": "arith.div",
+      "inputs": [
+        "n5",
+        "n4"
+      ],
+      "type": "series<float>"
+    },
+    {
+      "id": "n7",
+      "op": "const",
+      "inputs": [],
+      "attrs": {
+        "value": 100
+      },
+      "type": "int"
+    },
+    {
+      "id": "n8",
+      "op": "arith.mul",
+      "inputs": [
+        "n6",
+        "n7"
+      ],
+      "type": "series<float>"
+    },
+    {
+      "id": "n9",
+      "op": "let",
+      "inputs": [
+        "n8"
+      ],
+      "attrs": {
+        "name": "discount"
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n10",
+      "op": "schedule",
+      "inputs": [],
+      "attrs": {
+        "interval": "15m"
+      }
+    },
+    {
+      "id": "n11",
+      "op": "param.ref",
+      "inputs": [],
+      "attrs": {
+        "name": "discount_pct"
+      },
+      "type": "float"
+    },
+    {
+      "id": "n12",
+      "op": "compare.ge",
+      "inputs": [
+        "n9",
+        "n11"
+      ],
+      "type": "series<bool>"
+    },
+    {
+      "id": "n13",
+      "op": "indicator",
+      "inputs": [
+        "n1"
+      ],
+      "attrs": {
+        "name": "RSI",
+        "periods": [
+          14
+        ],
+        "lookback": 14,
+        "lifted": false
+      },
+      "type": "series<float>"
+    },
+    {
+      "id": "n14",
+      "op": "param.ref",
+      "inputs": [],
+      "attrs": {
+        "name": "rsi_ceiling"
+      },
+      "type": "float"
+    },
+    {
+      "id": "n15",
+      "op": "compare.lt",
+      "inputs": [
+        "n13",
+        "n14"
+      ],
+      "type": "series<bool>"
+    },
+    {
+      "id": "n16",
+      "op": "logic.and",
+      "inputs": [
+        "n12",
+        "n15"
+      ],
+      "type": "series<bool>"
+    },
+    {
+      "id": "n17",
+      "op": "intent.emit",
+      "inputs": [],
+      "attrs": {
+        "action": "BUY",
+        "asset": "BTCUSD",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "n18",
+      "op": "block",
+      "inputs": [
+        "n17"
+      ]
+    },
+    {
+      "id": "n19",
+      "op": "rule",
+      "inputs": [
+        "n10",
+        "n16",
+        "n18"
+      ]
+    }
+  ],
+  "entries": [
+    "n19"
+  ],
+  "provenance": {
+    "compiler": {
+      "name": "nnc",
+      "version": "1.0.0"
+    },
+    "sourceHash": "sha256:f1e1337c2dcad0cd7f523a1aa209e6e7bebf3fe2fa4c1ea9bb4cea96c8a1afa8"
+  },
+  "moduleHash": "sha256:e39a055152224759a2358457cbd3926ce042e240f9b3582c85a5d1f003d0dcc7"
+}

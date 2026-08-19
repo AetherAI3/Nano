@@ -1,0 +1,48 @@
+// EMA pullback continuation. Nano computes both averages from a declared
+// `close` input: EMA(close, 20) over EMA(close, 50) is the trend, and a close
+// that has fallen back to the fast average while still holding the slow one is
+// the pullback. Nothing here is host-derived except the price series itself.
+// REGIME: an established uptrend that breathes. Do NOT fire in a downtrend or
+// in a range - when the fast average sits under the slow one this rule is
+// silent by construction, and in a range the two averages braid together so
+// "pullback" and "breakdown" become the same bar.
+// INPUTS: close (series<float>). No other host signal.
+// CONDITIONS: fast EMA above slow EMA, and the close inside the band between
+// them. Both halves are load-bearing - the trend test alone buys extension,
+// the pullback test alone buys every decline.
+// INVALIDATION: a close below the slow average. The pullback thesis assumes
+// the slow average is support; once it is not, this is a failed trend, and the
+// rule goes silent on its own because the second condition inverts.
+// SHAPE: 1d; a stair-step advance that keeps returning to the 20-day line.
+// NOT golden_cross: that fires once, on the crossing bar, and says the trend
+// began. This fires repeatedly, inside a trend that already exists, and says
+// nothing about when it started. NOT rsi_oversold_reversal: that measures
+// exhaustion in an oscillator; this measures location against two averages and
+// can fire with RSI at 55.
+// CALIBRATED ON: liquid US equity index proxies, daily. 20/50 is a convention,
+// not a discovery - the pair only needs to be far enough apart that the band
+// between them is wide enough to catch a normal pullback. Both periods are
+// `param`s so a host can re-fit them without editing the rule.
+strategy EmaPullbackContinuation {
+
+    param fast: int = 20
+    param slow: int = 50
+
+    input close: series<float>
+
+    let fast_ma = EMA(close, fast)
+    let slow_ma = EMA(close, slow)
+    let uptrend = fast_ma > slow_ma
+    let pullback = close <= fast_ma and close > slow_ma
+
+    every 1d {
+
+        if uptrend and pullback {
+
+            buy(SPY, 0.65)
+
+        }
+
+    }
+
+}
