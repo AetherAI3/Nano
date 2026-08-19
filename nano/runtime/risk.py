@@ -275,6 +275,10 @@ class RiskGate:
         if rule.measurement is None:
             return _finite(intent.confidence)
         series = self._signals.get(rule.measurement)
+        # `MarketFrame` already refuses a series whose length does not match the
+        # timeline, so the bounds half of this is unreachable through the public
+        # constructor. It stays because a gate can be built from any mapping, and
+        # an IndexError inside a risk check is the worst place to learn that.
         if series is None or bar >= len(series):
             return None
         return _finite(series[bar])

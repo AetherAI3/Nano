@@ -169,6 +169,13 @@ rejected as a percentage nowhere: `max_daily_loss 2` is a compile error, not a
 feed signal used by the strategy library, which is expressed in percent. The two
 never meet, because the risk gate reads only `risk.drawdown`.
 
+Two shapes are refused when a document is loaded, not just when source is
+compiled: a counting limit must be a whole number of the type it is written as,
+so `max_open_positions 5` loads and `5.0` does not — a host that normalises its
+config through a float has to round before it serialises — and a module may carry
+at most one `risk.limits` node, because a second one could silently loosen the
+first.
+
 **The allowed band is inclusive; a breach is strictly outside it.** A drawdown of
 exactly `0.05` under `max_drawdown 0.05` is permitted; anything above it is not.
 An intent whose confidence is exactly `0.6` under `min_confidence 0.6` is

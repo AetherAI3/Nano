@@ -142,12 +142,13 @@ def validate_risk_limit(name: str, value: object) -> Optional[str]:
     own error type at its own position: the checker owes a 1-based line and
     column, the loader owes a node id.
 
+    `name` must already be in `RISK_LIMITS`. Both callers reject an unknown name
+    first, with their own wording and their own ordering, so a check here would
+    be a third spelling of an error neither of them would ever see.
+
     `bool` is excluded by hand rather than by importing `nano.types.lookahead`:
     `nano.types` imports this module, so the dependency only runs one way.
     """
-    if name not in RISK_LIMITS:
-        return f"is not a known risk limit (expected one of {', '.join(sorted(RISK_LIMITS))})"
-
     unit, low, high = RISK_LIMITS[name]
 
     if isinstance(value, bool) or not isinstance(value, (int, float)):

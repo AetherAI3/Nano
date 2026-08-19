@@ -24,7 +24,12 @@ from nano.cli.main import main
 from nano.compiler import compile_module
 from nano.compiler.errors import NanoSyntaxError, NanoTypeError
 from nano.ir import IRNode, NanoModule, load_module
-from nano.ir.schema import RISK_LIMITS, IRValidationError, validate_risk_limit
+from nano.ir.schema import (
+    INTEGER_RISK_LIMITS,
+    RISK_LIMITS,
+    IRValidationError,
+    validate_risk_limit,
+)
 from nano.runtime.interpreter import MarketFrame
 from nano.runtime.risk import (
     ACTUATING_ACTIONS,
@@ -972,3 +977,78 @@ def test_an_ungated_replay_says_nothing_about_risk(guarded, tmp_path, capsys):
     code, out, _ = _cli(["replay", str(guarded), "--data", str(path)], capsys)
     assert code == EXIT_OK
     assert "withheld by risk limits" not in out
+
+
+# ---------------------------------------------------------------------------
+# R1 - the integer tightening is a real behavior change, so it is pinned
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "limit", sorted(INTEGER_RISK_LIMITS), ids=sorted(INTEGER_RISK_LIMITS)
+)
+def test_a_counting_limit_written_as_a_float_is_refused_by_the_loader(limit):
+    """`5.0` is legal JSON that round-trips out of any host that uses floats.
+
+    The compiler always refused it; the loader used to accept it, because it
+    compared `float(value) != int(value)` and 5.0 passes that. Sharing one
+    validator tightened the loader to match — which is the point of sharing it,
+    and is also a document shape that used to load and no longer does.
+    """
+    document = _raw_module({"max_drawdown": 0.05}).to_dict(include_hash=False)
+    document["nodes"][0]["attrs"]["limits"] = {limit: 5.0}
+    with pytest.raises(IRValidationError, match="whole number"):
+        load_module(document)
+
+    document["nodes"][0]["attrs"]["limits"] = {limit: 5}
+    assert load_module(document) is not None
+
+
+# ---------------------------------------------------------------------------
+# R3 - both violation paths, and every rule's noun
+# ---------------------------------------------------------------------------
+
+
+def test_the_unmeasured_line_spells_an_integer_limit_the_same_way():
+    """The sibling of the breach assertion above, on the other formatting path.
+
+    Both lines format from the declared value rather than the float the
+    comparison needs, so `10` never appears as `10.0` in one of them.
+    """
+    result = _run(_strategy("        max_orders_per_day 10"), length=1)
+    assert _events(result, "risk.violation")[0].detail == (
+        "max_orders_per_day 10: order count is unmeasured (fail-closed at bar 0)"
+    )
+
+
+@pytest.mark.parametrize(
+    "limit, declared, noun",
+    [
+        ("max_daily_loss", "0.02", "daily loss"),
+        ("max_drawdown", "0.05", "drawdown"),
+        ("max_orders_per_day", "10", "order count"),
+        ("stop_trading_after_losses", "3", "consecutive losses"),
+    ],
+    ids=["daily_loss", "drawdown", "orders", "losses"],
+)
+def test_every_measured_rule_names_its_observation_in_words(limit, declared, noun):
+    """A violation line should read as a sentence, not as a signal name.
+
+    Pinned per rule: without this only two of the five nouns were covered, and
+    swapping one for its measurement name went unnoticed.
+    """
+    result = _run(_strategy(f"        {limit} {declared}"), length=1)
+    assert _events(result, "risk.violation")[0].detail == (
+        f"{limit} {declared}: {noun} is unmeasured (fail-closed at bar 0)"
+    )
+
+
+def test_min_confidence_names_its_observation_in_words_too():
+    """The fifth rule, reached through a breach — source can no longer leave it absent."""
+    result = _run(
+        _strategy("        min_confidence 0.6", action="buy(BTC, 0.1)"), length=1
+    )
+    assert _events(result, "risk.violation")[0].detail == (
+        "min_confidence 0.6: the intent's declared confidence observed 0.1 "
+        "(allowed >= 0.6)"
+    )
