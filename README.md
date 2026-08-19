@@ -96,7 +96,7 @@ The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems
 
 | momentum | mean_reversion | trend | volatility | volume | risk | event_volatility | watchdog |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 4 rules | 3 rules | 4 rules | 2 rules | 2 rules | 7 rules | 11 rules | 2 rules |
+| 4 rules | 3 rules | 4 rules | 2 rules | 2 rules | 7 rules | 11 rules | 8 rules |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
