@@ -44,6 +44,16 @@ RunResult = Union[ModuleResult, ExecutionResult]
 # a shape change cannot land quietly with this number unchanged.
 RECEIPT_VERSION = 1
 
+# Canonical documents are deliberately bounded before Python's JSON encoder sees
+# them.  CPython otherwise makes oversized-integer behavior depend on the
+# process-wide ``sys.set_int_max_str_digits`` setting and lets sufficiently deep
+# trees escape as ``RecursionError``.  These are input-domain limits, not fields
+# in the receipt, so they do not change ``RECEIPT_VERSION`` or the bytes of any
+# retained document.
+MAX_CANONICAL_INTEGER_DIGITS = 640
+MAX_CANONICAL_NESTING = 64
+_MAX_CANONICAL_INTEGER = (10**MAX_CANONICAL_INTEGER_DIGITS) - 1
+
 
 class ReceiptError(ValueError):
     """A value cannot be represented in a receipt's canonical form."""
@@ -72,7 +82,22 @@ def _describe(value: Any) -> str:
     return f"{kind.__module__}.{kind.__name__}"
 
 
-def _check(value: Any, path: str, seen: Set[int]) -> None:
+def _check_text(value: str, path: str, subject: str = "string") -> None:
+    """Require exact text to be valid Unicode without invoking foreign code."""
+    # Pure ASCII is the overwhelming case and needs no work. A lone surrogate
+    # survives `ensure_ascii` as a `\\udXXX` escape and then fails to decode
+    # anywhere else, which breaks the "survives any transport" promise.
+    if not value.isascii():
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise ReceiptError(
+                f"{path or '/'}: {subject} contains an unpaired surrogate and is "
+                "not valid Unicode, so it cannot appear in a receipt"
+            ) from exc
+
+
+def _check(value: Any, path: str, seen: Set[int], depth: int = 0) -> None:
     """Reject anything the canonical form cannot represent, naming where it is.
 
     Everything ``json.dumps`` would accept-but-mangle is refused here instead:
@@ -85,59 +110,140 @@ def _check(value: Any, path: str, seen: Set[int]) -> None:
     carries a path. Only ``dict`` counts as an object: a ``MappingProxyType``
     reaching the encoder raised a bare ``TypeError`` pointing at nothing.
     """
-    if value is None or type(value) in (bool, int):
-        return
-    if type(value) is str:
-        # Pure ASCII is the overwhelming case and needs no work. A lone surrogate
-        # survives `ensure_ascii` as a `\\udXXX` escape and then fails to decode
-        # anywhere else, which breaks the "survives any transport" promise.
-        if not value.isascii():
-            try:
-                value.encode("utf-8")
-            except UnicodeEncodeError as exc:
+    # An explicit stack makes the 64-level contract independent of the host
+    # process's Python recursion limit.  ``exit`` actions keep ``seen`` scoped to
+    # the active path, so a shared (but acyclic) built-in subtree remains valid
+    # while an actual cycle is rejected at the path that closes it.
+    stack = [("value", value, path, depth)]
+    while stack:
+        action, current, current_path, current_depth = stack.pop()
+        if action == "exit":
+            seen.discard(id(current))
+            continue
+        if action == "pair":
+            key, item = current
+            if type(key) is not str:
                 raise ReceiptError(
-                    f"{path or '/'}: string contains an unpaired surrogate and is "
-                    "not valid Unicode, so it cannot appear in a receipt"
-                ) from exc
-        return
-    if type(value) is float:
-        if not math.isfinite(value):
-            raise ReceiptError(
-                f"{path or '/'}: {value!r} is non-finite and has no JSON "
-                "representation, so it cannot appear in a receipt"
+                    f"{current_path or '/'}: object keys must be strings; received "
+                    "a non-string key"
+                )
+            _check_text(key, current_path, "object key")
+            stack.append(
+                ("value", item, f"{current_path}/{key}", current_depth)
             )
-        return
+            continue
 
-    # Exact built-in containers are part of the trust boundary.  Accepting a
-    # subclass here lets validation call one implementation of ``items`` or
-    # ``__iter__`` and ``json.dumps`` call another.  A mutable/hostile subclass
-    # could therefore validate one tree and encode different bytes.  Callers
-    # that own such a container must snapshot it to a built-in before entering
-    # the canonical encoder.
-    if type(value) in (dict, list, tuple):
-        if id(value) in seen:
+        if current is None or type(current) is bool:
+            continue
+        if type(current) is int:
+            if (
+                current < -_MAX_CANONICAL_INTEGER
+                or current > _MAX_CANONICAL_INTEGER
+            ):
+                raise ReceiptError(
+                    f"{current_path or '/'}: integer magnitude exceeds the "
+                    f"canonical limit of {MAX_CANONICAL_INTEGER_DIGITS} decimal digits"
+                )
+            continue
+        if type(current) is str:
+            _check_text(current, current_path)
+            continue
+        if type(current) is float:
+            if not math.isfinite(current):
+                raise ReceiptError(
+                    f"{current_path or '/'}: {current!r} is non-finite and has no "
+                    "JSON representation, so it cannot appear in a receipt"
+                )
+            continue
+
+        # Exact built-in containers are part of the trust boundary. Accepting a
+        # subclass here lets validation and encoding observe different trees.
+        if type(current) not in (dict, list, tuple):
             raise ReceiptError(
-                f"{path or '/'}: contains itself; a receipt must be a finite tree"
+                f"{current_path or '/'}: {_describe(current)} is not canonically "
+                "encodable (allowed: dict, list, tuple, str, int, float, bool, None)"
             )
-        seen.add(id(value))
-        if type(value) is dict:
-            for key, item in value.items():
-                if type(key) is not str:
-                    raise ReceiptError(
-                        f"{path or '/'}: object keys must be strings, got "
-                        f"{_describe(key)} {key!r}"
-                    )
-                _check(item, f"{path}/{key}", seen)
+
+        container_depth = current_depth + 1
+        if container_depth > MAX_CANONICAL_NESTING:
+            raise ReceiptError(
+                f"{current_path or '/'}: container nesting exceeds the canonical "
+                f"limit of {MAX_CANONICAL_NESTING} levels including the root"
+            )
+        if id(current) in seen:
+            raise ReceiptError(
+                f"{current_path or '/'}: contains itself; a receipt must be a finite tree"
+            )
+        seen.add(id(current))
+        stack.append(("exit", current, current_path, container_depth))
+
+        if type(current) is dict:
+            # Push in reverse so each key is checked immediately before its value,
+            # preserving the prior validator's deterministic rejection order.
+            for key, item in reversed(tuple(current.items())):
+                stack.append(
+                    ("pair", (key, item), current_path, container_depth)
+                )
         else:
-            for position, item in enumerate(value):
-                _check(item, f"{path}/{position}", seen)
-        seen.discard(id(value))
-        return
+            for position in range(len(current) - 1, -1, -1):
+                stack.append(
+                    (
+                        "value",
+                        current[position],
+                        f"{current_path}/{position}",
+                        container_depth,
+                    )
+                )
 
-    raise ReceiptError(
-        f"{path or '/'}: {_describe(value)} is not canonically encodable "
-        "(allowed: dict, list, tuple, str, int, float, bool, None)"
-    )
+
+def _encode(document: Any) -> bytes:
+    """Encode a validated tree without consulting Python's recursion limit."""
+    parts: List[str] = []
+    stack = [("value", document)]
+    while stack:
+        action, value = stack.pop()
+        if action == "text":
+            parts.append(value)
+            continue
+
+        if type(value) is dict:
+            items = sorted(value.items(), key=lambda pair: pair[0])
+            parts.append("{")
+            if not items:
+                parts.append("}")
+                continue
+            stack.append(("text", "}"))
+            for position in range(len(items) - 1, -1, -1):
+                key, item = items[position]
+                stack.append(("value", item))
+                stack.append(("text", ":"))
+                stack.append(("text", json.dumps(key, ensure_ascii=True)))
+                if position:
+                    stack.append(("text", ","))
+            continue
+
+        if type(value) in (list, tuple):
+            parts.append("[")
+            if not value:
+                parts.append("]")
+                continue
+            stack.append(("text", "]"))
+            for position in range(len(value) - 1, -1, -1):
+                stack.append(("value", value[position]))
+                if position:
+                    stack.append(("text", ","))
+            continue
+
+        # Validation has already restricted this to exact canonical scalars.
+        parts.append(
+            json.dumps(
+                value,
+                ensure_ascii=True,
+                allow_nan=False,
+                separators=(",", ":"),
+            )
+        )
+    return "".join(parts).encode("ascii")
 
 
 def canonical_bytes(document: Any) -> bytes:
@@ -150,13 +256,7 @@ def canonical_bytes(document: Any) -> bytes:
     cannot fail and cannot depend on a locale.
     """
     _check(document, "", set())
-    return json.dumps(
-        document,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        allow_nan=False,
-    ).encode("ascii")
+    return _encode(document)
 
 
 def digest_of(payload: bytes) -> str:
@@ -368,6 +468,8 @@ def _diff(left: Any, right: Any, path: str, found: List[str]) -> None:
 
 
 __all__ = [
+    "MAX_CANONICAL_INTEGER_DIGITS",
+    "MAX_CANONICAL_NESTING",
     "RECEIPT_VERSION",
     "ReceiptError",
     "ReplayDivergence",

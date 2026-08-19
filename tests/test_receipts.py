@@ -9,6 +9,7 @@ either way, it is written against ``canonical_bytes``.
 """
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -26,6 +27,8 @@ from nano.ir.module import NanoModule
 from nano.ir.schema import NANO_IR_VERSION_1_0
 from nano.runtime.interpreter import MarketFrame, execute
 from nano.runtime.receipt import (
+    MAX_CANONICAL_INTEGER_DIGITS,
+    MAX_CANONICAL_NESTING,
     RECEIPT_VERSION,
     ReceiptError,
     ReplayDivergence,
@@ -202,6 +205,79 @@ def test_booleans_and_integers_are_distinguishable_in_bytes_but_not_in_dicts():
 def test_non_string_object_keys_are_refused():
     with pytest.raises(ReceiptError, match="keys must be strings"):
         canonical_bytes({1: "a"})
+
+
+def test_non_string_key_diagnostics_never_execute_key_repr():
+    class HostileKey:
+        repr_calls = 0
+
+        def __hash__(self):
+            return 1
+
+        def __repr__(self):
+            self.repr_calls += 1
+            raise RuntimeError("repr must not run")
+
+    key = HostileKey()
+    with pytest.raises(ReceiptError, match=r"^/: object keys must be strings"):
+        canonical_bytes({key: "value"})
+    assert key.repr_calls == 0
+
+
+def test_object_keys_receive_the_same_unicode_validation_as_values():
+    with pytest.raises(
+        ReceiptError, match=r"^/: object key contains an unpaired surrogate"
+    ):
+        canonical_bytes({"bad\udcffkey": "value"})
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_integer_limit_accepts_exactly_640_digits_and_refuses_641_by_path(sign):
+    assert MAX_CANONICAL_INTEGER_DIGITS == 640
+    boundary = sign * ((10**MAX_CANONICAL_INTEGER_DIGITS) - 1)
+    encoded = canonical_bytes({"run": {"value": boundary}})
+    assert json.loads(encoded)["run"]["value"] == boundary
+
+    too_large = sign * (10**MAX_CANONICAL_INTEGER_DIGITS)
+    with pytest.raises(
+        ReceiptError,
+        match=(
+            r"^/run/value: integer magnitude exceeds the canonical limit "
+            r"of 640 decimal digits$"
+        ),
+    ):
+        canonical_bytes({"run": {"value": too_large}})
+
+
+def test_extreme_integer_refusal_does_not_mutate_or_depend_on_process_digit_limit():
+    getter = getattr(sys, "get_int_max_str_digits", None)
+    before = getter() if getter is not None else None
+    with pytest.raises(ReceiptError, match=r"^/host/value: integer magnitude"):
+        canonical_bytes({"host": {"value": 10**5000}})
+    after = getter() if getter is not None else None
+    assert after == before
+
+
+def _nested_document(levels):
+    document = 0
+    for _ in range(levels):
+        document = [document]
+    return document
+
+
+def test_nesting_limit_counts_the_root_container_and_has_an_exact_boundary():
+    assert MAX_CANONICAL_NESTING == 64
+    assert canonical_bytes(_nested_document(64)).startswith(b"[")
+    with pytest.raises(
+        ReceiptError, match=r"nesting exceeds .* 64 levels including the root"
+    ):
+        canonical_bytes(_nested_document(65))
+
+
+def test_wide_shallow_documents_have_no_global_byte_limit():
+    document = {f"k{position}": position for position in range(5000)}
+    encoded = canonical_bytes(document)
+    assert json.loads(encoded) == document
 
 
 def test_unencodable_values_are_refused_by_path():
@@ -663,6 +739,29 @@ def test_cli_replay_emits_exactly_the_canonical_receipt(cli_files, capsys):
     assert out.encode("ascii") == canonical_bytes(expected) + b"\n"
 
 
+def test_cli_receipt_limit_failure_is_a_diagnostic_not_a_traceback(
+    cli_files, capsys, monkeypatch
+):
+    from nano.cli import commands
+
+    def reject(_document):
+        raise ReceiptError(
+            "/run/value: integer magnitude exceeds the canonical limit of 640 decimal digits"
+        )
+
+    monkeypatch.setattr(commands, "canonical_bytes", reject)
+    strategy, bars = cli_files
+    code, out, err = _cli(
+        ["replay", str(strategy), "--data", str(bars), "--report", "receipt"],
+        capsys,
+    )
+
+    assert code == 1
+    assert out == ""
+    assert "error: replay failed: /run/value" in err
+    assert "Traceback" not in err
+
+
 def test_cli_receipt_output_is_a_single_json_lines_record(cli_files, capsys):
     strategy, bars = cli_files
     _, out, _ = _cli(
@@ -807,6 +906,56 @@ def test_a_lone_surrogate_is_refused():
 def test_valid_non_ascii_text_still_encodes():
     # The surrogate guard must not become a ban on international text.
     assert canonical_bytes({"n": "stratégie ✓"}) == b'{"n":"strat\\u00e9gie \\u2713"}'
+
+
+_LIMIT_SCRIPT = """
+import hashlib
+import sys
+from nano.runtime.receipt import ReceiptError, canonical_bytes
+
+setter = getattr(sys, "set_int_max_str_digits", None)
+if setter is not None:
+    setter(640)
+sys.setrecursionlimit(66)
+
+boundary = (10 ** 640) - 1
+document = {key: boundary for key in {"z", "a", "é"}}
+print(hashlib.sha256(canonical_bytes(document)).hexdigest())
+try:
+    canonical_bytes({"run": {"value": 10 ** 640}})
+except ReceiptError as error:
+    print(error)
+
+at_limit = 0
+for _ in range(64):
+    at_limit = [at_limit]
+print(hashlib.sha256(canonical_bytes(at_limit)).hexdigest())
+
+too_deep = at_limit
+for _ in range(1936):
+    too_deep = [too_deep]
+try:
+    canonical_bytes(too_deep)
+except ReceiptError as error:
+    print(error)
+"""
+
+
+@pytest.mark.parametrize("seed", ["0", "1", "42", "4294967295"])
+def test_integer_boundaries_and_refusals_are_stable_across_hash_seeds(seed):
+    def run(selected_seed):
+        return subprocess.run(
+            [sys.executable, "-c", _LIMIT_SCRIPT],
+            cwd=str(ROOT),
+            env=dict(
+                os.environ, PYTHONPATH=str(ROOT), PYTHONHASHSEED=selected_seed
+            ),
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+
+    assert run(seed) == run("0")
 
 
 # -- conventions the artifact promises ----------------------------------------

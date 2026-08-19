@@ -41,6 +41,8 @@ another.
 | Non-finite floats | **refused** (`ReceiptError`) | `NaN`/`Infinity` are not JSON; Python's encoder emits them anyway as bare tokens no conforming parser accepts |
 | Absent members | **omitted**, never `null` | One spelling for "no value" |
 | Object keys | must be strings | `json.dumps` silently coerces `{1: "a"}` to `{"1": "a"}`, which can collide with a real `"1"` key |
+| Integer magnitude | at most **640 decimal digits**, excluding the sign | Refusal is independent of CPython's process-wide integer-to-string digit setting |
+| Container nesting | at most **64 built-in containers, including the root** | Deep hostile documents fail as `ReceiptError`, not a recursion-limit-dependent `RecursionError` |
 | Containers | exact built-in `dict`, `list`, or `tuple` | A subclass can expose different contents during validation and encoding; snapshot trusted foreign containers before canonicalization |
 
 This continues the convention `NanoModule.content_hash` has always used
@@ -82,8 +84,14 @@ nano replay s.nano --data bars.csv --report receipt > receipt.json
 JSON has one number type. Timestamps, bar counts, and warm-up counts are emitted
 as JSON integers, and every one Nano produces is far inside ±2^53, so a
 JavaScript `JSON.parse` consumer reads them exactly. A `host` value beyond that
-range will lose precision in such a consumer — Nano will emit it faithfully, but
-JavaScript cannot read it back.
+range will lose precision in such a consumer. Nano emits integers whose absolute
+magnitude has at most 640 decimal digits faithfully; a larger value is refused
+with a path-bearing `ReceiptError`. The sign does not count toward the limit.
+
+The bound is checked by integer comparison, without converting the candidate to
+text and without changing `sys.set_int_max_str_digits`. It therefore behaves the
+same under every supported Python process setting. There is deliberately no
+global byte-size cap: a wide, shallow canonical document remains valid.
 
 ### Floats
 
@@ -259,7 +267,7 @@ They are deliberately not merged. `except ReplayDivergence` will **not** catch a
 
 `Backtester.verify_replay` and `nano replay --verify` used to compare the two
 runs as Python dictionaries. They now compare canonical bytes, which is stricter
-in two ways that can surface as new failures in existing, previously-passing
+in several ways that can surface as new failures in existing, previously-passing
 deployments:
 
 - A gate that returns a **non-`bool`, non-`float` scalar** — `numpy.bool_`,
@@ -270,8 +278,15 @@ deployments:
   (`True` one run, `1` the next) now raises `ReplayDivergence`. It always was
   nondeterministic; the old comparison could not see it, because Python holds
   `True == 1`.
+- An integer over 640 decimal digits, or a document nested beyond 64 built-in
+  containers including its root, now raises a path-bearing `ReceiptError`.
+  Previously these could escape as CPython `ValueError` or `RecursionError`, and
+  their behavior depended on process-global interpreter limits.
+- Object keys receive the same Unicode validation as string values. A key with
+  an unpaired surrogate is refused, and a non-string key is diagnosed without
+  invoking its `repr` method.
 
-Both are intentional. A comparison that cannot distinguish `true` from `1`
+These changes are intentional. A comparison that cannot distinguish `true` from `1`
 cannot underwrite a claim about bytes.
 
 ---
@@ -293,6 +308,11 @@ behavior. A base receipt is fully constructible with that package absent.
 
 `receiptVersion` is an integer, currently **1**. It is bumped on any change to
 the emitted shape, in the same commit that regenerates `tests/golden/`.
+
+The integer and nesting bounds above tighten which malformed inputs are
+accepted; they add no member and change no retained document's bytes. They do
+not change `receiptVersion`, the Watchdog contract version, or either Nano IR
+version.
 
 A **Nano version bump** also moves every golden receipt, because
 `identity.nanoVersion` is part of the artifact. That is not a format change and

@@ -92,16 +92,26 @@ def replay_watchdog(
     way in, so a replay that stamped a fresh value would report a mismatch on
     every run and teach whoever reads the alert to ignore it.
     """
+    # Preserve the frame-specific diagnostics for malformed timestamp/signal
+    # containers, then validate the complete document before evaluation. Extra
+    # receipt members are not consumed by frame reconstruction, but still must
+    # not bypass canonical limits.
     frame = frame_from_document(receipt.input_frame)
-    replayed = evaluate_watchdog(artifact, frame, created_at=receipt.created_at)
-
-    recorded_document, replayed_document = receipt.to_dict(), replayed.to_dict()
+    recorded_document = receipt.to_dict()
     try:
         recorded_bytes = canonical_json(recorded_document)
-        replayed_bytes = canonical_json(replayed_document)
     except WatchdogContractError as error:
         raise WatchdogReplayMismatch(
             f"Receipt cannot be replayed as canonical bytes: {error}"
+        ) from error
+
+    replayed = evaluate_watchdog(artifact, frame, created_at=receipt.created_at)
+    replayed_document = replayed.to_dict()
+    try:
+        replayed_bytes = canonical_json(replayed_document)
+    except WatchdogContractError as error:
+        raise WatchdogReplayMismatch(
+            f"Replayed receipt is not canonical: {error}"
         ) from error
     if replayed_bytes != recorded_bytes:
         raise WatchdogReplayMismatch(_describe(recorded_document, replayed_document))
