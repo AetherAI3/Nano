@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
 
@@ -46,10 +47,12 @@ from .schema import (
     KNOWN_EFFECTS,
     ManifestViolation,
     NANO_IR_VERSION_1_0,
+    PARAM_SCALAR_TYPES,
     RISK_LIMITS,
     TIER_REQUIREMENTS,
     TIERS,
     TierViolation,
+    validate_integer_magnitude,
     validate_risk_limit,
 )
 
@@ -253,6 +256,54 @@ def _require_non_negative_int(value: Any, what: str) -> int:
     return value
 
 
+def _is_duration(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) >= 2
+        and all("0" <= char <= "9" for char in value[:-1])
+        and value[-1] in "smhd"
+    )
+
+
+def _validate_param(name: str, type_name: str, value: Any) -> ParamDecl:
+    if type_name not in PARAM_SCALAR_TYPES:
+        raise IRValidationError(
+            f"Param {name!r} type must be a scalar type "
+            f"({', '.join(PARAM_SCALAR_TYPES)}), got {type_name!r}"
+        )
+
+    is_plain_int = isinstance(value, int) and not isinstance(value, bool)
+    is_number = is_plain_int or isinstance(value, float)
+    if is_plain_int:
+        problem = validate_integer_magnitude(value)
+        if problem is not None:
+            raise IRValidationError(f"Param {name!r} integer value {problem}")
+
+    valid = False
+    if type_name == "bool":
+        valid = isinstance(value, bool)
+    elif type_name == "int":
+        valid = is_plain_int
+    elif type_name == "float":
+        valid = is_number and (is_plain_int or math.isfinite(value))
+    elif type_name == "confidence":
+        valid = (
+            is_number
+            and (is_plain_int or math.isfinite(value))
+            and 0.0 <= value <= 1.0
+        )
+    elif type_name == "string":
+        valid = isinstance(value, str)
+    elif type_name == "duration":
+        valid = _is_duration(value)
+
+    if not valid:
+        raise IRValidationError(
+            f"Param {name!r} value does not match declared scalar type {type_name!r}"
+        )
+    return ParamDecl(name=name, type=type_name, value=value)
+
+
 @dataclass(frozen=True)
 class NanoModule:
     """A validated v1.0.0 Nano IR document."""
@@ -399,10 +450,10 @@ class NanoModule:
                 raise IRValidationError(f"Entry {entry!r} is not a declared node")
 
         params = tuple(
-            ParamDecl(
-                name=_require_text(p, "name", "Param"),
-                type=_require_text(p, "type", "Param"),
-                value=p.get("value"),
+            _validate_param(
+                _require_text(p, "name", "Param"),
+                _require_text(p, "type", "Param"),
+                p.get("value"),
             )
             for p in _require_object_list(data.get("params", []), "'params'")
         )

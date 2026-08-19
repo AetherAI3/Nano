@@ -56,6 +56,7 @@ Comparisons do not chain: `a < b < c` is rejected rather than silently parsed as
 
 from __future__ import annotations
 
+import math
 from typing import List, Optional, Tuple
 
 from .ast import (
@@ -90,8 +91,8 @@ from .ast import (
     StringLit,
     Unary,
 )
-from ..ir.schema import CONDITION_OPERATORS
-from .errors import NanoSyntaxError
+from ..ir.schema import CONDITION_OPERATORS, MAX_CANONICAL_INTEGER_DIGITS
+from .errors import NanoSyntaxError, NanoTypeError
 from .lexer import decode_string, tokenize
 from .tokens import Token
 
@@ -183,6 +184,38 @@ class _Parser:
                 f"Unexpected token {self._describe(token)} in {block} block", token
             )
         self._advance()
+
+    def _parse_integer_token(self, token: Token, what: str) -> int:
+        """Convert one decimal token without inheriting CPython's digit guard.
+
+        The guard counts source characters, while Nano's contract bounds the
+        integer's magnitude.  Strip leading zeroes before both checks so a
+        harmless padded literal stays legal, and never ask ``int`` to consume
+        more than Nano's own 640-digit maximum.
+        """
+        significant = token.value.lstrip("0") or "0"
+        if len(significant) > MAX_CANONICAL_INTEGER_DIGITS:
+            raise NanoTypeError(
+                f"Integer literal for {what} must contain at most "
+                f"{MAX_CANONICAL_INTEGER_DIGITS} decimal digits",
+                token.line,
+                token.column,
+            )
+        return int(significant)
+
+    def _parse_float_token(self, token: Token, what: str) -> float:
+        """Convert one decimal token and keep non-finite values out of the AST."""
+        try:
+            value = float(token.value)
+        except (OverflowError, ValueError):
+            value = math.inf
+        if not math.isfinite(value):
+            raise NanoTypeError(
+                f"Floating-point literal for {what} must be finite",
+                token.line,
+                token.column,
+            )
+        return value
 
     # -- program -----------------------------------------------------------
 
@@ -435,15 +468,26 @@ class _Parser:
         # with its own keyword, so there is nothing to disambiguate against.
         if self._peek().type == "LBRACE":
             self._advance()
-            while True:
-                token = self._peek()
-                if token.type == "RBRACE":
-                    self._advance()
-                    break
-                if token.type == "EOF":
-                    raise self._error("Unterminated 'agent' block (missing '}')", token)
-                self._expect_keyword("role")
-                role = self._expect("IDENT", "agent role").value
+            token = self._peek()
+            if token.type == "RBRACE":
+                raise self._error(
+                    f"Agent {name_token.value!r} body requires exactly one "
+                    "'role' clause (omit the braces for an unclassified agent)",
+                    token,
+                )
+            if token.type == "EOF":
+                raise self._error("Unterminated 'agent' block (missing '}')", token)
+
+            self._expect_keyword("role")
+            role = self._expect("IDENT", "agent role").value
+
+            token = self._peek()
+            if self._at_keyword("role"):
+                raise self._error(
+                    f"Agent {name_token.value!r} declares 'role' more than once",
+                    token,
+                )
+            self._expect_closing_brace("'agent'")
         return AgentAst(
             name=name_token.value,
             role=role,
@@ -780,7 +824,11 @@ class _Parser:
             return NumberLit(
                 line=token.line,
                 column=token.column,
-                value=int(token.value) if token.type == "INT" else float(token.value),
+                value=(
+                    self._parse_integer_token(token, "expression")
+                    if token.type == "INT"
+                    else self._parse_float_token(token, "expression")
+                ),
             )
         if token.type == "STRING":
             self._advance()
@@ -843,10 +891,10 @@ class _Parser:
         token = self._peek()
         if token.type == "INT":
             self._advance()
-            value: Number = int(token.value)
+            value: Number = self._parse_integer_token(token, what)
         elif token.type == "FLOAT":
             self._advance()
-            value = float(token.value)
+            value = self._parse_float_token(token, what)
         else:
             raise self._error(
                 f"Expected numeric {what}, got {self._describe(token)}", token

@@ -116,6 +116,18 @@ INTEGER_RISK_LIMITS = frozenset(
 # target, and `research` is consulted about novel situations.
 AGENT_ROLES = ("research", "validation", "execution", "observer")
 
+# Canonical integers are deliberately bounded without consulting or mutating
+# CPython's process-wide ``int_max_str_digits`` setting.  Receipt and module
+# hashes must not depend on how the embedding host configured its interpreter.
+# A numeric comparison also avoids converting a hostile oversized integer to
+# text merely to reject it.
+MAX_CANONICAL_INTEGER_DIGITS = 640
+_MAX_CANONICAL_INTEGER_MAGNITUDE = 10**MAX_CANONICAL_INTEGER_DIGITS
+
+# Param declarations are compile-time JSON scalars.  Series and record values
+# belong to runtime inputs/nodes and cannot be smuggled into the param table.
+PARAM_SCALAR_TYPES = ("bool", "confidence", "duration", "float", "int", "string")
+
 
 class IRValidationError(ValueError):
     """The document is not valid Nano IR."""
@@ -127,6 +139,18 @@ class ManifestViolation(IRValidationError):
 
 class TierViolation(IRValidationError):
     """A module uses a construct its declared tier does not permit."""
+
+
+def validate_integer_magnitude(value: int) -> Optional[str]:
+    """Return a stable problem phrase when an integer exceeds the IR bound.
+
+    Callers establish that ``value`` is a plain integer first.  Keeping this
+    helper numeric means its result is independent of the host's ambient
+    integer-to-string conversion limit.
+    """
+    if abs(value) >= _MAX_CANONICAL_INTEGER_MAGNITUDE:
+        return f"must contain at most {MAX_CANONICAL_INTEGER_DIGITS} decimal digits"
+    return None
 
 
 def validate_risk_limit(name: str, value: object) -> Optional[str]:
