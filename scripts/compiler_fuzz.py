@@ -20,7 +20,6 @@ import sys
 import tarfile
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Sequence
 
@@ -42,6 +41,17 @@ def _git(*args: str, cwd: Path = ROOT, check: bool = True) -> str:
         text=True,
     )
     return completed.stdout.strip()
+
+
+def _git_optional(*args: str, cwd: Path = ROOT) -> str | None:
+    """Return locally available git metadata without fetching missing refs."""
+    completed = subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return completed.stdout.strip() if completed.returncode == 0 else None
 
 
 def _parse_hash_seeds(raw: str) -> tuple[str, ...]:
@@ -223,10 +233,25 @@ def _target_result(
 
 
 def _repository_state() -> dict[str, Any]:
+    main_tip = _git_optional("rev-parse", "--verify", "origin/main^{commit}")
+    main_merge_base = (
+        _git_optional("merge-base", "HEAD", "origin/main")
+        if main_tip is not None
+        else None
+    )
+    if main_tip is None:
+        merge_base_status = "unavailable: origin/main is absent from local checkout"
+    elif main_merge_base is None:
+        merge_base_status = (
+            "unavailable: HEAD and origin/main have no locally available merge base"
+        )
+    else:
+        merge_base_status = "resolved"
     return {
-        "branch": _git("branch", "--show-current"),
+        "branch": _git("branch", "--show-current") or None,
         "head": _git("rev-parse", "HEAD"),
-        "mainMergeBase": _git("merge-base", "HEAD", "origin/main"),
+        "mainMergeBase": main_merge_base,
+        "mainMergeBaseStatus": merge_base_status,
         "status": _git(
             "status",
             "--short",
@@ -236,6 +261,99 @@ def _repository_state() -> dict[str, Any]:
             "tests/test_compiler_fuzz.py",
             "_loopstate/g5-compiler-fuzz.json",
         ).splitlines(),
+    }
+
+
+def _configuration(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "generatorSeed": args.seed,
+        "validCases": args.cases,
+        "oneMutationInvalidCases": args.cases,
+        "semanticEquivalentCases": max(4, args.cases // 3),
+        "pythonHashSeeds": list(args.hash_seeds),
+        "refs": list(args.refs),
+    }
+
+
+def _coordination_state() -> dict[str, Any]:
+    return {
+        "lane": "G5",
+        "ownedPaths": [
+            "nano/fuzzing/**",
+            "scripts/compiler_fuzz.py",
+            "tests/test_compiler_fuzz.py",
+            "_loopstate/g5-compiler-fuzz.json",
+        ],
+        "productionFixPolicy": (
+            "Minimized defects receive separate narrow follow-up commits/PRs."
+        ),
+        "mergeConstraint": (
+            "Source/IR acceptance parity 1.0.7 and receipt canonical limits "
+            "1.0.8 have landed. G5 is active on their exact main; provisional "
+            "1.0.9 remains coordinator-owned. No version, push, PR, or merge "
+            "before G0 review."
+        ),
+        "currentBlocker": (
+            "None in the G5 surface. The former receipt integer-641 and "
+            "containers-65 ledger entries are required to remain closed."
+        ),
+    }
+
+
+def _write_loopstate(output: Path, loopstate: dict[str, Any]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(loopstate, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+
+
+def _emergency_loopstate(args: argparse.Namespace, error: Exception) -> dict[str, Any]:
+    """Create a deterministic artifact for an unexpected parent failure."""
+    try:
+        repository = _repository_state()
+    except Exception as repository_error:
+        repository = {
+            "branch": None,
+            "head": None,
+            "mainMergeBase": None,
+            "mainMergeBaseStatus": (
+                "unavailable: repository metadata failed with "
+                f"{type(repository_error).__name__}"
+            ),
+            "status": [],
+        }
+    defect = {
+        "id": "G5-parent-orchestration",
+        "property": "parent-campaign-completes",
+        "severity": "medium",
+        "owning_subsystem": "fuzz.harness",
+        "case_id": "parent",
+        "minimal_reproducer": (
+            f"{sys.executable} scripts/compiler_fuzz.py --seed {args.seed} "
+            f"--cases {args.cases} --refs " + " ".join(args.refs)
+        ),
+        "observed": f"{type(error).__name__}: {error}",
+        "suggested_minimal_fix": (
+            "Repair the smallest parent orchestration boundary while preserving "
+            "deterministic loopstate emission."
+        ),
+    }
+    return {
+        "schemaVersion": 2,
+        "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
+        "status": "defects-found",
+        "repository": repository,
+        "configuration": _configuration(args),
+        "summary": {
+            "requestedTargets": len(args.refs),
+            "targets": 0,
+            "workers": 0,
+            "defects": 1,
+        },
+        "coverage": {},
+        "targets": [],
+        "defects": [defect],
+        "coordination": _coordination_state(),
     }
 
 
@@ -282,16 +400,8 @@ def _parent(args: argparse.Namespace) -> int:
         "schemaVersion": 2,
         "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
         "status": "defects-found" if defects else "pass",
-        "generatedAt": datetime.now(timezone.utc).isoformat(),
         "repository": _repository_state(),
-        "configuration": {
-            "generatorSeed": args.seed,
-            "validCases": args.cases,
-            "oneMutationInvalidCases": args.cases,
-            "semanticEquivalentCases": max(4, args.cases // 3),
-            "pythonHashSeeds": list(args.hash_seeds),
-            "refs": list(args.refs),
-        },
+        "configuration": _configuration(args),
         "summary": {
             "requestedTargets": len(args.refs),
             "targets": len(targets),
@@ -305,35 +415,11 @@ def _parent(args: argparse.Namespace) -> int:
         ),
         "targets": targets,
         "defects": defects,
-        "coordination": {
-            "lane": "G5",
-            "ownedPaths": [
-                "nano/fuzzing/**",
-                "scripts/compiler_fuzz.py",
-                "tests/test_compiler_fuzz.py",
-                "_loopstate/g5-compiler-fuzz.json",
-            ],
-            "productionFixPolicy": (
-                "Minimized defects receive separate narrow follow-up commits/PRs."
-            ),
-            "mergeConstraint": (
-                "Source/IR acceptance parity 1.0.7 and receipt canonical limits "
-                "1.0.8 have landed. G5 is active on their exact main; provisional "
-                "1.0.9 remains coordinator-owned. No version, push, PR, or merge "
-                "before G0 review."
-            ),
-            "currentBlocker": (
-                "None in the G5 surface. The former receipt integer-641 and "
-                "containers-65 ledger entries are required to remain closed."
-            ),
-        },
+        "coordination": _coordination_state(),
     }
 
     output: Path = args.output
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(
-        json.dumps(loopstate, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
+    _write_loopstate(output, loopstate)
 
     print(
         f"G5 {loopstate['status']}: {len(targets)} target(s), "
@@ -376,7 +462,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise SystemExit("--cases must be at least 1")
     if args.worker:
         return _worker(args.seed, args.cases)
-    return _parent(args)
+    try:
+        return _parent(args)
+    except Exception as error:
+        try:
+            _write_loopstate(args.output, _emergency_loopstate(args, error))
+        except Exception as write_error:
+            print(
+                "G5 parent failed and could not write loopstate: "
+                f"{type(error).__name__}: {error}; artifact error: "
+                f"{type(write_error).__name__}: {write_error}",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            "G5 parent failed; deterministic defect loopstate written: "
+            f"{type(error).__name__}: {error}",
+            file=sys.stderr,
+        )
+        return 1
 
 
 if __name__ == "__main__":

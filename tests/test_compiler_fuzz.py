@@ -5,7 +5,9 @@ The deterministic campaign is intentionally small in the ordinary pytest run.
 ``PYTHONHASHSEED`` values while preserving every failing source as a reproducer.
 """
 
+import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from dataclasses import replace
@@ -210,26 +212,35 @@ def test_campaign_is_reproducible_and_preserves_every_discovered_defect():
 
 def test_hash_seed_driver_always_writes_a_deterministic_loopstate(tmp_path):
     root = Path(__file__).resolve().parent.parent
-    output = tmp_path / "loopstate.json"
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(root / "scripts" / "compiler_fuzz.py"),
-            "--cases",
-            "8",
-            "--hash-seeds",
-            "0,7",
-            "--refs",
-            "HEAD",
-            "--output",
-            str(output),
-        ],
-        cwd=root,
-        capture_output=True,
-        text=True,
-    )
-    assert completed.returncode in (0, 1), completed.stdout + completed.stderr
-    state = json.loads(output.read_text(encoding="utf-8"))
+
+    def run(output: Path) -> tuple[subprocess.CompletedProcess[str], bytes]:
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(root / "scripts" / "compiler_fuzz.py"),
+                "--cases",
+                "8",
+                "--hash-seeds",
+                "0,7",
+                "--refs",
+                "HEAD",
+                "--output",
+                str(output),
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        )
+        diagnostics = f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+        assert completed.returncode in (0, 1), diagnostics
+        assert output.is_file(), diagnostics
+        return completed, output.read_bytes()
+
+    _, first = run(tmp_path / "first.json")
+    _, second = run(tmp_path / "second.json")
+    assert first == second
+    state = json.loads(first)
+    assert "generatedAt" not in state
     assert state["status"] in ("pass", "defects-found")
     assert state["summary"] == {
         "requestedTargets": 1,
@@ -242,3 +253,101 @@ def test_hash_seed_driver_always_writes_a_deterministic_loopstate(tmp_path):
         worker["campaign"]["coverage"] for worker in state["targets"][0]["workers"]
     ]
     assert worker_coverages[1:] == worker_coverages[:-1]
+
+
+def test_hash_seed_driver_is_fetchless_when_origin_main_is_absent(tmp_path):
+    root = Path(__file__).resolve().parent.parent
+    isolated = tmp_path / "fresh" / "Nano"
+    shutil.copytree(
+        root,
+        isolated,
+        ignore=shutil.ignore_patterns(
+            ".git", ".pytest_cache", "__pycache__", "*.pyc", "build", "dist"
+        ),
+    )
+    for command in (
+        ("init",),
+        ("config", "user.name", "G5 Test"),
+        ("config", "user.email", "g5@example.invalid"),
+        ("add", "."),
+        ("commit", "-m", "fresh detached fixture"),
+    ):
+        subprocess.run(
+            ["git", "-C", str(isolated), *command],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    missing_main = subprocess.run(
+        ["git", "-C", str(isolated), "rev-parse", "--verify", "origin/main"],
+        capture_output=True,
+        text=True,
+    )
+    assert missing_main.returncode != 0
+
+    output = tmp_path / "fresh-loopstate.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(isolated / "scripts" / "compiler_fuzz.py"),
+            "--cases",
+            "4",
+            "--hash-seeds",
+            "0,7",
+            "--refs",
+            "HEAD",
+            "--output",
+            str(output),
+        ],
+        cwd=isolated,
+        capture_output=True,
+        text=True,
+    )
+    diagnostics = f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+    assert completed.returncode in (0, 1), diagnostics
+    assert output.is_file(), diagnostics
+    state = json.loads(output.read_text(encoding="utf-8"))
+    assert state["repository"]["mainMergeBase"] is None
+    assert state["repository"]["mainMergeBaseStatus"] == (
+        "unavailable: origin/main is absent from local checkout"
+    )
+    assert state["summary"] == {
+        "requestedTargets": 1,
+        "targets": 1,
+        "workers": 2,
+        "defects": 0,
+    }
+
+
+def test_hash_seed_driver_writes_deterministic_artifact_on_parent_failure(
+    tmp_path, monkeypatch
+):
+    root = Path(__file__).resolve().parent.parent
+    script = root / "scripts" / "compiler_fuzz.py"
+    spec = importlib.util.spec_from_file_location("nano_g5_driver_test", script)
+    assert spec is not None and spec.loader is not None
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+
+    def fail_parent(_args):
+        raise RuntimeError("injected parent orchestration failure")
+
+    monkeypatch.setattr(driver, "_parent", fail_parent)
+    payloads = []
+    for name in ("failure-first.json", "failure-second.json"):
+        output = tmp_path / name
+        assert (
+            driver.main(["--cases", "4", "--refs", "HEAD", "--output", str(output)])
+            == 1
+        )
+        assert output.is_file()
+        payloads.append(output.read_bytes())
+
+    assert payloads[0] == payloads[1]
+    state = json.loads(payloads[0])
+    assert state["status"] == "defects-found"
+    assert state["summary"]["defects"] == 1
+    assert state["defects"][0]["id"] == "G5-parent-orchestration"
+    assert state["defects"][0]["observed"] == (
+        "RuntimeError: injected parent orchestration failure"
+    )
