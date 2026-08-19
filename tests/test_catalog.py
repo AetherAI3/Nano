@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import ast
+import importlib.util
 import json
 from pathlib import Path
 
 import pytest
 
-from scripts import check_contribution
 from nano.library.catalog import (
     CatalogDiagnostic,
     CatalogValidationError,
@@ -22,6 +23,14 @@ from nano.library.catalog import (
 
 
 LIBRARY = Path(__file__).parents[1] / "nano" / "library"
+ROOT = Path(__file__).parents[1]
+
+_CHECKER_SPEC = importlib.util.spec_from_file_location(
+    "_nano_check_contribution_test", ROOT / "scripts" / "check_contribution.py"
+)
+assert _CHECKER_SPEC is not None and _CHECKER_SPEC.loader is not None
+check_contribution = importlib.util.module_from_spec(_CHECKER_SPEC)
+_CHECKER_SPEC.loader.exec_module(check_contribution)
 
 BASELINE_IR = {
     "type": "Strategy",
@@ -353,3 +362,23 @@ def test_contribution_check_fails_on_generated_catalog_drift(monkeypatch, capsys
 
     assert check_contribution.main() == 1
     assert "nano/library/catalog/strategy_metadata_v1.json" in capsys.readouterr().err
+
+
+def test_python_sources_do_not_import_the_unpacked_scripts_namespace():
+    violations = []
+    for source_root in (ROOT / "nano", ROOT / "scripts", ROOT / "tests"):
+        for path in sorted(source_root.rglob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    names = [node.module or ""]
+                else:
+                    continue
+                if any(name == "scripts" or name.startswith("scripts.") for name in names):
+                    violations.append(f"{path.relative_to(ROOT).as_posix()}:{node.lineno}")
+    assert violations == [], (
+        "top-level scripts are CLI entry files, not an installed package: "
+        + ", ".join(violations)
+    )
