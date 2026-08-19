@@ -35,6 +35,9 @@ if str(ROOT) not in sys.path:  # so a fresh clone works without `pip install -e 
     sys.path.insert(0, str(ROOT))
 
 from nano.compiler import compile_source, compile_to_dict  # noqa: E402
+from nano.ir.module import NanoModule  # noqa: E402
+from nano.ir.schema import NANO_IR_VERSION_BASELINE  # noqa: E402
+from nano.runtime.vm import run_module  # noqa: E402
 from nano.compiler.errors import NanoCompileError  # noqa: E402
 from nano.ir.graph import StrategyGraph  # noqa: E402
 from nano.runtime.interpreter import MarketFrame, execute  # noqa: E402
@@ -117,7 +120,17 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
 
     try:
         document = compile_to_dict(source)
-        graph = compile_source(source)
+        # The library ships two corpora. A baseline entry names the feed signals
+        # the host must inject; a v1 entry declares them as typed inputs and
+        # computes its indicators from them. Either way the host owes the data,
+        # so both are checked against the same documentation rule below —
+        # `compile_source` is baseline-only and cannot be called on a v1 entry.
+        if document.get("nanoIrVersion") == NANO_IR_VERSION_BASELINE:
+            graph = compile_source(source)
+            required = tuple(c.signal for c in graph.conditions)
+        else:
+            graph = None
+            required = tuple(i.name for i in NanoModule.from_dict(document).inputs)
     except NanoCompileError as error:
         problems.append(
             f"{rel}:{error.line}:{error.column}: does not compile — {error.message}"
@@ -136,10 +149,10 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
     # README and are reused across entries; a signal this entry invents has to
     # arrive with its definition.
     conventions = (LIBRARY / "README.md").read_text(encoding="utf-8")
-    for condition in graph.conditions:
-        if condition.signal not in header_text and condition.signal not in conventions:
+    for name in required:
+        if name not in header_text and name not in conventions:
             problems.append(
-                f"{rel}: signal `{condition.signal}` is documented nowhere. The "
+                f"{rel}: signal `{name}` is documented nowhere. The "
                 "host has to implement it, so give it a formula or data source, a "
                 "unit or range, and a lookback convention — in this file's header "
                 "if it is new, or in the nano/library/README.md table if other "
@@ -171,16 +184,30 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
                 "reads as a list of steps in a diff. Re-run with `--write`."
             )
 
-    round_tripped = StrategyGraph.from_dict(document).to_dict()
+    # Both checks below exist for every entry; only the loader differs, because
+    # a v1 document is archived and executed as a NanoModule rather than a
+    # StrategyGraph. Skipping them for v1 would leave the newer corpus unchecked.
+    if graph is not None:
+        round_tripped = StrategyGraph.from_dict(document).to_dict()
+    else:
+        round_tripped = NanoModule.from_dict(document).to_dict()
     if round_tripped != document:
         problems.append(
-            f"{rel}: IR does not survive a StrategyGraph round trip, so it cannot "
-            "be archived and reloaded to the same rule."
+            f"{rel}: IR does not survive a round trip, so it cannot be archived "
+            "and reloaded to the same rule."
         )
 
-    signals = {condition.signal: (0.0, 1e9) for condition in graph.conditions}
-    frame = MarketFrame(timestamps=(0, 86400), signals=signals)
-    if execute(graph, frame).to_dict() != execute(graph, frame).to_dict():
+    timestamps = tuple(86400 * bar for bar in range(64))
+    frame = MarketFrame(
+        timestamps=timestamps,
+        signals={name: (1.0,) * len(timestamps) for name in required},
+    )
+    if graph is not None:
+        first, second = execute(graph, frame), execute(graph, frame)
+    else:
+        module = NanoModule.from_dict(document)
+        first, second = run_module(module, frame), run_module(module, frame)
+    if first.to_dict() != second.to_dict():
         problems.append(
             f"{rel}: two runs over one frame produced different results. "
             "Determinism is the contract; this is a compiler or runtime bug — "
