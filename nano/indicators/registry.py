@@ -132,6 +132,29 @@ _SPECS: Tuple[IndicatorSpec, ...] = (
         "SUM", (SERIES_FLOAT, INT), SERIES_FLOAT, _first_period(-1),
         "Rolling sum over the last `period` bars.",
     ),
+    # -- temporal and event composition -----------------------------------
+    IndicatorSpec(
+        "BARS_SINCE", (SERIES_BOOL,), SERIES_FLOAT, _fixed(0),
+        "Bars since the last true cell; zero on the event bar, absent before "
+        "the first event or after a gap until the next event.",
+    ),
+    IndicatorSpec(
+        "COUNT_TRUE", (SERIES_BOOL, INT), SERIES_FLOAT, _first_period(-1),
+        "Number of true cells in the trailing gap-free `period`-bar window.",
+    ),
+    IndicatorSpec(
+        "RISING", (SERIES_FLOAT, INT), SERIES_BOOL, _first_period(-1),
+        "True when the trailing `period` values are strictly increasing.",
+    ),
+    IndicatorSpec(
+        "FALLING", (SERIES_FLOAT, INT), SERIES_BOOL, _first_period(-1),
+        "True when the trailing `period` values are strictly decreasing.",
+    ),
+    IndicatorSpec(
+        "PERCENTRANK", (SERIES_FLOAT, INT), SERIES_FLOAT, _first_period(),
+        "Fraction of the preceding `period` values at or below the current "
+        "value, normalized to 0..1.",
+    ),
     # -- momentum -----------------------------------------------------------
     IndicatorSpec(
         "RSI", (SERIES_FLOAT, INT), SERIES_FLOAT, _first_period(),
