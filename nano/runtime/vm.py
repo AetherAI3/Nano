@@ -51,7 +51,7 @@ from ..indicators.registry import lookup as lookup_indicator
 from ..ir.module import IRNode, NanoModule
 from .effects import Intent, LogEntry
 from .interpreter import MarketFrame, RuntimeError_
-from .risk import RiskGate
+from .risk import ACTUATING_ACTIONS, RiskGate
 from .scheduler import ticks
 
 Cell = Optional[Union[float, bool]]
@@ -450,7 +450,18 @@ class _Machine:
                 # A breached limit removes the proposal and says why. It never
                 # substitutes a different intent: the host still decides on
                 # everything that survives, and sees nothing that did not.
-                violations = self.risk.review(intent, bar)
+                # The host's order count describes the state at this bar. Add
+                # only actuating intents that already survived at the same
+                # timestamp so two rules cannot overbook one frame, while a
+                # later bar remains governed by its own host measurement.
+                emitted_capacity = sum(
+                    accepted.timestamp == timestamp
+                    and accepted.action in ACTUATING_ACTIONS
+                    for accepted in intents
+                )
+                violations = self.risk.review(
+                    intent, bar, emitted_capacity=emitted_capacity
+                )
                 if violations:
                     self.log.extend(self.risk.suppression_log(intent, violations))
                     continue

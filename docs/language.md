@@ -124,7 +124,7 @@ a strategy may have at most one `risk` block.
 |---|---|---|---|
 | `max_daily_loss` | fraction of equity | `risk.daily_loss <= limit` | `risk.daily_loss` |
 | `max_drawdown` | fraction of equity | `risk.drawdown <= limit` | `risk.drawdown` |
-| `max_orders_per_day` | count | `risk.orders_today <= limit` | `risk.orders_today` |
+| `max_orders_per_day` | count | `risk.orders_today + accepted intents at this timestamp < limit` | `risk.orders_today` |
 | `stop_trading_after_losses` | consecutive losses | `risk.consecutive_losses < limit` | `risk.consecutive_losses` |
 | `min_confidence` | confidence in [0, 1] | `intent confidence >= limit` | the intent itself |
 | `max_position_size` | fraction of equity | — | **not enforced by Nano** |
@@ -176,12 +176,14 @@ config through a float has to round before it serialises — and a module may ca
 at most one `risk.limits` node, because a second one could silently loosen the
 first.
 
-**The allowed band is inclusive; a breach is strictly outside it.** A drawdown of
+Fraction ceilings and confidence floors include their boundary. A drawdown of
 exactly `0.05` under `max_drawdown 0.05` is permitted; anything above it is not.
 An intent whose confidence is exactly `0.6` under `min_confidence 0.6` is
-permitted. `stop_trading_after_losses 3` is the one limit whose number names the
-first *unacceptable* count rather than the last acceptable one — "stop after
-three losses" — so its band is 0 to 2 and it breaches at 3.
+permitted. Count stops name the first *unacceptable* count: both
+`max_orders_per_day 3` and `stop_trading_after_losses 3` have an allowed band of
+0 to 2 and breach at 3. For the order limit, the runtime adds actuating intents
+already accepted at the same timestamp before deciding whether the next one
+fits; a later bar uses the host's measurement for that bar.
 
 ### Where the numbers come from
 
@@ -201,11 +203,15 @@ a number the host maintains and reports. The `risk.` prefix contains a dot, whic
 no Nano identifier may, so a measurement can never collide with a signal a
 strategy reads by name.
 
-**A limit whose measurement is missing, absent at that bar, or not a finite
-number is a breach, not a pass.** NaN compares false against every threshold and
-negative infinity compares below every threshold, so treating either as "safe"
-would ignore the two most dangerous values a gate can be handed. A boolean is not
-a number either: `False` would otherwise arrive as a perfectly satisfied count.
+**A limit whose measurement is missing, absent at that bar, outside its domain,
+or not a finite number is a breach, not a pass.** NaN compares false against
+every threshold and negative infinity compares below every threshold, so
+treating either as "safe" would ignore the two most dangerous values a gate can
+be handed. Drawdown and count measurements cannot be negative. Daily loss is
+different: its sign distinguishes loss from profit, so a negative
+`risk.daily_loss` is valid and does not breach a maximum-loss limit. A boolean is
+not a number either: `False` would otherwise arrive as a perfectly satisfied
+count.
 
 Because a missing measurement withholds everything, `nano replay` refuses a data
 file that does not carry the columns a strategy's limits read, rather than

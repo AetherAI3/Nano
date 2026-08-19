@@ -14,9 +14,10 @@ run and records why. It never rewrites one intent into another, never invents a
 already declare. Nano proposes and the host disposes — a gate that only ever
 *reduces* what Nano proposes is the only kind that can live inside Nano.
 
-**No state.** A gate holds its limits and this run's signals. There is no
-accumulator across bars and none across frames, so enforcement is exactly as
-replayable as the rest of the run.
+**No ambient state.** A gate holds its limits and this run's signals. The VM
+supplies how many actuating intents have already survived at the current
+timestamp so an order-count limit cannot overbook one frame. Nothing carries
+across frames, so enforcement is exactly as replayable as the rest of the run.
 
 **Two tables, and every keyword in exactly one.** `ENFORCED_LIMITS` is what the
 runtime applies; `HOST_ENFORCED_LIMITS` is what it announces it will not. A
@@ -63,12 +64,18 @@ class LimitRule:
 
     `observation` is the noun the log uses for the thing being measured, so a
     violation line reads as a sentence rather than as a signal name.
+
+    `minimum_observation` is the host measurement's domain floor, where one
+    exists. `includes_emitted_capacity` marks the one rule whose observed count
+    must include actuating intents already accepted at this timestamp.
     """
 
     limit: str
     measurement: Optional[str]
     mode: str
     observation: str
+    minimum_observation: Optional[float] = None
+    includes_emitted_capacity: bool = False
 
     def breaches(self, observed: float, limit: float) -> bool:
         if self.mode == "exceeds":
@@ -95,15 +102,27 @@ def _measurement(name: str) -> str:
 # rather than two that can drift. A test holds the two together.
 ENFORCED_LIMITS: Tuple[LimitRule, ...] = (
     LimitRule("max_daily_loss", _measurement("daily_loss"), "exceeds", "daily loss"),
-    LimitRule("max_drawdown", _measurement("drawdown"), "exceeds", "drawdown"),
     LimitRule(
-        "max_orders_per_day", _measurement("orders_today"), "exceeds", "order count"
+        "max_drawdown",
+        _measurement("drawdown"),
+        "exceeds",
+        "drawdown",
+        minimum_observation=0.0,
+    ),
+    LimitRule(
+        "max_orders_per_day",
+        _measurement("orders_today"),
+        "reaches",
+        "order count",
+        minimum_observation=0.0,
+        includes_emitted_capacity=True,
     ),
     LimitRule(
         "stop_trading_after_losses",
         _measurement("consecutive_losses"),
         "reaches",
         "consecutive losses",
+        minimum_observation=0.0,
     ),
     # No measurement: the observation is the intent's own declared confidence.
     LimitRule("min_confidence", None, "below", "the intent's declared confidence"),
@@ -225,11 +244,14 @@ class RiskGate:
 
     # -- decision ----------------------------------------------------------
 
-    def review(self, intent: Intent, bar: int) -> Tuple[Violation, ...]:
+    def review(
+        self, intent: Intent, bar: int, *, emitted_capacity: int = 0
+    ) -> Tuple[Violation, ...]:
         """Every limit this intent breaches, in declared vocabulary order.
 
         An empty tuple means the intent is proposed. Non-actuating intents are
-        never reviewed, so no limit can stop one.
+        never reviewed, so no limit can stop one. `emitted_capacity` counts only
+        actuating intents that already survived at this intent's timestamp.
         """
         if not self._rules or intent.action not in ACTUATING_ACTIONS:
             return ()
@@ -241,7 +263,9 @@ class RiskGate:
             # float, so one limit never appears in the log under two spellings.
             declared = self._limits[rule.limit]
             limit = _finite(declared)
-            observed = self._observe(rule, intent, bar)
+            observed, observation_error = self._observe(
+                rule, intent, bar, emitted_capacity
+            )
             if limit is None:
                 # The loader requires a numeric, finite, in-range limit, so this
                 # is reachable only through `run_module(validate=False)`. It
@@ -250,6 +274,14 @@ class RiskGate:
                     Violation(
                         rule.limit,
                         f"{rule.limit}: declared limit is not a usable number",
+                    )
+                )
+            elif observation_error is not None:
+                found.append(
+                    Violation(
+                        rule.limit,
+                        f"{rule.limit} {declared}: {observation_error} "
+                        f"(fail-closed at bar {bar})",
                     )
                 )
             elif observed is None:
@@ -270,18 +302,40 @@ class RiskGate:
                 )
         return tuple(found)
 
-    def _observe(self, rule: LimitRule, intent: Intent, bar: int) -> Optional[float]:
-        """This bar's observation for one rule, or None if there is no usable one."""
+    def _observe(
+        self, rule: LimitRule, intent: Intent, bar: int, emitted_capacity: int
+    ) -> Tuple[Optional[float], Optional[str]]:
+        """Return this bar's value and, separately, any domain violation."""
         if rule.measurement is None:
-            return _finite(intent.confidence)
-        series = self._signals.get(rule.measurement)
-        # `MarketFrame` already refuses a series whose length does not match the
-        # timeline, so the bounds half of this is unreachable through the public
-        # constructor. It stays because a gate can be built from any mapping, and
-        # an IndexError inside a risk check is the worst place to learn that.
-        if series is None or bar >= len(series):
-            return None
-        return _finite(series[bar])
+            observed = _finite(intent.confidence)
+        else:
+            series = self._signals.get(rule.measurement)
+            # `MarketFrame` already refuses a series whose length does not match
+            # the timeline, so the bounds half of this is unreachable through
+            # the public constructor. It stays because a gate can be built from
+            # any mapping, and an IndexError inside a risk check is the worst
+            # place to learn that.
+            if series is None or bar >= len(series):
+                return None, None
+            observed = _finite(series[bar])
+
+        # Domains belong to rules, not to `_finite`: a negative daily loss is a
+        # valid profit/no-loss observation, while negative drawdown and counts
+        # are impossible measurements and therefore fail closed.
+        if observed is None:
+            return None, None
+        if (
+            rule.minimum_observation is not None
+            and observed < rule.minimum_observation
+        ):
+            return (
+                None,
+                f"{rule.observation} observed {observed} outside valid domain "
+                f">= {rule.minimum_observation}",
+            )
+        if rule.includes_emitted_capacity:
+            observed += emitted_capacity
+        return observed, None
 
     def suppression_log(
         self, intent: Intent, violations: Sequence[Violation]

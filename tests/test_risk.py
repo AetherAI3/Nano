@@ -204,12 +204,38 @@ def test_max_daily_loss_allows_the_limit_exactly_and_breaches_just_above():
     assert _emitted_bars(result) == [0, 1]
 
 
-def test_max_orders_per_day_allows_the_limit_exactly():
+def test_max_orders_per_day_breaches_at_the_limit_not_after_it():
     result = _run(
         _strategy("        max_orders_per_day 5"),
         **{"risk.orders_today": (4.0, 5.0, 6.0)},
     )
-    assert _emitted_bars(result) == [0, 1]
+    assert _emitted_bars(result) == [0]
+
+
+def test_max_orders_per_day_accounts_for_intents_already_emitted_this_frame():
+    source = (
+        "strategy Capacity {\n"
+        "    risk {\n"
+        "        max_orders_per_day 2\n"
+        "    }\n"
+        "    every 1m {\n"
+        "        if TRIGGER > 0 {\n"
+        "            buy(BTC, 1.0)\n"
+        "            sell(ETH, 1.0)\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    result = run_module(
+        compile_module(source),
+        _frame(1, TRIGGER=(1.0,), **{"risk.orders_today": (1.0,)}),
+    )
+
+    assert [(intent.action, intent.asset) for intent in result.intents] == [
+        ("BUY", "BTC")
+    ]
+    assert len(_events(result, "intent.suppressed")) == 1
+    assert "max_orders_per_day" in _events(result, "intent.suppressed")[0].detail
 
 
 def test_stop_trading_after_losses_breaches_at_the_count_not_after_it():
@@ -299,6 +325,40 @@ def test_a_loss_reported_as_a_negative_number_is_not_a_breach():
         **{"risk.daily_loss": (-0.30,)},
     )
     assert _emitted_bars(result) == [0]
+
+
+def test_a_negative_drawdown_is_invalid_and_fails_closed():
+    result = _run(
+        _strategy("        max_drawdown 0.05"),
+        length=1,
+        **{"risk.drawdown": (-0.01,)},
+    )
+    assert result.intents == ()
+    detail = _events(result, "risk.violation")[0].detail
+    assert "drawdown observed -0.01 outside valid domain >= 0.0" in detail
+    assert "fail-closed" in detail
+
+
+@pytest.mark.parametrize(
+    ("limit", "measurement", "observation"),
+    [
+        ("max_orders_per_day 5", "risk.orders_today", "order count"),
+        (
+            "stop_trading_after_losses 3",
+            "risk.consecutive_losses",
+            "consecutive losses",
+        ),
+    ],
+    ids=["orders_today", "consecutive_losses"],
+)
+def test_a_negative_count_measurement_is_invalid_and_fails_closed(
+    limit, measurement, observation
+):
+    result = _run(_strategy(f"        {limit}"), length=1, **{measurement: (-1,)})
+    assert result.intents == ()
+    detail = _events(result, "risk.violation")[0].detail
+    assert f"{observation} observed -1.0 outside valid domain >= 0.0" in detail
+    assert "fail-closed" in detail
 
 
 # ---------------------------------------------------------------------------
@@ -816,10 +876,10 @@ def test_the_violation_line_is_exact_and_spells_the_limit_one_way():
         **{"risk.orders_today": (12,)},
     )
     assert _events(result, "risk.armed")[0].detail == (
-        "max_orders_per_day <= 10; measurements: risk.orders_today"
+        "max_orders_per_day < 10; measurements: risk.orders_today"
     )
     assert _events(result, "risk.violation")[0].detail == (
-        "max_orders_per_day 10: order count observed 12.0 (allowed <= 10)"
+        "max_orders_per_day 10: order count observed 12.0 (allowed < 10)"
     )
 
 
