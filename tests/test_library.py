@@ -37,13 +37,14 @@ import pytest
 from nano.compiler import compile_module, compile_source, compile_to_dict
 from nano.ir.graph import StrategyGraph
 from nano.ir.module import NanoModule
-from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
-from nano.runtime.vm import run_module
-from scripts.check_contribution import (
+from nano.library import contribution
+from nano.library.contribution import (
     baseline_control_frames,
     module_control_frame,
     source_provenance_issues,
 )
+from nano.runtime.interpreter import MarketFrame, RuntimeError_, execute
+from nano.runtime.vm import run_module
 
 LIBRARY = Path(__file__).resolve().parent.parent / "nano" / "library"
 
@@ -75,6 +76,17 @@ def _pinned_ir_version(nano_path: Path) -> str:
 
 BASELINE_SOURCES = [p for p in NANO_SOURCES if _pinned_ir_version(p) == "0.1.0"]
 V1_SOURCES = [p for p in NANO_SOURCES if _pinned_ir_version(p) == "1.0.0"]
+
+
+def test_contribution_controls_are_in_the_packaged_namespace():
+    """Collection must not depend on the repository-only ``scripts`` tree."""
+    helpers = (
+        baseline_control_frames,
+        module_control_frame,
+        source_provenance_issues,
+    )
+    assert contribution.__package__ == "nano.library"
+    assert {helper.__module__ for helper in helpers} == {"nano.library.contribution"}
 
 
 def test_library_is_nonempty_and_paired():
