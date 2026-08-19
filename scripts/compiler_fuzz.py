@@ -232,7 +232,7 @@ def _target_result(
     }
 
 
-def _repository_state() -> dict[str, Any]:
+def _repository_state(output: Path | None = None) -> dict[str, Any]:
     main_tip = _git_optional("rev-parse", "--verify", "origin/main^{commit}")
     main_merge_base = (
         _git_optional("merge-base", "HEAD", "origin/main")
@@ -247,20 +247,35 @@ def _repository_state() -> dict[str, Any]:
         )
     else:
         merge_base_status = "resolved"
+    status = _git(
+        "status",
+        "--short",
+        "--",
+        "nano/fuzzing",
+        "scripts/compiler_fuzz.py",
+        "tests/test_compiler_fuzz.py",
+        "_loopstate/g5-compiler-fuzz.json",
+    ).splitlines()
+    if output is not None:
+        try:
+            output_relative = output.resolve().relative_to(ROOT.resolve()).as_posix()
+        except ValueError:
+            output_relative = None
+        if output_relative is not None:
+            # The artifact cannot report its own dirty state without making the
+            # first and second default-output runs differ byte-for-byte.
+            status = [
+                entry
+                for entry in status
+                if entry.split(maxsplit=1)[-1].split(" -> ")[-1].replace("\\", "/")
+                != output_relative
+            ]
     return {
         "branch": _git("branch", "--show-current") or None,
         "head": _git("rev-parse", "HEAD"),
         "mainMergeBase": main_merge_base,
         "mainMergeBaseStatus": merge_base_status,
-        "status": _git(
-            "status",
-            "--short",
-            "--",
-            "nano/fuzzing",
-            "scripts/compiler_fuzz.py",
-            "tests/test_compiler_fuzz.py",
-            "_loopstate/g5-compiler-fuzz.json",
-        ).splitlines(),
+        "status": status,
     }
 
 
@@ -310,7 +325,7 @@ def _write_loopstate(output: Path, loopstate: dict[str, Any]) -> None:
 def _emergency_loopstate(args: argparse.Namespace, error: Exception) -> dict[str, Any]:
     """Create a deterministic artifact for an unexpected parent failure."""
     try:
-        repository = _repository_state()
+        repository = _repository_state(args.output)
     except Exception as repository_error:
         repository = {
             "branch": None,
@@ -400,7 +415,7 @@ def _parent(args: argparse.Namespace) -> int:
         "schemaVersion": 2,
         "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
         "status": "defects-found" if defects else "pass",
-        "repository": _repository_state(),
+        "repository": _repository_state(args.output),
         "configuration": _configuration(args),
         "summary": {
             "requestedTargets": len(args.refs),

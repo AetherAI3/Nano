@@ -285,28 +285,30 @@ def test_hash_seed_driver_is_fetchless_when_origin_main_is_absent(tmp_path):
     )
     assert missing_main.returncode != 0
 
-    output = tmp_path / "fresh-loopstate.json"
-    completed = subprocess.run(
-        [
-            sys.executable,
-            str(isolated / "scripts" / "compiler_fuzz.py"),
-            "--cases",
-            "4",
-            "--hash-seeds",
-            "0,7",
-            "--refs",
-            "HEAD",
-            "--output",
-            str(output),
-        ],
-        cwd=isolated,
-        capture_output=True,
-        text=True,
-    )
-    diagnostics = f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
-    assert completed.returncode in (0, 1), diagnostics
-    assert output.is_file(), diagnostics
-    state = json.loads(output.read_text(encoding="utf-8"))
+    output = isolated / "_loopstate" / "g5-compiler-fuzz.json"
+    payloads = []
+    for _ in range(2):
+        completed = subprocess.run(
+            [
+                sys.executable,
+                str(isolated / "scripts" / "compiler_fuzz.py"),
+                "--cases",
+                "4",
+                "--hash-seeds",
+                "0,7",
+                "--refs",
+                "HEAD",
+            ],
+            cwd=isolated,
+            capture_output=True,
+            text=True,
+        )
+        diagnostics = f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}"
+        assert completed.returncode in (0, 1), diagnostics
+        assert output.is_file(), diagnostics
+        payloads.append(output.read_bytes())
+    assert payloads[0] == payloads[1]
+    state = json.loads(payloads[0])
     assert state["repository"]["mainMergeBase"] is None
     assert state["repository"]["mainMergeBaseStatus"] == (
         "unavailable: origin/main is absent from local checkout"
