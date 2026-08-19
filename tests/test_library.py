@@ -8,6 +8,7 @@ behavior.
 """
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ EXPECTED_CATEGORIES = {
     "volume",
     "risk",
     "event_volatility",
+    "watchdog",
 }
 
 
@@ -45,6 +47,58 @@ def test_library_is_nonempty_and_paired():
         assert _ir_path(nano_path).exists(), f"{nano_path.name} has no IR partner"
     categories = {p.parent.name for p in NANO_SOURCES}
     assert categories == EXPECTED_CATEGORIES
+
+
+def test_the_advertised_library_size_is_not_stale():
+    """The library README quotes a strategy count, and counts rot silently.
+
+    It said 26 while the directory held 32 — six entries a reader browsing the
+    prose would not know were there. The number is the first thing a would-be
+    contributor reads, so it gets a guard rather than a good intention.
+    """
+    readme = (LIBRARY / "README.md").read_text(encoding="utf-8")
+    claimed = {int(n) for n in re.findall(r"contains (\d+) strateg", readme)}
+    assert claimed, "the library README no longer states how many strategies ship"
+    assert claimed == {len(NANO_SOURCES)}, (
+        f"the README claims {sorted(claimed)} strategies; the directory holds "
+        f"{len(NANO_SOURCES)}. Update the count and the category table together."
+    )
+
+
+def test_the_root_readme_category_counts_match_the_directories():
+    """The root README repeats the per-category counts, a third place to go stale.
+
+    It is the first table a visitor sees, so it is the one worth pinning: parse
+    the row rather than trusting it, and fail on the category that drifted.
+    """
+    readme = (LIBRARY.parent.parent / "README.md").read_text(encoding="utf-8")
+    header = next(
+        (line for line in readme.splitlines() if line.startswith("| momentum |")),
+        None,
+    )
+    assert header, "the root README no longer carries the library category table"
+    lines = readme.splitlines()
+    counts_row = lines[lines.index(header) + 2]
+
+    categories = [cell.strip() for cell in header.strip("|").split("|")]
+    counts = [cell.strip() for cell in counts_row.strip("|").split("|")]
+    assert set(categories) == EXPECTED_CATEGORIES
+
+    for category, claim in zip(categories, counts):
+        actual = len(list((LIBRARY / category).glob("*.nano")))
+        assert claim == f"{actual} rules", (
+            f"the root README says `{claim}` for {category}/, which holds {actual}"
+        )
+
+
+def test_every_category_is_listed_in_the_readme():
+    """A category the README does not name is a category nobody contributes to."""
+    readme = (LIBRARY / "README.md").read_text(encoding="utf-8")
+    for category in sorted(EXPECTED_CATEGORIES):
+        assert f"`{category}/`" in readme, (
+            f"nano/library/{category}/ ships but the README category table does "
+            "not list it"
+        )
 
 
 def test_no_orphan_ir_files():
@@ -346,3 +400,49 @@ def test_atr_halt_emits_no_intent_in_calm_regime():
     assert [(i.action, i.timestamp) for i in execute(graph, violent).intents] == [
         ("PAUSE", 300)
     ]
+
+
+def test_trusted_route_guard_pauses_only_while_the_route_is_down():
+    graph = _load("watchdog/trusted_route_guard.nano")
+    assert [a.name for a in graph.agents] == ["SecurityDesk"]
+    frame = MarketFrame(
+        timestamps=(0, 60, 120),
+        # verified | down | recovered. The rule does not latch: it stops
+        # proposing a pause the moment the host stops reporting the outage,
+        # because deciding when a pause ends is the host's job, not the rule's.
+        signals={"TRUSTED_ROUTE_DOWN": (0.0, 1.0, 0.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [("PAUSE", 60)]
+    assert result.intents[0].asset is None
+
+
+def test_credential_age_alert_observes_rather_than_pausing():
+    # The positive control matters more than the no-fire here: a watchdog that
+    # silently upgraded an advisory into a PAUSE would halt a system over a key
+    # that is merely getting old.
+    graph = _load("watchdog/credential_age_alert.nano")
+    frame = MarketFrame(
+        timestamps=(0, 86400, 172800),
+        signals={"CREDENTIAL_AGE_DAYS": (79.0, 80.0, 91.0)},  # 79 is NOT >= 80
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("OBSERVE", 86400),
+        ("OBSERVE", 172800),
+    ]
+
+
+def test_watchdog_rules_never_propose_a_direction():
+    """Every watchdog is a control, so none of them may emit a trade.
+
+    The category exists to express policy conditions. A BUY or SELL appearing
+    here would mean a security rule had quietly become a trading rule.
+    """
+    for nano_path in sorted((LIBRARY / "watchdog").glob("*.nano")):
+        graph = compile_source(nano_path.read_text())
+        actions = {intent.action for intent in graph.intents}
+        assert actions <= {"PAUSE", "OBSERVE"}, (
+            f"{nano_path.name} proposes {sorted(actions - {'PAUSE', 'OBSERVE'})}; "
+            "watchdog rules emit PAUSE and OBSERVE only"
+        )

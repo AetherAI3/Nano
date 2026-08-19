@@ -23,6 +23,25 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  contribution-shape:
+    # The test suite proves a library entry compiles to its pinned IR. It says
+    # nothing about the IR file's house formatting or the comment header every
+    # entry carries, and both had already drifted — six risk/ entries shipped
+    # with the compiler's default JSON indentation instead of the library's.
+    # A contributor should learn this from a command, not from review.
+    name: Contribution shape
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install
+        run: pip install -e .
+      - name: Check every library entry
+        run: python scripts/check_contribution.py --all
+
   package:
     runs-on: ubuntu-latest
     steps:

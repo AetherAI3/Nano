@@ -1,11 +1,15 @@
-name: Strategy library proposal
-description: Propose a well-specified trading strategy for Nano's paired source/IR library.
+name: Strategy or watchdog rule proposal
+description: Propose a well-specified rule - trading strategy or deterministic watchdog - for Nano's paired source/IR library.
 title: "[strategy]: "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping grow the Nano strategy library. A strategy proposal describes a signal contract for a host to provide; it is not investment advice or a request for live execution.
+        Thanks for helping grow the Nano rule library. A proposal describes a signal contract for a host to provide; it is not investment advice or a request for live execution.
+
+        New here? [Walk through a first contribution](https://github.com/AetherAI3/Nano/blob/main/docs/first-contribution.md) - the whole path once, with a real rule.
+
+        Watchdog rules read host-measured system or policy state rather than markets, emit `pause` and `observe` only, and follow the same nonnegative rises-as-it-worsens direction convention as `risk/`.
   - type: dropdown
     id: category
     attributes:
@@ -18,6 +22,7 @@ body:
         - volume
         - risk
         - event_volatility
+        - watchdog (system or policy state, not markets)
         - new category proposal
     validations:
       required: true
@@ -66,5 +71,5 @@ body:
           required: true
         - label: I will include paired .nano and _ir.json files plus documented signal conventions in a pull request.
           required: true
-        - label: I will run python -m pytest tests/test_library.py -q before requesting review.
+        - label: I will run python scripts/check_contribution.py and python -m pytest tests/test_library.py -q before requesting review.
           required: true

@@ -73,9 +73,16 @@ def _read_source(path: Path, console: Console) -> Optional[str]:
     `UnicodeDecodeError` is caught explicitly because it is a `ValueError`, not an
     `OSError` — a file of binary junk would otherwise escape as a traceback while a
     missing file produced a clean diagnostic.
+
+    `utf-8-sig` and not `utf-8`: several Windows editors write a UTF-8 BOM by
+    default, and the lexer reports the leading U+FEFF as `Unexpected character`
+    at 1:1 — a diagnostic that points at a perfectly good strategy and names
+    something invisible. Stripping the mark on read is not a grammar change; a
+    BOM carries no meaning inside a program, and every other byte still has to
+    be valid UTF-8.
     """
     try:
-        return path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8-sig")
     except OSError as exc:
         console.warn(f"error: cannot read {path}: {exc}")
         return None

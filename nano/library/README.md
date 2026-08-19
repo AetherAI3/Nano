@@ -11,9 +11,15 @@ Every entry has two files:
 
 ## Learn, compare, contribute
 
-The current library contains 26 strategies across seven familiar categories. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 34 strategies across eight categories — seven trading, one for deterministic watchdog controls. Browse an entry to see the source, its expected IR, and the feed convention it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
-[Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a strategy proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
+[Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
+
+One command checks an entry before you push it, and writes the `_ir.json` partner for you:
+
+```bash
+python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
+```
 
 ## Categories
 
@@ -26,6 +32,49 @@ The current library contains 26 strategies across seven familiar categories. Bro
 | `volume/` | `volume_spike_confirmation`, `obv_trend` |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
 | `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
+| `watchdog/` | `trusted_route_guard`, `credential_age_alert` |
+
+## The comment header
+
+Every entry opens with a `//` header, and it is not decoration — it is the part
+a reviewer reads to decide whether the rule is *right*, as opposed to whether it
+compiles. The source already says what the rule computes. The header says when
+it is meant to fire and, more usefully, when it is wrong.
+
+Five fields, all required, all checked by
+`python scripts/check_contribution.py`:
+
+| Field | What it answers |
+| --- | --- |
+| `REGIME:` | Which market or system state this is for — and, often more useful, which one it must **not** fire in |
+| `CONDITIONS:` | What has to already be true before the rule is armed |
+| `INVALIDATION:` | What makes it wrong. A rule nobody can disprove is not a rule |
+| `SHAPE:` | The timeframe and the picture being described, and why that timeframe |
+| `CALIBRATED ON:` | Where the numbers came from, and specifically what does *not* travel to another instrument or site |
+
+A `NOT <other_entry>:` line is the convention for the near-neighbour problem:
+name the existing entry yours is most likely to be confused with, and say what
+distinguishes them. Every current entry carries one.
+
+Signals get documented too. If your rule uses a signal already in the tables
+below, the table is its definition. If it introduces a new one, define it in
+your header — formula or data source, unit or range, normalization, lookback
+convention — because the host has to implement it.
+
+### Provenance
+
+`SOURCE:` is optional and is how an entry credits an idea it did not invent:
+
+```text
+// SOURCE: Donchian channel breakout, as described publicly in trend-following
+// literature. Translated to Nano; not derived from any proprietary code.
+```
+
+Use it whenever you are translating a publicly described idea. Leave it out when
+the rule is your own. Do not transcribe proprietary strategy code — translate
+the publicly described idea and say where it came from. Authorship itself is
+already recorded by git and by the pull request, so there is no author field to
+fill in.
 
 ## Signal conventions
 
@@ -62,6 +111,37 @@ Risk entries read **portfolio and infrastructure state**, not bar indicators. Ev
 | feed freshness | `FEED_AGE_SEC` | Seconds since the last accepted tick |
 | gross leverage | `GROSS_LEVERAGE` | Gross exposure divided by equity |
 | losing streak | `CONSECUTIVE_LOSSES` | Count of consecutive losing closed decisions; host defines close and loss |
+
+### Watchdog signals (`watchdog/`)
+
+Watchdog rules read **host-measured system and policy state** — not markets at
+all. They exist because the same three properties that make a trading rule
+auditable (deterministic, replayable, unable to reach outside the host) are what
+a security or compliance control needs most. See
+[deterministic watchdogs and compliance controls](../../README.md#deterministic-watchdogs-and-compliance-controls)
+for the boundary this sits inside.
+
+They follow the `risk/` direction convention: every series is nonnegative and
+rises as the situation worsens, so a control is always a `>=` against a ceiling.
+A stack of them reads the same way top to bottom, which is the point. If your
+natural measurement falls as things get worse — availability, remaining budget,
+a health score — the host publishes the complement, and the header documents the
+transform.
+
+Watchdog rules emit `pause` and `observe` only. A rule proposing a direction is
+a trading rule and belongs in another category; `tests/test_library.py` enforces
+this.
+
+| System measurement | Nano signal | Feed convention |
+| --- | --- | --- |
+| trusted route unavailable | `TRUSTED_ROUTE_DOWN` | 0 while the host's connectivity check verifies the route, 1 while it does not; host owns debouncing |
+| credential age | `CREDENTIAL_AGE_DAYS` | Age in whole days of the oldest in-scope credential or signing key |
+
+The categories are deliberately thin — two entries and two signals. Rules for
+authentication-failure bursts, unsigned release artifacts, endpoint posture, and
+release-approval thresholds are
+[open issues](https://github.com/AetherAI3/Nano/labels/good%20first%20issue),
+not omissions.
 
 ### Macro-event signals (`event_volatility/`)
 
@@ -104,10 +184,21 @@ A corpus strategy can emit `BUY`, `SELL`, `EXECUTE`, `PAUSE`, or `OBSERVE` inten
 
 ## Adding a strategy
 
+[`docs/first-contribution.md`](../../docs/first-contribution.md) walks the whole
+path once, with a real rule. The short version:
+
 1. Choose an existing category or propose a new one.
 2. Add `<name>.nano` using the [v0.1.0 subset](../../docs/language.md): one `every` block, one `if` rule, AND-chained conditions, and supported intent actions. Staying inside it is what keeps the checked-in IR byte-stable.
-3. Add the matching `<name>_ir.json` with the canonical `compile_to_dict()` output.
-4. Document every derived-signal convention in a source comment.
+3. Write the [comment header](#the-comment-header) — five fields, plus a `NOT` line, plus any new signal's definition.
+4. Generate the `_ir.json` partner and check everything at once:
+
+   ```bash
+   python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
+   ```
+
+   `--write` produces the IR in the library's format, so nothing has to be
+   hand-reflowed to match its neighbours. Re-run without `--write` and it should
+   print `1 entry ready for review.`
 5. Run `python -m pytest tests/test_library.py -q`.
 
-The pair must compile to the checked-in IR, round-trip through the validator, and replay deterministically under the test frames before it is ready to merge.
+The pair must compile to the checked-in IR, round-trip through the validator, and replay deterministically under the test frames before it is ready to merge. CI runs the same checker over the whole library on every pull request.
