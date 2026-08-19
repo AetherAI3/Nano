@@ -95,6 +95,109 @@ For each scheduled timestamp, the reference interpreter:
 
 A strategy with no conditions emits no intents under the current interpreter. An invalid interval string supplied through raw IR may be rejected when the scheduler executes it rather than at IR load time.
 
+## Risk limits (v1.0)
+
+Everything above describes the v0.1.0 surface. `risk { ... }` is the one v1.0
+construct documented here, because it is the one whose *runtime* behavior a
+reader is most likely to assume wrongly. A strategy carrying a risk block
+compiles to v1.0 IR.
+
+```nano
+strategy GuardedBreakout {
+  risk {
+    max_drawdown 0.05
+    min_confidence 0.6
+  }
+
+  every 5m {
+    if RSI(14) > 70 {
+      sell(BTC, 0.8)
+    }
+  }
+}
+```
+
+A limit is a name and one non-negative number. Each may be set at most once, and
+a strategy may have at most one `risk` block.
+
+| Limit | Unit | Allowed while | Measurement |
+|---|---|---|---|
+| `max_daily_loss` | fraction of equity | `risk.daily_loss <= limit` | `risk.daily_loss` |
+| `max_drawdown` | fraction of equity | `risk.drawdown <= limit` | `risk.drawdown` |
+| `max_orders_per_day` | count | `risk.orders_today <= limit` | `risk.orders_today` |
+| `stop_trading_after_losses` | consecutive losses | `risk.consecutive_losses < limit` | `risk.consecutive_losses` |
+| `min_confidence` | confidence in [0, 1] | `intent confidence >= limit` | the intent itself |
+| `max_position_size` | fraction of equity | — | **not enforced by Nano** |
+| `max_open_positions` | count | — | **not enforced by Nano** |
+
+### What enforcement does
+
+When an actuating intent — `buy`, `sell`, or `execute` — is about to be proposed,
+every enforced limit is checked against that bar. A breach **withholds the
+proposal** and records `risk.violation` and `intent.suppressed` in the run log. A
+violation never rewrites one intent into another and never grants the module an
+effect it did not already declare; the host still decides everything that
+survives, and never sees what did not.
+
+`pause` and `observe` are never suppressed. They are how a strategy asks to be
+stopped and how it reports what it saw — a breaker that silenced its own halt
+because the book was in drawdown would be worse than no breaker.
+
+### Units, and the boundary
+
+Fractions are fractions. `max_drawdown 0.05` is five percent, and `0.05` is
+rejected as a percentage nowhere: `max_daily_loss 2` is a compile error, not a
+200 percent stop. Note that this is a *different convention* from the `DRAWDOWN`
+feed signal used by the strategy library, which is expressed in percent. The two
+never meet, because the risk gate reads only `risk.drawdown`.
+
+**The allowed band is inclusive; a breach is strictly outside it.** A drawdown of
+exactly `0.05` under `max_drawdown 0.05` is permitted; anything above it is not.
+An intent whose confidence is exactly `0.6` under `min_confidence 0.6` is
+permitted. `stop_trading_after_losses 3` is the one limit whose number names the
+first *unacceptable* count rather than the last acceptable one — "stop after
+three losses" — so its band is 0 to 2 and it breaches at 3.
+
+### Where the numbers come from
+
+From the host, per bar, through the same `MarketFrame` that carries every other
+signal:
+
+```python
+MarketFrame(
+    timestamps=(0, 300),
+    signals={"RSI": (45.0, 78.0), "risk.drawdown": (0.01, 0.07)},
+)
+```
+
+Nano does not read your account, your positions, or your order history, and it
+has no clock of its own to decide when a day rolled over — `risk.orders_today` is
+a number the host maintains and reports. The `risk.` prefix contains a dot, which
+no Nano identifier may, so a measurement can never collide with a signal a
+strategy reads by name.
+
+**A limit whose measurement is missing, absent at that bar, or not a finite
+number is a breach, not a pass.** NaN compares false against every threshold and
+negative infinity compares below every threshold, so treating either as "safe"
+would ignore the two most dangerous values a gate can be handed. The same rule
+applies to `min_confidence`, which reads the intent's own declared confidence and
+nothing else: `buy(BTC)` states no confidence, so it cannot clear a minimum. Give
+the action a confidence — `buy(BTC, 0.8)` — or do not declare the limit.
+
+### The two Nano will not enforce
+
+`max_position_size` and `max_open_positions` still parse, still range-check, and
+still travel to the host in the IR. Nano does not apply them, and says so with a
+`risk.unenforced` log entry naming each one.
+
+The reason is that neither is decidable from what Nano can see. A Nano intent
+carries an action, an asset, and a confidence — it carries no order size, so
+nothing in the language says how much a `buy` would put on. Nano equally cannot
+tell an opening trade from a closing one: a `sell` may flatten a long or open a
+short. A guard built on either guess would carry a name it does not honour, and
+an unenforced limit that announces itself is safer than an enforced-looking one
+that does not. The host knows its book; these belong at its gate.
+
 ## Errors
 
 The lexer and parser raise `NanoSyntaxError` with a 1-based line and column. IR load validation raises `IRValidationError` or `ManifestViolation` when the serialized strategy shape violates the supported contract.

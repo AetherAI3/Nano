@@ -298,6 +298,16 @@ def test_ambient_clock_or_entropy_is_refused(key):
         ("risk.limits", {"limits": {}}, "non-empty 'limits'"),
         ("risk.limits", {"limits": {"max_yolo": 1}}, "unknown risk limit"),
         ("risk.limits", {"limits": {"max_daily_loss": "big"}}, "must be numeric"),
+        ("risk.limits", {"limits": {"max_daily_loss": True}}, "must be numeric"),
+        # The type checker range-checks a `risk { ... }` block, but raw IR never
+        # went through it. These four are the shapes that make the *runtime* gate
+        # misbehave rather than merely look odd: a negative ceiling nothing can
+        # satisfy, a confidence floor above 1 that suppresses every intent
+        # forever, a limit no comparison can order, and a fractional count.
+        ("risk.limits", {"limits": {"max_drawdown": -0.1}}, "fraction of equity"),
+        ("risk.limits", {"limits": {"min_confidence": 5}}, r"\[0.0, 1.0\]"),
+        ("risk.limits", {"limits": {"max_drawdown": float("nan")}}, "finite number"),
+        ("risk.limits", {"limits": {"max_open_positions": 2.5}}, "whole number"),
         ("const", {}, "requires a 'value'"),
     ],
 )

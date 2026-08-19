@@ -36,11 +36,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
 
 from .schema import (
     AGENT_ROLES,
+    INTEGER_RISK_LIMITS,
     INTENT_ACTIONS,
     IRValidationError,
     KNOWN_EFFECTS,
@@ -491,6 +493,11 @@ class NanoModule:
 # the moment a named opcode is added.
 NAMED_OPS = frozenset({"input.ref", "param.ref", "feed.signal", "let", "agent"})
 
+# Position of each risk limit in the declared vocabulary. Validation walks a
+# document's limits in this order, so which rejection an auditor is shown first
+# does not depend on the order the document happened to serialise its keys in.
+_RISK_LIMIT_ORDER = {name: index for index, name in enumerate(RISK_LIMITS)}
+
 
 def _validate_attrs(node: IRNode) -> None:
     """Check the attributes each opcode's behavior depends on.
@@ -599,14 +606,41 @@ def _validate_attrs(node: IRNode) -> None:
             raise IRValidationError(
                 f"Node {node.id!r} (risk.limits) requires a non-empty 'limits' object"
             )
-        for key, value in limits.items():
+        for key in limits:
             if key not in RISK_LIMITS:
                 raise IRValidationError(
                     f"Node {node.id!r} declares unknown risk limit {key!r}"
                 )
+        # Iterated in schema order rather than document order. The runtime reads
+        # these limits and logs what they reject, so the order a document happens
+        # to spell them in must not change which rejection an auditor sees first.
+        for key in sorted(limits, key=_RISK_LIMIT_ORDER.__getitem__):
+            value = limits[key]
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise IRValidationError(
                     f"Node {node.id!r} risk limit {key!r} must be numeric"
+                )
+            if not math.isfinite(float(value)):
+                # NaN sits below every threshold and infinity sits above every
+                # one. A limit that cannot be compared is not a limit.
+                raise IRValidationError(
+                    f"Node {node.id!r} risk limit {key!r} must be a finite number"
+                )
+            unit, low, high = RISK_LIMITS[key]
+            if key in INTEGER_RISK_LIMITS and float(value) != int(value):
+                raise IRValidationError(
+                    f"Node {node.id!r} risk limit {key!r} is measured in {unit} "
+                    f"and must be a whole number, got {value}"
+                )
+            if value < low or (high is not None and value > high):
+                # The type checker range-checks the `risk { ... }` block, but raw
+                # IR never passed through it. Without this a hand-built document
+                # could declare `max_drawdown -1` — a limit nothing can satisfy —
+                # or `min_confidence 5`, which suppresses every intent forever.
+                bound = f"[{low}, {high}]" if high is not None else f">= {low}"
+                raise IRValidationError(
+                    f"Node {node.id!r} risk limit {key!r} is measured in {unit} "
+                    f"and must be {bound}, got {value}"
                 )
         return
 

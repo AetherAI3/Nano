@@ -51,6 +51,7 @@ from ..indicators.registry import lookup as lookup_indicator
 from ..ir.module import IRNode, NanoModule
 from .effects import Intent, LogEntry
 from .interpreter import MarketFrame, RuntimeError_
+from .risk import RiskGate
 from .scheduler import ticks
 
 Cell = Optional[Union[float, bool]]
@@ -189,6 +190,9 @@ class _Machine:
             node.attrs["name"]: node.attrs
             for node in self.module.of_op("ai.signature")
         }
+        # The risk block's whole runtime lives in `.risk`; a module without one
+        # gets an inert gate that adds no decision and no log entry.
+        self.risk = RiskGate.for_module(self.module, self.frame)
 
     # -- stage 1: derive every series --------------------------------------
 
@@ -354,10 +358,11 @@ class _Machine:
     # -- stage 2: walk the schedule ----------------------------------------
 
     def run(self) -> ModuleResult:
+        first_timestamp = self.frame.timestamps[0] if self.frame.timestamps else 0
         self.log.append(
             LogEntry(
                 event="module.loaded",
-                timestamp=self.frame.timestamps[0] if self.frame.timestamps else 0,
+                timestamp=first_timestamp,
                 detail=(
                     f"{self.module.name} tier={self.module.tier} "
                     f"effects={list(self.module.effects)} "
@@ -365,6 +370,7 @@ class _Machine:
                 ),
             )
         )
+        self.log.extend(self.risk.declaration_log(first_timestamp))
         self.derive()
 
         intents: List[Intent] = []
@@ -441,6 +447,15 @@ class _Machine:
                     asset=statement.attrs.get("asset"),
                     confidence=statement.attrs.get("confidence"),
                 )
+                # A breached limit removes the proposal and says why. It never
+                # substitutes a different intent: the host still decides on
+                # everything that survives, and sees nothing that did not.
+                violations = self.risk.review(intent.action, intent.confidence, bar)
+                if violations:
+                    self.log.extend(
+                        self.risk.suppression_log(intent.action, timestamp, violations)
+                    )
+                    continue
                 intents.append(intent)
                 self.log.append(
                     LogEntry(
