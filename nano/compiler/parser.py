@@ -90,8 +90,8 @@ from .ast import (
     StringLit,
     Unary,
 )
-from ..ir.schema import CONDITION_OPERATORS
-from .errors import NanoSyntaxError
+from ..ir.schema import CONDITION_OPERATORS, MAX_CANONICAL_INTEGER_DIGITS
+from .errors import NanoSyntaxError, NanoTypeError
 from .lexer import decode_string, tokenize
 from .tokens import Token
 
@@ -183,6 +183,24 @@ class _Parser:
                 f"Unexpected token {self._describe(token)} in {block} block", token
             )
         self._advance()
+
+    def _parse_integer_token(self, token: Token, what: str) -> int:
+        """Convert one decimal token without inheriting CPython's digit guard.
+
+        The guard counts source characters, while Nano's contract bounds the
+        integer's magnitude.  Strip leading zeroes before both checks so a
+        harmless padded literal stays legal, and never ask ``int`` to consume
+        more than Nano's own 640-digit maximum.
+        """
+        significant = token.value.lstrip("0") or "0"
+        if len(significant) > MAX_CANONICAL_INTEGER_DIGITS:
+            raise NanoTypeError(
+                f"Integer literal for {what} must contain at most "
+                f"{MAX_CANONICAL_INTEGER_DIGITS} decimal digits",
+                token.line,
+                token.column,
+            )
+        return int(significant)
 
     # -- program -----------------------------------------------------------
 
@@ -791,7 +809,11 @@ class _Parser:
             return NumberLit(
                 line=token.line,
                 column=token.column,
-                value=int(token.value) if token.type == "INT" else float(token.value),
+                value=(
+                    self._parse_integer_token(token, "expression")
+                    if token.type == "INT"
+                    else float(token.value)
+                ),
             )
         if token.type == "STRING":
             self._advance()
@@ -854,7 +876,7 @@ class _Parser:
         token = self._peek()
         if token.type == "INT":
             self._advance()
-            value: Number = int(token.value)
+            value: Number = self._parse_integer_token(token, what)
         elif token.type == "FLOAT":
             self._advance()
             value = float(token.value)

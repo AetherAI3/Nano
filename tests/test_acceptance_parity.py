@@ -198,6 +198,49 @@ def test_source_param_uses_the_same_canonical_integer_boundary():
         compile_module(f"strategy S {{ param p: int = {rejected} agent Desk }}")
 
 
+def test_source_integer_boundary_is_independent_of_cpython_digit_guard():
+    positive = "9" * MAX_CANONICAL_INTEGER_DIGITS
+    negative = "-" + positive
+    oversized_positive = "1" + ("0" * MAX_CANONICAL_INTEGER_DIGITS)
+    oversized_negative = "-" + oversized_positive
+    padded_one = ("0" * (MAX_CANONICAL_INTEGER_DIGITS + 100)) + "1"
+
+    settings = [None]
+    if hasattr(sys, "get_int_max_str_digits"):
+        settings.extend((640, 0))
+
+    original = sys.get_int_max_str_digits() if hasattr(sys, "get_int_max_str_digits") else None
+    try:
+        for setting in settings:
+            if setting is not None:
+                sys.set_int_max_str_digits(setting)
+
+            for literal in (positive, negative, padded_one):
+                module = compile_module(
+                    f"strategy S {{ param p: int = {literal} agent Desk }}"
+                )
+                expected = (
+                    -int(positive)
+                    if literal == negative
+                    else 1
+                    if literal == padded_one
+                    else int(positive)
+                )
+                assert module.params[0].value == expected
+
+            for literal in (oversized_positive, oversized_negative):
+                with pytest.raises(
+                    NanoTypeError,
+                    match=f"at most {MAX_CANONICAL_INTEGER_DIGITS} decimal digits",
+                ):
+                    compile_module(
+                        f"strategy S {{ param p: int = {literal} agent Desk }}"
+                    )
+    finally:
+        if original is not None:
+            sys.set_int_max_str_digits(original)
+
+
 def test_integer_validation_never_mutates_the_process_wide_digit_guard(monkeypatch):
     if not hasattr(sys, "set_int_max_str_digits"):
         pytest.skip("interpreter has no integer digit guard")
