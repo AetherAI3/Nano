@@ -3,3 +3,8 @@ __pycache__/
 .pytest_cache/
 dist/
 *.egg-info/
+
+# CONTRIBUTING.md tells a newcomer to create this, so it belongs here — a first
+# `git add -A` should not stage several thousand files from their interpreter.
+.venv/
+venv/
