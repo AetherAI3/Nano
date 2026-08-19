@@ -43,6 +43,7 @@ from ..compiler.ast import (
     Index,
     Member,
     Name,
+    Number,
     NumberLit,
     RuleAst,
     SignatureAst,
@@ -54,14 +55,15 @@ from ..compiler.ast import (
 from ..compiler.errors import NanoTypeError
 from ..indicators.registry import IndicatorSpec, lookup as lookup_indicator
 from ..ir.schema import (
+    ACTUATING_INTENT_ACTIONS,
     AGENT_ROLES,
     CONDITION_OPERATORS,
     EFFECT_ORDER,
-    INTEGER_RISK_LIMITS,
     INTENT_ACTIONS,
     RISK_LIMITS,
     TIER_REQUIREMENTS,
     TIERS,
+    validate_risk_limit,
 )
 from .env import (
     KIND_AGENT,
@@ -202,6 +204,9 @@ class _Checker:
         self.signatures: Dict[str, SignatureAst] = {}
         self.effects: Set[str] = {"log.append"}
         self.warmup = 0
+        # Set by `_check_risk`, read when checking each action. See
+        # `_check_statement` for what a declared floor makes illegal.
+        self.min_confidence: Optional[Number] = None
 
     # -- entry -------------------------------------------------------------
 
@@ -450,20 +455,17 @@ class _Checker:
                     limit.column,
                 )
             seen.add(limit.name)
+            if limit.name == "min_confidence":
+                self.min_confidence = limit.value
 
-            unit, low, high = spec
-            if limit.name in INTEGER_RISK_LIMITS and not is_plain_int(limit.value):
+            problem = validate_risk_limit(limit.name, limit.value)
+            if problem is not None:
+                # Same function the IR loader calls. Two copies of these bounds
+                # had already drifted once — only the loader rejected a
+                # non-finite limit — and a range a compiler and a loader disagree
+                # about is worse than no range at all.
                 raise self._fail(
-                    f"Risk limit {limit.name!r} is measured in {unit} and must "
-                    f"be a whole number, got {limit.value}",
-                    limit.line,
-                    limit.column,
-                )
-            if limit.value < low or (high is not None and limit.value > high):
-                bound = f"[{low}, {high}]" if high is not None else f">= {low}"
-                raise self._fail(
-                    f"Risk limit {limit.name!r} is measured in {unit} and must "
-                    f"be {bound}, got {limit.value}",
+                    f"Risk limit {limit.name!r} {problem}",
                     limit.line,
                     limit.column,
                 )
@@ -505,6 +507,7 @@ class _Checker:
                     statement.line,
                     statement.column,
                 )
+            self._check_confidence_floor(statement)
             self.effects.add("intent.emit")
             return
 
@@ -520,6 +523,45 @@ class _Checker:
 
         raise self._fail(
             f"Unsupported statement {type(statement).__name__}",
+            statement.line,
+            statement.column,
+        )
+
+    def _check_confidence_floor(self, statement: ActionAst) -> None:
+        """Reject an actuating intent that cannot clear a declared `min_confidence`.
+
+        The floor is checked against the intent's own declared confidence, and
+        absence fails closed — so `min_confidence 0.6` beside a bare `buy(BTC)`
+        proposes nothing, ever, at any input. `min_confidence 0` is the trap: the
+        natural spelling of "no floor" is in range, compiles, and silently
+        suppresses every intent the strategy has.
+
+        The IR loader already refuses `min_confidence 5` on the grounds that a
+        limit suppressing every intent forever is not a limit. This is the same
+        rule applied to the case reachable from source. It rejects programs that
+        used to compile; none of them ever proposed anything.
+
+        `execute()` has no confidence argument in the grammar at all, so pairing
+        it with any floor is rejected here rather than at run time. Exempting it
+        would mean one actuating intent quietly ignoring a limit its author
+        declared.
+        """
+        if self.min_confidence is None:
+            return
+        if statement.action not in ACTUATING_INTENT_ACTIONS:
+            return
+        if statement.confidence is not None:
+            return
+        surface = statement.action.lower()
+        fix = (
+            f"give it one, as `{surface}({statement.asset or 'ASSET'}, 0.9)`"
+            if statement.asset is not None
+            else "use `buy` or `sell` with a confidence"
+        )
+        raise self._fail(
+            f"{surface}() declares no confidence, so it can never satisfy "
+            f"min_confidence {self.min_confidence} and would be suppressed at "
+            f"every bar — {fix}, or drop the limit",
             statement.line,
             statement.column,
         )

@@ -145,11 +145,21 @@ because the book was in drawdown would be worse than no breaker. `escalate` is
 not gated either: a breached limit is a reason to ask for help, not to stop
 asking.
 
-One sharp edge follows from the rules rather than from a special case:
-`execute()` has no confidence argument in the grammar, so under a declared
-`min_confidence` **every `execute()` is withheld**. Exempting it would mean one
-actuating intent quietly ignored a limit its author declared. Use `buy` or `sell`
-with a confidence, or do not pair `min_confidence` with `execute`.
+`min_confidence` is checked against the intent's own declared confidence, and
+absence fails closed — so a floor beside a bare `buy(BTC)` would propose nothing,
+ever, at any input. **The compiler rejects that pairing rather than letting it
+run**, naming the line and column of the action:
+
+```text
+buy() declares no confidence, so it can never satisfy min_confidence 0.6 and
+would be suppressed at every bar — give it one, as `buy(BTC, 0.9)`, or drop
+the limit
+```
+
+The same applies to `execute()`, which has no confidence argument in the grammar
+at all, so it cannot appear in a strategy that declares a floor. Watch for
+`min_confidence 0`: it is the natural spelling of "no floor", it is inside the
+allowed range, and it suppresses everything — so it is rejected too.
 
 ### Units, and the boundary
 
@@ -187,10 +197,14 @@ strategy reads by name.
 **A limit whose measurement is missing, absent at that bar, or not a finite
 number is a breach, not a pass.** NaN compares false against every threshold and
 negative infinity compares below every threshold, so treating either as "safe"
-would ignore the two most dangerous values a gate can be handed. The same rule
-applies to `min_confidence`, which reads the intent's own declared confidence and
-nothing else: `buy(BTC)` states no confidence, so it cannot clear a minimum. Give
-the action a confidence — `buy(BTC, 0.8)` — or do not declare the limit.
+would ignore the two most dangerous values a gate can be handed. A boolean is not
+a number either: `False` would otherwise arrive as a perfectly satisfied count.
+
+Because a missing measurement withholds everything, `nano replay` refuses a data
+file that does not carry the columns a strategy's limits read, rather than
+reporting a run that proposed nothing. When a replay does withhold something, the
+text report says so and the full account is in the log — `nano replay --report
+json` prints it.
 
 ### The two Nano will not enforce
 

@@ -26,6 +26,9 @@ executable form and v0.1.0 graphs lift into it, so there is exactly one
 evaluator and no chance of the two versions drifting apart in behavior.
 """
 
+import math
+from typing import Optional
+
 NANO_IR_VERSION_BASELINE = "0.1.0"
 NANO_IR_VERSION_1_0 = "1.0.0"
 
@@ -83,6 +86,12 @@ EFFECT_ORDER = ("intent.emit", "llm.call", "llmre.escalate", "sign.emit", "log.a
 
 INTENT_ACTIONS = frozenset({"BUY", "SELL", "EXECUTE", "PAUSE", "OBSERVE"})
 
+# The subset that asks the host to act in the market. `PAUSE` and `OBSERVE` are
+# how a strategy asks to be stopped and how it reports, so a risk limit gates the
+# first three and never the last two. Lives here because the type checker and the
+# runtime gate must agree on the split, and both already read this module.
+ACTUATING_INTENT_ACTIONS = frozenset({"BUY", "SELL", "EXECUTE"})
+
 # Risk-limit vocabulary for the `risk { ... }` block. Each entry is
 # (canonical unit, inclusive lower bound, inclusive upper bound or None).
 # Fractions are fractions, never percentages: `max_daily_loss 0.02` is 2%.
@@ -118,3 +127,38 @@ class ManifestViolation(IRValidationError):
 
 class TierViolation(IRValidationError):
     """A module uses a construct its declared tier does not permit."""
+
+
+def validate_risk_limit(name: str, value: object) -> Optional[str]:
+    """Check one risk limit's value. Returns a problem phrase, or None if it fits.
+
+    One function because there are two call sites that must never disagree: the
+    type checker, which sees a `risk { ... }` block, and the IR loader, which
+    sees a document that never passed through the checker. They had already
+    drifted — only the loader rejected a non-finite limit — which is exactly what
+    a limit shared between a compiler and a loader cannot afford.
+
+    The return is a phrase rather than an exception so each caller can raise its
+    own error type at its own position: the checker owes a 1-based line and
+    column, the loader owes a node id.
+
+    `bool` is excluded by hand rather than by importing `nano.types.lookahead`:
+    `nano.types` imports this module, so the dependency only runs one way.
+    """
+    if name not in RISK_LIMITS:
+        return f"is not a known risk limit (expected one of {', '.join(sorted(RISK_LIMITS))})"
+
+    unit, low, high = RISK_LIMITS[name]
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "must be numeric"
+    if not math.isfinite(value):
+        # NaN sits below every threshold and infinity above every one. A limit
+        # that cannot be compared is not a limit.
+        return "must be a finite number"
+    if name in INTEGER_RISK_LIMITS and not isinstance(value, int):
+        return f"is measured in {unit} and must be a whole number, got {value}"
+    if value < low or (high is not None and value > high):
+        bound = f"[{low}, {high}]" if high is not None else f">= {low}"
+        return f"is measured in {unit} and must be {bound}, got {value}"
+    return None

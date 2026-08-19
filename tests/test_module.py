@@ -342,6 +342,29 @@ def test_a_document_with_two_bad_limits_names_the_same_one_first(limits):
         )
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"max_yolo": 1, "max_fomo": 1},
+        {"max_fomo": 1, "max_yolo": 1},
+    ],
+    ids=["yolo-first", "fomo-first"],
+)
+def test_a_document_with_two_unknown_limits_names_the_same_one_first(limits):
+    """The sibling of the test above, for the loop that runs before it.
+
+    Known limits are walked in the schema's order; unknown ones have no place in
+    that order, so they are walked by name. Both loops exist to keep the
+    diagnostic a property of the document rather than of whichever host
+    serialised it last, and leaving one of them on document order would have kept
+    exactly half the defect.
+    """
+    with pytest.raises(IRValidationError, match="max_fomo"):
+        NanoModule.from_dict(
+            document(nodes=_nodes(("n1", "risk.limits", (), {"limits": limits})))
+        )
+
+
 # -- version dispatch ---------------------------------------------------------
 
 

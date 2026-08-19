@@ -22,12 +22,7 @@ from .interpreter import (
     SignalFrame,
     execute,
 )
-from .risk import (
-    ENFORCED_LIMITS,
-    HOST_ENFORCED_LIMITS,
-    RiskGate,
-    measurement_for,
-)
+from .risk import ENFORCED_LIMITS, HOST_ENFORCED_LIMITS, RiskGate
 from .scheduler import interval_seconds, ticks
 from .vm import Escalation, ModuleResult, ReasoningProvider, run_frames, run_module
 
@@ -46,7 +41,6 @@ __all__ = [
     "SignalFrame",
     "execute",
     "interval_seconds",
-    "measurement_for",
     "run_frames",
     "run_module",
     "ticks",

@@ -450,11 +450,9 @@ class _Machine:
                 # A breached limit removes the proposal and says why. It never
                 # substitutes a different intent: the host still decides on
                 # everything that survives, and sees nothing that did not.
-                violations = self.risk.review(intent.action, intent.confidence, bar)
+                violations = self.risk.review(intent, bar)
                 if violations:
-                    self.log.extend(
-                        self.risk.suppression_log(intent.action, timestamp, violations)
-                    )
+                    self.log.extend(self.risk.suppression_log(intent, violations))
                     continue
                 intents.append(intent)
                 self.log.append(

@@ -19,17 +19,19 @@ import math
 
 import pytest
 
+from nano.cli.commands import EXIT_DIAGNOSTICS, EXIT_OK
+from nano.cli.main import main
 from nano.compiler import compile_module
-from nano.compiler.errors import NanoSyntaxError
+from nano.compiler.errors import NanoSyntaxError, NanoTypeError
 from nano.ir import IRNode, NanoModule, load_module
-from nano.ir.schema import RISK_LIMITS
+from nano.ir.schema import RISK_LIMITS, IRValidationError, validate_risk_limit
 from nano.runtime.interpreter import MarketFrame
 from nano.runtime.risk import (
     ACTUATING_ACTIONS,
     ENFORCED_LIMITS,
     HOST_ENFORCED_LIMITS,
     MEASUREMENT_PREFIX,
-    measurement_for,
+    RiskGate,
 )
 from nano.runtime.vm import run_module
 
@@ -123,8 +125,12 @@ def test_measurement_names_live_in_a_namespace_source_cannot_spell():
             "    }\n"
             "}\n"
         )
-    assert measurement_for("max_drawdown") == "risk.drawdown"
-    assert measurement_for("min_confidence") is None
+    assert [rule.measurement for rule in ENFORCED_LIMITS if rule.measurement] == [
+        "risk.daily_loss",
+        "risk.drawdown",
+        "risk.orders_today",
+        "risk.consecutive_losses",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +305,7 @@ def test_a_limit_whose_measurement_the_host_never_supplied_suppresses_everything
     result = _run(_strategy("        max_drawdown 0.05"))
     assert _emitted_bars(result) == []
     detail = _events(result, "risk.violation")[0].detail
-    assert "risk.drawdown" in detail and "unmeasured" in detail
+    assert "drawdown is unmeasured" in detail
 
 
 def test_positive_control_supplying_that_measurement_lets_the_intent_through():
@@ -334,9 +340,20 @@ def test_a_non_finite_measurement_is_unmeasured_rather_than_safely_below(hostile
 
 
 def test_an_intent_that_declares_no_confidence_cannot_satisfy_min_confidence():
-    result = _run(_strategy("        min_confidence 0.6", action="buy(BTC)"), length=1)
-    assert _emitted_bars(result) == []
-    assert "no confidence" in _events(result, "risk.violation")[0].detail
+    """Reachable only through raw IR now, and it must still fail closed.
+
+    The compiler rejects this pairing at the door (see the `min_confidence`
+    diagnostics below), so the runtime guard has no source-level path to it. It
+    still has to hold: `run_module` is a public entry point, and a hand-built
+    document must not be able to satisfy a floor by declining to state a number.
+    """
+    module = _raw_module({"min_confidence": 0.6}, confidence=None)
+    result = run_module(module, _frame(1))
+    assert result.intents == ()
+    assert (
+        "the intent's declared confidence is unmeasured"
+        in _events(result, "risk.violation")[0].detail
+    )
 
 
 def test_the_confidence_builtin_does_not_stand_in_for_a_declared_intent_confidence():
@@ -345,12 +362,9 @@ def test_the_confidence_builtin_does_not_stand_in_for_a_declared_intent_confiden
     Letting it substitute would make `min_confidence` pass on the strength of a
     number the author never attached to the action.
     """
-    result = _run(
-        _strategy("        min_confidence 0.6", action="buy(BTC)"),
-        length=1,
-        confidence=(1.0,),
-    )
-    assert _emitted_bars(result) == []
+    module = _raw_module({"min_confidence": 0.6}, confidence=None)
+    result = run_module(module, _frame(1, confidence=(1.0,)))
+    assert result.intents == ()
 
 
 def test_positive_control_a_declared_confidence_does_satisfy_the_same_limit():
@@ -585,25 +599,49 @@ def test_a_hand_built_document_is_gated_the_same_way_a_compiled_one_is():
     assert [i.action for i in permitted.intents] == ["BUY"]
 
 
-def test_two_risk_blocks_in_one_document_merge_rather_than_race():
-    """Hand-written IR may carry several `risk.limits` nodes; all of them apply."""
-    document = _raw_module({"max_drawdown": 0.05}).to_dict(include_hash=False)
+def test_a_second_risk_limits_node_is_rejected_at_load():
+    """Two blocks would be a fail-open path inside a fail-closed feature.
+
+    Whichever node a runtime read last would decide the limits, so a looser
+    second declaration could silently replace a tighter first one with nothing in
+    the log to show it. The parser already refuses two `risk` blocks; raw IR now
+    gets the same answer.
+    """
+    document = _raw_module({"max_drawdown": 0.01}).to_dict(include_hash=False)
     document["nodes"].insert(
         1,
         {
             "id": "r2",
             "op": "risk.limits",
             "inputs": [],
-            "attrs": {"limits": {"max_daily_loss": 0.02}},
+            "attrs": {"limits": {"max_drawdown": 0.99}},
         },
     )
+    with pytest.raises(IRValidationError, match="second risk.limits"):
+        load_module(document)
+
+
+def test_a_loosening_second_block_cannot_reach_the_gate_even_unvalidated():
+    """First declaration binds, for the one caller that skips the loader."""
+    document = _raw_module({"max_drawdown": 0.01}).to_dict(include_hash=False)
     module = load_module(document)
-    frame = _frame(1, **{"risk.drawdown": (0.01,), "risk.daily_loss": (0.9,)})
-    result = run_module(module, frame)
+    loosened = NanoModule(
+        name=module.name,
+        tier=module.tier,
+        effects=module.effects,
+        nodes=module.nodes
+        + (
+            IRNode(
+                id="r2", op="risk.limits", attrs={"limits": {"max_drawdown": 0.99}}
+            ),
+        ),
+        entries=module.entries,
+    )
+    result = run_module(
+        loosened, _frame(1, **{"risk.drawdown": (0.5,)}), validate=False
+    )
     assert result.intents == ()
-    assert [e.detail.split()[0] for e in _events(result, "risk.violation")] == [
-        "max_daily_loss"
-    ]
+    assert "max_drawdown <= 0.01" in _events(result, "risk.armed")[0].detail
 
 
 @pytest.mark.parametrize(
@@ -662,21 +700,8 @@ def test_an_unusable_limit_reaching_an_unvalidated_run_still_fails_closed():
     assert "not a usable number" in _events(result, "risk.violation")[0].detail
 
 
-def test_min_confidence_makes_execute_unreachable_and_that_is_deliberate():
-    """`execute()` has no confidence slot in the grammar, so it cannot clear one.
-
-    Pinned rather than special-cased. Exempting `EXECUTE` would mean one
-    actuating intent quietly ignores a limit the author declared, which is the
-    exact shape of dishonesty this module exists to remove — and the failure is
-    loud: every `execute()` is withheld, and the log says why on the first bar.
-    """
-    result = _run(
-        _strategy("        min_confidence 0.6", action="execute()"), length=1
-    )
-    assert result.intents == ()
-    assert "no confidence" in _events(result, "risk.violation")[0].detail
-    # Positive control: the same action clears the same gate once the limit that
-    # cannot be expressed for it is not the one declared.
+def test_execute_still_clears_a_limit_it_can_actually_be_measured_against():
+    """`execute()` is only unusable under `min_confidence`, not under every limit."""
     permitted = _run(
         _strategy("        max_drawdown 0.05", action="execute()"),
         length=1,
@@ -708,3 +733,242 @@ def test_an_escalation_is_not_gated_by_a_risk_limit():
     )
     assert result.intents == ()
     assert [e.target for e in result.escalations] == ["RiskDesk"]
+
+
+# ---------------------------------------------------------------------------
+# F4 - a bool is not a measurement
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("hostile", [True, False], ids=["true", "false"])
+def test_a_boolean_measurement_is_unmeasured_not_one_or_zero(hostile):
+    """`bool` is a subclass of `int`, so `float(False)` is a very good number.
+
+    A feed that wrote booleans into `risk.orders_today` would otherwise report a
+    perfectly satisfied limit on every bar. The guard is one `isinstance`, and
+    without a test it is one `isinstance` nobody would miss.
+    """
+    result = _run(
+        _strategy("        max_orders_per_day 10"),
+        length=2,
+        **{"risk.orders_today": (hostile, hostile)},
+    )
+    assert result.intents == ()
+    assert "order count is unmeasured" in _events(result, "risk.violation")[0].detail
+    # Positive control: the same limit, the same bars, a real number under it.
+    permitted = _run(
+        _strategy("        max_orders_per_day 10"),
+        length=2,
+        **{"risk.orders_today": (3, 3)},
+    )
+    assert len(permitted.intents) == 2
+
+
+# ---------------------------------------------------------------------------
+# F5 - the log is the host's only window into suppression
+# ---------------------------------------------------------------------------
+
+
+def test_a_suppression_line_carries_what_intent_emitted_carries():
+    """Two intents withheld on one bar must not be two identical lines.
+
+    `intent.emitted` records the asset; without the same fields here a host
+    reading the log cannot tell which asset it was not asked to trade.
+    """
+    source = (
+        "strategy TwoAssets {\n"
+        "    risk {\n"
+        "        max_drawdown 0.05\n"
+        "    }\n"
+        "    every 1m {\n"
+        "        if TRIGGER > 0 {\n"
+        "            sell(BTC, 0.9)\n"
+        "            sell(ETH, 0.3)\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    module = compile_module(source)
+    result = run_module(module, _frame(1, TRIGGER=(1.0,), **{"risk.drawdown": (0.9,)}))
+    assert result.intents == ()
+    lines = [e.detail for e in _events(result, "intent.suppressed")]
+    assert lines == [
+        "SELL asset=BTC confidence=0.9 withheld by risk limits: max_drawdown",
+        "SELL asset=ETH confidence=0.3 withheld by risk limits: max_drawdown",
+    ]
+
+
+def test_the_violation_line_is_exact_and_spells_the_limit_one_way():
+    """Pins the sentence, not a substring of it.
+
+    `risk.armed` and `risk.violation` both show the declared value, and they used
+    to disagree - one printed `10`, the other `10.0`, because only one had passed
+    through the float coercion the comparison needs.
+    """
+    result = _run(
+        _strategy("        max_orders_per_day 10"),
+        length=1,
+        **{"risk.orders_today": (12,)},
+    )
+    assert _events(result, "risk.armed")[0].detail == (
+        "max_orders_per_day <= 10; measurements: risk.orders_today"
+    )
+    assert _events(result, "risk.violation")[0].detail == (
+        "max_orders_per_day 10: order count observed 12.0 (allowed <= 10)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# F3 - a floor no intent in the program can ever clear is a compile error
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "action", ["buy(BTC)", "sell(BTC)", "execute()"], ids=["buy", "sell", "execute"]
+)
+def test_min_confidence_beside_an_intent_that_states_none_is_rejected(action):
+    with pytest.raises(NanoTypeError) as excinfo:
+        compile_module(_strategy("        min_confidence 0.6", action=action))
+    message = excinfo.value.message
+    assert "min_confidence 0.6" in message
+    assert "suppressed at every bar" in message
+    assert excinfo.value.line > 0 and excinfo.value.column > 0
+
+
+def test_min_confidence_zero_is_the_trap_and_is_rejected_too():
+    """`min_confidence 0` is the natural spelling of "no floor", and is in range.
+
+    It compiled, and then suppressed every intent forever, because absence fails
+    closed. The loader already refuses `min_confidence 5` for suppressing
+    everything forever; this is the same rule where an author can reach it.
+    """
+    with pytest.raises(NanoTypeError, match="min_confidence 0"):
+        compile_module(_strategy("        min_confidence 0", action="buy(BTC)"))
+
+
+@pytest.mark.parametrize("action", ["pause()", "observe()"], ids=["pause", "observe"])
+def test_min_confidence_does_not_reject_intents_it_never_gates(action):
+    """`PAUSE` and `OBSERVE` are never suppressed, so they need no confidence."""
+    module = compile_module(_strategy("        min_confidence 0.6", action=action))
+    result = run_module(module, _frame(1, TRIGGER=(1.0,)))
+    assert len(result.intents) == 1
+
+
+def test_a_declared_confidence_compiles_and_runs_under_the_same_floor():
+    """Positive control for the whole diagnostic: the fix the message names works."""
+    result = _run(
+        _strategy("        min_confidence 0.6", action="buy(BTC, 0.9)"), length=1
+    )
+    assert [i.action for i in result.intents] == ["BUY"]
+
+
+def test_no_risk_block_means_no_confidence_requirement():
+    """The diagnostic must not leak into strategies that declared no floor."""
+    result = _run(_strategy("", action="buy(BTC)"), length=1)
+    assert [i.action for i in result.intents] == ["BUY"]
+
+
+# ---------------------------------------------------------------------------
+# F7 - one validator, two callers
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (-0.1, "fraction of equity"),
+        (float("nan"), "finite number"),
+        (float("inf"), "finite number"),
+        (True, "must be numeric"),
+    ],
+)
+def test_one_validator_answers_for_both_front_doors(value, expected):
+    """They had drifted: only the loader refused a non-finite limit.
+
+    Source cannot spell `nan`, so the shared function is checked directly for the
+    values only raw IR can carry, and through both front doors below for the ones
+    an author can write.
+    """
+    assert expected in (validate_risk_limit("max_drawdown", value) or "")
+
+
+def test_a_range_the_compiler_rejects_the_loader_rejects_too():
+    with pytest.raises(NanoTypeError, match="fraction of equity"):
+        compile_module(_strategy("        max_drawdown 1.5"))
+    document = _raw_module({"max_drawdown": 0.05}).to_dict(include_hash=False)
+    document["nodes"][0]["attrs"]["limits"] = {"max_drawdown": 1.5}
+    with pytest.raises(IRValidationError, match="fraction of equity"):
+        load_module(document)
+
+
+# ---------------------------------------------------------------------------
+# F1 - the CLI must not let a disarmed run look like a quiet one
+# ---------------------------------------------------------------------------
+
+
+GUARDED = (
+    "strategy Guarded {\n"
+    "    risk {\n"
+    "        max_drawdown 0.05\n"
+    "    }\n"
+    "    every 1m {\n"
+    "        if RSI < 30 {\n"
+    "            buy(BTC, 0.9)\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def _cli(argv, capsys):
+    code = main(argv)
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
+@pytest.fixture
+def guarded(tmp_path):
+    path = tmp_path / "guarded.nano"
+    path.write_text(GUARDED, encoding="utf-8")
+    return path
+
+
+def test_replay_refuses_data_that_omits_a_risk_measurement(guarded, tmp_path, capsys):
+    """The silent-disarm case: same strategy, same hash, zero intents, exit 0.
+
+    Fail-closed enforcement means a missing measurement withholds everything, so
+    a replay against the wrong file used to read exactly like a strategy that
+    found no setup - and `--verify` stamped it deterministic, raising confidence
+    in the wrong number.
+    """
+    path = tmp_path / "nodd.csv"
+    path.write_text("timestamp,RSI\n0,20\n60,20\n", encoding="utf-8")
+    code, _, err = _cli(
+        ["replay", str(guarded), "--data", str(path), "--verify"], capsys
+    )
+    assert code == EXIT_DIAGNOSTICS
+    assert "does not supply risk.drawdown" in err
+
+
+def test_replay_surfaces_suppression_in_the_default_text_report(
+    guarded, tmp_path, capsys
+):
+    path = tmp_path / "dd.csv"
+    path.write_text(
+        "timestamp,RSI,risk.drawdown\n0,20,0.01\n60,20,0.9\n", encoding="utf-8"
+    )
+    code, out, _ = _cli(["replay", str(guarded), "--data", str(path)], capsys)
+    assert code == EXIT_OK
+    assert "1 intent(s) withheld by risk limits" in out
+    assert "BUY BTC @0.9" in out
+
+
+def test_an_ungated_replay_says_nothing_about_risk(guarded, tmp_path, capsys):
+    """Positive control for the row above: it shows only when something was withheld."""
+    path = tmp_path / "clean.csv"
+    path.write_text(
+        "timestamp,RSI,risk.drawdown\n0,20,0.01\n60,20,0.01\n", encoding="utf-8"
+    )
+    code, out, _ = _cli(["replay", str(guarded), "--data", str(path)], capsys)
+    assert code == EXIT_OK
+    assert "withheld by risk limits" not in out
