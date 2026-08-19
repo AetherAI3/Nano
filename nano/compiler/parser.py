@@ -435,15 +435,26 @@ class _Parser:
         # with its own keyword, so there is nothing to disambiguate against.
         if self._peek().type == "LBRACE":
             self._advance()
-            while True:
-                token = self._peek()
-                if token.type == "RBRACE":
-                    self._advance()
-                    break
-                if token.type == "EOF":
-                    raise self._error("Unterminated 'agent' block (missing '}')", token)
-                self._expect_keyword("role")
-                role = self._expect("IDENT", "agent role").value
+            token = self._peek()
+            if token.type == "RBRACE":
+                raise self._error(
+                    f"Agent {name_token.value!r} body requires exactly one "
+                    "'role' clause (omit the braces for an unclassified agent)",
+                    token,
+                )
+            if token.type == "EOF":
+                raise self._error("Unterminated 'agent' block (missing '}')", token)
+
+            self._expect_keyword("role")
+            role = self._expect("IDENT", "agent role").value
+
+            token = self._peek()
+            if self._at_keyword("role"):
+                raise self._error(
+                    f"Agent {name_token.value!r} declares 'role' more than once",
+                    token,
+                )
+            self._expect_closing_brace("'agent'")
         return AgentAst(
             name=name_token.value,
             role=role,

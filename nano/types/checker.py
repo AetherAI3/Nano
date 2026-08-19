@@ -63,6 +63,7 @@ from ..ir.schema import (
     RISK_LIMITS,
     TIER_REQUIREMENTS,
     TIERS,
+    validate_integer_magnitude,
     validate_risk_limit,
 )
 from .env import (
@@ -223,6 +224,7 @@ class _Checker:
         self._check_risk()
         self._check_routes()
         self._check_schedules()
+        self._check_emits_nodes()
 
         return TypedProgram(
             strategy=self.strategy,
@@ -338,6 +340,14 @@ class _Checker:
                     param.line,
                     param.column,
                 )
+            if isinstance(param.value, int) and not isinstance(param.value, bool):
+                problem = validate_integer_magnitude(param.value)
+                if problem is not None:
+                    raise self._fail(
+                        f"Param {param.name!r} integer default {problem}",
+                        param.line,
+                        param.column,
+                    )
             declared = (
                 self._resolve_annotation(param.declared_type, param.line, param.column)
                 if param.declared_type is not None
@@ -438,6 +448,12 @@ class _Checker:
     def _check_risk(self) -> None:
         if self.strategy.risk is None:
             return
+        if not self.strategy.risk.limits:
+            raise self._fail(
+                "A risk block requires at least one limit",
+                self.strategy.risk.line,
+                self.strategy.risk.column,
+            )
         seen: Set[str] = set()
         for limit in self.strategy.risk.limits:
             spec = RISK_LIMITS.get(limit.name)
@@ -493,6 +509,27 @@ class _Checker:
         for schedule in self.strategy.schedules:
             for rule in schedule.rules:
                 self._check_rule(rule)
+
+    def _check_emits_nodes(self) -> None:
+        """Refuse source the compiler would lower to an unloadable empty graph."""
+        strategy = self.strategy
+        if any(
+            (
+                strategy.lets,
+                strategy.signatures,
+                strategy.routes,
+                strategy.agents,
+                strategy.schedules,
+                strategy.risk is not None,
+            )
+        ):
+            return
+        raise self._fail(
+            "Strategy produces no IR nodes (add a schedule, agent, derived "
+            "binding, risk limit, signature, or route)",
+            strategy.line,
+            strategy.column,
+        )
 
     def _check_rule(self, rule: RuleAst) -> None:
         self._expect_condition(rule.when, context="rule condition")
