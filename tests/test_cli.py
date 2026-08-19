@@ -210,6 +210,20 @@ def test_non_utf8_source_is_a_diagnostic_not_a_traceback(tmp_path, capsys):
     assert "Traceback" not in err
 
 
+def test_a_utf8_bom_does_not_break_an_otherwise_valid_strategy(tmp_path, capsys):
+    # Several Windows editors write a BOM by default. Reading as plain `utf-8`
+    # kept the U+FEFF in the source, and the lexer reported `Unexpected character`
+    # at 1:1 — pointing at a correct program and naming a character the author
+    # cannot see. A first contribution should not begin there.
+    path = tmp_path / "bom.nano"
+    path.write_text(LEGACY, encoding="utf-8-sig")
+    assert path.read_bytes().startswith(b"\xef\xbb\xbf")
+
+    code, _, err = _run(["check", str(path)], capsys)
+    assert code == EXIT_OK, err
+    assert err == ""
+
+
 def test_non_utf8_market_data_is_a_diagnostic_not_a_traceback(
     strategy, tmp_path, capsys
 ):

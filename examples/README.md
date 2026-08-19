@@ -10,14 +10,14 @@ pieces together.
 
 Wraps a toy risk engine with [`ProvenanceGate`](../nano/bridge/provenance.py)
 so every decision-gate decision — approved or rejected — is signed via
-[Protocol-C](https://github.com/DBarr3/PROTOCOL-C) into an append-only,
+[Protocol-C](https://github.com/AetherAI3/PROTOCOL-C) into an append-only,
 independently verifiable audit log, with zero changes to the strategy or the
 decision itself.
 
 Requires the optional dependency:
 
 ```bash
-pip install aether-protocol-c
+pip install git+https://github.com/AetherAI3/PROTOCOL-C.git   # not yet on PyPI
 ```
 
 Run from the repo root (`pip install -e .` first, or `PYTHONPATH=.`):

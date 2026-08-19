@@ -16,6 +16,7 @@ Package map:
 | ``nano.ir`` | both IR document versions, and the DAG runtimes execute |
 | ``nano.runtime`` | the reference interpreter and the VM |
 | ``nano.bridge`` | decision-gate adapter, backtester, optional provenance |
+| ``nano.watchdog`` | the restricted profile for host-governed controls |
 | ``nano.data`` | the one place that reads a file |
 | ``nano.cli`` | check, compile, replay, visualize |
 | ``nano.aethercode`` | editor language services |

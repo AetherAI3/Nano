@@ -6,7 +6,7 @@
 
 ### Trading and agent rules that run the same way every time — with a receipt.
 
-[![CI](https://github.com/DBarr3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/DBarr3/Nano/actions/workflows/ci.yml)
+[![CI](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
 
@@ -52,7 +52,7 @@ A rule and an approval are different jobs. Nano makes the rule compact, versione
 From a fresh checkout, run the bundled Momentum strategy and then the test suite:
 
 ```bash
-git clone https://github.com/DBarr3/Nano.git
+git clone https://github.com/AetherAI3/Nano.git
 cd Nano
 python -m venv .venv
 
@@ -88,17 +88,19 @@ strategy Momentum {
 
 ## Start with the strategy library
 
-The [strategy library](nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
+The [strategy library](nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas — and deterministic watchdog controls — translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
+
+**[Your first contribution →](docs/first-contribution.md)** walks the whole path once, with a real rule: idea, source, generated IR, deterministic replay, CI, pull request. One command generates the IR fixture and checks the entry before you push it.
 
 The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems.net/nano)** — search and filter by category, cadence or signal, read the source and compiled IR side by side, and open any strategy directly in an editor. Nothing to install, no account needed.
 
-| Momentum | Mean reversion | Trend | Volatility | Volume | Risk | Event volatility |
-| --- | --- | --- | --- | --- | --- | --- |
-| 4 strategies | 3 strategies | 4 strategies | 2 strategies | 2 strategies | 7 strategies | 11 strategies |
+| momentum | mean_reversion | trend | volatility | volume | risk | event_volatility | watchdog |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 rules | 3 rules | 4 rules | 2 rules | 2 rules | 7 rules | 11 rules | 2 rules |
 
 The library is a conformance corpus, not a performance claim, live signal service, or trading recommendation.
 
-[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/DBarr3/Nano/issues/new?template=language-change.yml)
+[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Your first contribution →](docs/first-contribution.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml)
 
 ## From rule to governed decision
 
@@ -161,6 +163,8 @@ strategy TrustedRouteWatchdog {
 ```
 
 Nano does not inspect the network, disable traffic, or decide that a network is hostile. The host measures the route state and supplies `TRUSTED_ROUTE`. Nano only evaluates the declared threshold and returns proposed intents with an ordered execution log.
+
+Working versions of these rules live in [`nano/library/watchdog/`](nano/library/watchdog/), alongside the signal conventions a host has to implement — see [the category's section in the library README](nano/library/README.md#watchdog-signals-watchdog). Contributing one follows the [same path as a strategy](docs/first-contribution.md).
 
 The application's gate can then consider additional context, require operator consent, reject the proposal, or authorize an independently implemented enforcement mechanism.
 
