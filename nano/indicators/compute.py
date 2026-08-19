@@ -50,6 +50,11 @@ def _floats(series: Sequence[Cell]) -> Tuple[Optional[float], ...]:
     return tuple(None if c is None else float(c) for c in series)
 
 
+def _bools(series: Sequence[Cell]) -> Tuple[Optional[bool], ...]:
+    """View a series as booleans, preserving absence."""
+    return tuple(None if c is None else bool(c) for c in series)
+
+
 def _cell(value: Union[Series, Scalar], index: int) -> Optional[float]:
     """Read `value` at `index`, broadcasting scalars across every bar."""
     if isinstance(value, tuple):
@@ -174,6 +179,96 @@ def rolling_sum(values: Series, period: int) -> Series:
     for i in range(len(data)):
         window = _window(data, i, period)
         out.append(None if window is None else sum(window))
+    return tuple(out)
+
+
+# ---------------------------------------------------------------------------
+# temporal and event composition
+# ---------------------------------------------------------------------------
+
+
+def bars_since(values: Series) -> Series:
+    """Bars since the last true cell; a true bar is zero.
+
+    Before the first true cell there is no answer. A gap clears the remembered
+    event, so false cells after a gap stay absent until another true cell occurs.
+    """
+    flags = _bools(values)
+    out: list[Cell] = []
+    distance: Optional[int] = None
+    for flag in flags:
+        if flag is None:
+            distance = None
+            out.append(None)
+        elif flag:
+            distance = 0
+            out.append(0.0)
+        elif distance is None:
+            out.append(None)
+        else:
+            distance += 1
+            out.append(float(distance))
+    return tuple(out)
+
+
+def count_true(values: Series, period: int) -> Series:
+    """Count true cells in the trailing gap-free ``period``-bar window."""
+    flags = _bools(values)
+    out: list[Cell] = []
+    for i in range(len(flags)):
+        if i + 1 < period:
+            out.append(None)
+            continue
+        window = flags[i + 1 - period : i + 1]
+        if any(flag is None for flag in window):
+            out.append(None)
+        else:
+            out.append(float(sum(1 for flag in window if flag)))
+    return tuple(out)
+
+
+def _monotone(values: Series, period: int, *, ascending: bool) -> Series:
+    data = _floats(values)
+    out: list[Cell] = []
+    for i in range(len(data)):
+        window = _window(data, i, period)
+        if window is None:
+            out.append(None)
+            continue
+        pairs = zip(window, window[1:])
+        out.append(
+            all(left < right for left, right in pairs)
+            if ascending
+            else all(left > right for left, right in pairs)
+        )
+    return tuple(out)
+
+
+def rising(values: Series, period: int) -> Series:
+    """True when the trailing ``period`` values are strictly increasing."""
+    return _monotone(values, period, ascending=True)
+
+
+def falling(values: Series, period: int) -> Series:
+    """True when the trailing ``period`` values are strictly decreasing."""
+    return _monotone(values, period, ascending=False)
+
+
+def percentrank(values: Series, period: int) -> Series:
+    """Rank the current value against the preceding ``period`` values, 0..1.
+
+    Ties count at or below the current value. The current cell is deliberately
+    excluded from its own comparison set, which keeps both endpoints reachable.
+    """
+    data = _floats(values)
+    out: list[Cell] = []
+    for i, current in enumerate(data):
+        previous = _window(data, i - 1, period)
+        if current is None or previous is None:
+            out.append(None)
+        else:
+            at_or_below = sum(1 for value in previous if value <= current)
+            out.append(at_or_below / period)
     return tuple(out)
 
 
@@ -666,6 +761,11 @@ _KERNELS: Dict[str, Callable[..., Series]] = {
     "STDDEV": stddev,
     "ZSCORE": zscore,
     "SUM": rolling_sum,
+    "BARS_SINCE": bars_since,
+    "COUNT_TRUE": count_true,
+    "RISING": rising,
+    "FALLING": falling,
+    "PERCENTRANK": percentrank,
     "RSI": rsi,
     "ROC": roc,
     "MOM": momentum,
