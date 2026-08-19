@@ -385,7 +385,7 @@ def test_the_receipt_answers_the_four_questions():
     assert document["watchdog_revision"] == 3
     assert document["ir_hash"] == artifact.canonical_ir_hash
     assert document["source_hash"] == artifact.source_hash
-    assert document["nano_version"] == "1.0.0"
+    assert document["nano_version"] == "1.0.1"
 
     # what matched
     assert any(e["event"] == "condition.evaluated" for e in document["execution_log"])

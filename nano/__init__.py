@@ -26,4 +26,4 @@ Kept dependency-free on purpose: installing pulls in nothing, so a compiled
 artifact cannot change behavior because a transitive dependency did.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
