@@ -140,10 +140,17 @@ def test_public_kernel_count_matches_registry():
     count = len(names())
     assert count == 40
 
-    expected = f"{count} deterministic kernels"
-    for relative_path in ("README.md", "docs/status.md"):
+    expected_by_path = {
+        "README.md": (f"{count} deterministic kernels",),
+        "docs/status.md": (f"{count} deterministic kernels",),
+        "nano/library/README.md": (
+            f"{count} deterministic kernels",
+            f"— {count} of them",
+        ),
+    }
+    for relative_path, expected_phrases in expected_by_path.items():
         text = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
-        assert expected in text
+        assert all(phrase in text for phrase in expected_phrases)
 
 
 @pytest.mark.parametrize(

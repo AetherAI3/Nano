@@ -103,7 +103,7 @@ implied.
 
 ## Signal conventions (baseline entries)
 
-Baseline entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable v0.1.0 IR. A v1 entry does the opposite — it declares its inputs and lets Nano compute the indicator from the 35 deterministic kernels, which is what puts it on v1.0 IR; see [Data contract (v1 entries)](#data-contract-v1-entries). Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
+Baseline entries compare **host-provided named signal series** with numeric literals, which is what keeps them on byte-stable v0.1.0 IR. A v1 entry does the opposite — it declares its inputs and lets Nano compute the indicator from the 40 deterministic kernels, which is what puts it on v1.0 IR; see [Data contract (v1 entries)](#data-contract-v1-entries). Nano never fetches market data in either form. The names and transformations below are conventions a host data feed must implement.
 
 | Pine-style expression | Nano signal | Feed convention |
 | --- | --- | --- |
@@ -282,7 +282,7 @@ A v1 entry declares what it needs and Nano derives the rest, so the host contrac
 | `volume/volume_climax_reversal` | `high`, `low`, `close`, `volume` | `SMA(volume, 20)`, `ATR`, `(close - low) / (high - low)` |
 | `volume/vwap_band_reversion` | `close`, `volume` | `VWAP(close, volume, 20)`, `RSI(close, 14)` |
 
-Only indicators in `nano/indicators/registry.py` may be used — 35 of them. If an idea needs one that is not there, express it with the existing kernels and arithmetic or leave it out; inventing a name silently turns a computed call back into a feed signal the host must supply.
+Only indicators in `nano/indicators/registry.py` may be used — 40 of them. If an idea needs one that is not there, express it with the existing kernels and arithmetic or leave it out; inventing a name silently turns a computed call back into a feed signal the host must supply.
 
 Warm-up is a consequence of the periods, not a setting: `zscore_fade_trend_filtered` cannot emit anything for its first 199 bars, and the VM reports how many bars it discarded rather than counting them as no-signal.
 
