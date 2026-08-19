@@ -1096,6 +1096,48 @@ def test_a_blank_count_at_the_evaluated_bar_is_absent_too():
     assert receipt.missing_inputs == ("UNACCOUNTED_MERGE_COUNT",)
 
 
+@pytest.mark.parametrize(
+    ("stem", "signal"),
+    [
+        (BATCH, "UNACCOUNTED_MERGE_COUNT"),
+        (COVERAGE, "MERGE_COVERAGE_AVAILABLE"),
+        (COVERAGE, "MERGE_COVERAGE_EMPTY"),
+    ],
+)
+@pytest.mark.parametrize(
+    "value",
+    [float("nan"), float("inf"), float("-inf")],
+    ids=("nan", "positive-infinity", "negative-infinity"),
+)
+def test_nonfinite_release_note_inputs_hold_publication_and_replay_canonically(
+    stem, signal, value
+):
+    """#29 publication facts fail closed without losing replay evidence.
+
+    These three signals sit directly on the release-note publication boundary.
+    A non-finite host value must therefore become canonical absence, hold the
+    publication gate, and round-trip through the recorded frame byte-for-byte.
+    """
+    artifact = release_artifact(stem)
+    receipt = evaluate_watchdog(
+        artifact,
+        release_frame(**{signal: value}),
+        created_at=1767225600,
+    )
+
+    assert receipt.input_state == WatchdogState.INPUT_UNAVAILABLE
+    assert receipt.missing_inputs == (signal,)
+    assert receipt.proposed_intents == ()
+    assert receipt.input_frame["signals"][signal][-1] is None
+    assert not publication_cleared([receipt])
+
+    encoded = canonical_json(receipt.to_dict())
+    assert "NaN" not in encoded and "Infinity" not in encoded
+    replayed = replay_watchdog(artifact, receipt)
+    assert canonical_json(replayed.to_dict()) == encoded
+    assert replayed.evaluation_id == receipt.evaluation_id
+
+
 # --------------------------------------------------------------------------
 # the mutation: what the coverage guard is actually holding up
 # --------------------------------------------------------------------------
