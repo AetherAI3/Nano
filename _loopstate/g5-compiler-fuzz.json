@@ -1,0 +1,450 @@
+{
+  "schemaVersion": 2,
+  "loop": "NANO-G5-COMPILER-IR-ADVERSARY",
+  "status": "pass",
+  "generatedAt": "2026-08-19T23:13:38.116186+00:00",
+  "repository": {
+    "branch": "codex/g5-compiler-fuzz-merge",
+    "head": "76b8c85e0598e0cd2762883513ff95fa507d3225",
+    "mainMergeBase": "121f7b6d8ee7c73bbc0d48fe03bd6e45722321a4",
+    "status": [
+      "M nano/fuzzing/campaign.py",
+      " M nano/fuzzing/generators.py",
+      " M tests/test_compiler_fuzz.py"
+    ]
+  },
+  "configuration": {
+    "generatorSeed": 20260819,
+    "validCases": 128,
+    "oneMutationInvalidCases": 128,
+    "semanticEquivalentCases": 42,
+    "pythonHashSeeds": [
+      "0",
+      "1",
+      "7",
+      "42",
+      "4294967295"
+    ],
+    "refs": [
+      "HEAD",
+      "121f7b6d8ee7c73bbc0d48fe03bd6e45722321a4"
+    ]
+  },
+  "summary": {
+    "requestedTargets": 2,
+    "targets": 2,
+    "workers": 10,
+    "defects": 0
+  },
+  "coverage": {
+    "catalog": {
+      "baselineIr": 41,
+      "controls": 53,
+      "strategies": 53,
+      "v1Ir": 12,
+      "watchdog": 8
+    },
+    "receipt": {
+      "canonicalCases": 128,
+      "nonfiniteCases": 3,
+      "oversizedCases": 6,
+      "replayCases": 128
+    },
+    "risk": {
+      "actuatingCases": 129,
+      "equalityCases": 128,
+      "malformedCapacityCases": 8
+    }
+  },
+  "targets": [
+    {
+      "ref": "HEAD",
+      "resolvedSha": "76b8c85e0598e0cd2762883513ff95fa507d3225",
+      "stableAcrossHashSeeds": true,
+      "workers": [
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "0",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "1",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "7",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "42",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "4294967295",
+          "exitCode": 0
+        }
+      ],
+      "defects": []
+    },
+    {
+      "ref": "121f7b6d8ee7c73bbc0d48fe03bd6e45722321a4",
+      "resolvedSha": "121f7b6d8ee7c73bbc0d48fe03bd6e45722321a4",
+      "stableAcrossHashSeeds": true,
+      "workers": [
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "0",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "1",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "7",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "42",
+          "exitCode": 0
+        },
+        {
+          "campaign": {
+            "corpusDigest": "sha256:c63b7206a86843577487ace0b4c8d45840cb243ac825ba3b9c26cc1b2e85e4e4",
+            "coverage": {
+              "catalog": {
+                "baselineIr": 41,
+                "controls": 53,
+                "strategies": 53,
+                "v1Ir": 12,
+                "watchdog": 8
+              },
+              "receipt": {
+                "canonicalCases": 128,
+                "nonfiniteCases": 3,
+                "oversizedCases": 6,
+                "replayCases": 128
+              },
+              "risk": {
+                "actuatingCases": 129,
+                "equalityCases": 128,
+                "malformedCapacityCases": 8
+              }
+            },
+            "defects": [],
+            "families": {
+              "oneMutationInvalid": 128,
+              "semanticEquivalent": 42,
+              "valid": 128
+            },
+            "requestedCases": 128,
+            "seed": 20260819,
+            "semanticDigest": "sha256:88be88138f0cec11af246e3d4db7b228e5843380207f9e53c8d0981dac0b8c59"
+          },
+          "pythonHashSeed": "4294967295",
+          "exitCode": 0
+        }
+      ],
+      "defects": []
+    }
+  ],
+  "defects": [],
+  "coordination": {
+    "lane": "G5",
+    "ownedPaths": [
+      "nano/fuzzing/**",
+      "scripts/compiler_fuzz.py",
+      "tests/test_compiler_fuzz.py",
+      "_loopstate/g5-compiler-fuzz.json"
+    ],
+    "productionFixPolicy": "Minimized defects receive separate narrow follow-up commits/PRs.",
+    "mergeConstraint": "Source/IR acceptance parity 1.0.7 and receipt canonical limits 1.0.8 have landed. G5 is active on their exact main; provisional 1.0.9 remains coordinator-owned. No version, push, PR, or merge before G0 review.",
+    "currentBlocker": "None in the G5 surface. The former receipt integer-641 and containers-65 ledger entries are required to remain closed."
+  }
+}
