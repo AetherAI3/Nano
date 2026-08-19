@@ -4,8 +4,16 @@ The package documents four properties in prose — no network, no ambient clock,
 ambient randomness, no mandatory third-party dependency — and until now all four
 held by code review alone. Prose does not go red. These do.
 
-The import scan is deliberately an AST walk rather than a text grep: a grep for
-``socket`` matches a comment and misses ``from a import socket as s``.
+The scan is an AST walk rather than a text grep for three reasons a grep cannot
+cover: it does not match comments or docstrings, it resolves import aliases
+(``import time as t`` and ``from time import time as now`` both normalise to
+``time.time``), and it flattens dotted chains, so ``datetime.datetime.now()``
+and ``datetime.now()`` — different AST shapes, same ambient read — are one rule.
+
+Everything is normalised to a dotted path before matching. `import datetime`
+followed by `datetime.datetime.now` and `from datetime import datetime` followed
+by `datetime.now` both resolve to ``datetime.datetime.now``, which is the entry
+in ``AMBIENT_READS``.
 """
 
 import ast
@@ -43,25 +51,35 @@ NETWORK_MODULES = frozenset(
 # anywhere in this package.
 ENTROPY_MODULES = frozenset({"random", "secrets", "uuid"})
 
-# `time` and `datetime` are importable — `nano/data/frames.py` parses ISO-8601
+# `time` and `datetime` stay importable: `nano/data/frames.py` parses ISO-8601
 # timestamps out of a CSV, which is reading data, not reading a clock. What is
-# banned is *sampling* the ambient clock or the ambient entropy pool.
-AMBIENT_CALLS = frozenset(
+# banned is *sampling* an ambient source. Matched as a prefix, so `os.environ`
+# also covers `os.environ.get(...)` and `os.environ[...]`.
+AMBIENT_READS = frozenset(
     {
-        ("time", "time"),
-        ("time", "time_ns"),
-        ("time", "monotonic"),
-        ("time", "monotonic_ns"),
-        ("time", "perf_counter"),
-        ("time", "perf_counter_ns"),
-        ("datetime", "now"),
-        ("datetime", "utcnow"),
-        ("datetime", "today"),
-        ("date", "today"),
-        ("os", "urandom"),
-        ("os", "getenv"),
+        "time.time",
+        "time.time_ns",
+        "time.monotonic",
+        "time.monotonic_ns",
+        "time.perf_counter",
+        "time.perf_counter_ns",
+        "time.process_time",
+        "time.localtime",
+        "time.gmtime",
+        "datetime.datetime.now",
+        "datetime.datetime.utcnow",
+        "datetime.datetime.today",
+        "datetime.date.today",
+        "os.urandom",
+        "os.getenv",
+        "os.environ",
+        "os.times",
+        "os.cpu_count",
     }
 )
+
+# Dynamic import is a hole straight through every module-level rule above.
+DYNAMIC_IMPORTS = frozenset({"__import__", "importlib.import_module"})
 
 # The single permitted third-party import, and the single file allowed to make
 # it. `nano/bridge/provenance.py` guards it behind try/except and raises
@@ -71,7 +89,61 @@ OPTIONAL_DEPENDENCIES = {"aether_protocol_c": "nano/bridge/provenance.py"}
 STDLIB = set(sys.stdlib_module_names)
 
 
-def _imports(tree):
+def _alias_map(tree: ast.AST) -> dict:
+    """Local name -> the dotted path it refers to.
+
+    ``import time as t`` binds ``t`` to ``time``; ``from datetime import
+    datetime`` binds ``datetime`` to ``datetime.datetime``; ``from os import
+    urandom as rand`` binds ``rand`` to ``os.urandom``. Relative imports are
+    in-package and bind nothing interesting.
+    """
+    aliases = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for entry in node.names:
+                if entry.asname:
+                    aliases[entry.asname] = entry.name
+                else:
+                    # `import os.path` binds the top-level name `os`.
+                    head = entry.name.split(".")[0]
+                    aliases[head] = head
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            for entry in node.names:
+                aliases[entry.asname or entry.name] = f"{node.module}.{entry.name}"
+    return aliases
+
+
+def _dotted(node: ast.AST) -> list:
+    """Flatten an attribute chain into its parts, innermost first.
+
+    ``datetime.datetime.now`` -> ``["datetime", "datetime", "now"]``. Anything
+    not rooted in a bare name (``self.frame.timestamps``, a call result) returns
+    empty, because it cannot be resolved statically.
+    """
+    parts = []
+    while isinstance(node, ast.Attribute):
+        parts.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name):
+        return []
+    parts.append(node.id)
+    parts.reverse()
+    return parts
+
+
+def _resolve(node: ast.AST, aliases: dict):
+    """The dotted path `node` refers to, or None if it is not import-rooted."""
+    parts = _dotted(node)
+    if not parts or parts[0] not in aliases:
+        return None
+    return ".".join([aliases[parts[0]], *parts[1:]])
+
+
+def _banned_prefix(path: str, banned) -> bool:
+    return any(path == entry or path.startswith(entry + ".") for entry in banned)
+
+
+def _imports(tree: ast.AST) -> list:
     """Every absolute top-level module name imported by `tree`."""
     names = []
     for node in ast.walk(tree):
@@ -89,10 +161,45 @@ def _parsed():
         )
 
 
+def _references(tree: ast.AST):
+    """Every statically resolvable dotted reference in `tree`, with its aliases."""
+    aliases = _alias_map(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Attribute, ast.Name)):
+            resolved = _resolve(node, aliases)
+            if resolved is not None:
+                yield resolved
+
+
 def test_the_scan_actually_reads_the_package():
     """A guard on the guard: an empty file list makes every check below vacuous."""
     assert len(SOURCES) >= 30, f"only found {len(SOURCES)} modules under nano/"
     assert any(name.endswith("runtime/receipt.py") for name, _ in _parsed())
+
+
+def test_the_scan_resolves_aliases_and_dotted_chains():
+    """A guard on the guard: prove the resolver sees each shape it claims to.
+
+    Without this, a resolver that silently returned None for everything would
+    make every scan below pass on an empty offender list.
+    """
+    tree = ast.parse(
+        "import datetime\n"
+        "import time as t\n"
+        "from time import time as now\n"
+        "from os import urandom\n"
+        "a = datetime.datetime.now()\n"
+        "b = t.monotonic()\n"
+        "c = now()\n"
+        "d = urandom(8)\n"
+    )
+    resolved = set(_references(tree))
+    assert {
+        "datetime.datetime.now",
+        "time.monotonic",
+        "time.time",
+        "os.urandom",
+    } <= resolved
 
 
 def test_nothing_in_nano_can_reach_the_network():
@@ -116,14 +223,29 @@ def test_nothing_in_nano_samples_ambient_randomness():
 
 
 def test_nothing_in_nano_reads_an_ambient_clock_or_environment():
+    offenders = [
+        (name, resolved)
+        for name, tree in _parsed()
+        for resolved in _references(tree)
+        if _banned_prefix(resolved, AMBIENT_READS)
+    ]
+    assert offenders == []
+
+
+def test_nothing_in_nano_imports_dynamically():
+    """A dynamic import routes straight around every module-level rule above."""
     offenders = []
     for name, tree in _parsed():
+        aliases = _alias_map(tree)
         for node in ast.walk(tree):
-            if not isinstance(node, ast.Attribute):
+            if not isinstance(node, ast.Call):
                 continue
-            base = node.value
-            if isinstance(base, ast.Name) and (base.id, node.attr) in AMBIENT_CALLS:
-                offenders.append((name, f"{base.id}.{node.attr}"))
+            if isinstance(node.func, ast.Name) and node.func.id == "__import__":
+                offenders.append((name, "__import__"))
+                continue
+            resolved = _resolve(node.func, aliases)
+            if resolved is not None and _banned_prefix(resolved, DYNAMIC_IMPORTS):
+                offenders.append((name, resolved))
     assert offenders == []
 
 

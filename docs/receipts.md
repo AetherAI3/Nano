@@ -33,7 +33,7 @@ another.
 
 | Rule | Value | Why |
 |---|---|---|
-| Object key order | **sorted**, byte-wise over the escaped form | No fixed-order table to keep in step with the code, and immune to the order a dictionary happened to be built in |
+| Object key order | **sorted by Unicode code point** — Python's `sorted()` on `str`, which is what `json.dumps(sort_keys=True)` does | No fixed-order table to keep in step with the code, and immune to the order a dictionary happened to be built in |
 | Array order | **preserved** | In a run log, order *is* the meaning |
 | Whitespace | none — `separators=(",", ":")` | One artifact, not one per formatter |
 | Non-ASCII | escaped — `ensure_ascii=True`, encoded as ASCII | Survives any transport, console codepage, or editor. A non-ASCII strategy name appears as `\uXXXX`, and the escaped form is what is hashed |
@@ -48,13 +48,41 @@ This continues the convention `NanoModule.content_hash` has always used
 same way the receipt around it was. The two deliberate additions are
 `allow_nan=False` and the explicit ASCII encode.
 
+### Not RFC 8785
+
+This is **not** JCS ([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)). JCS
+sorts keys by UTF-16 code *unit*; Python sorts by code *point*, and the two
+disagree for keys above U+FFFF. They also differ on number formatting. A JCS
+implementation will not reproduce these bytes, so verify a Nano receipt with a
+Nano-compatible encoder — or with `canonical_bytes` itself.
+
+Reachable in practice: `frame_digest` uses signal names as object keys, and
+`host` keys are whatever the caller passed.
+
 ### Newlines
 
 The canonical form contains **no line terminator**. A writer that frames a
 receipt as a file or as a [JSON Lines](https://jsonlines.org/) record appends
 exactly one `\n`; that byte is framing, not content, and is **not** covered by
-`receipt_digest`. `nano replay --report receipt` prints one line, so piping a
-series of runs into a file produces valid JSONL.
+`receipt_digest`.
+
+`nano replay --report receipt` writes the canonical bytes plus exactly one `\n`,
+on every platform — it goes to the byte stream rather than through `print`,
+whose text wrapper would rewrite that byte to `\r\n` on Windows. So the consumer
+recipe is exact:
+
+```sh
+nano replay s.nano --data bars.csv --report receipt > receipt.json
+# digest = sha256 of everything except the final byte
+```
+
+### Integers
+
+JSON has one number type. Timestamps, bar counts, and warm-up counts are emitted
+as JSON integers, and every one Nano produces is far inside ±2^53, so a
+JavaScript `JSON.parse` consumer reads them exactly. A `host` value beyond that
+range will lose precision in such a consumer — Nano will emit it faithfully, but
+JavaScript cannot read it back.
 
 ### Floats
 
@@ -212,6 +240,38 @@ Drift is detected for each of the three things that can change:
 | Mutate an input bar | `/inputs/frameHash`, and usually `/run/...` |
 | Mutate a declared param | `/identity/moduleHash`, `/identity/params/N/value` |
 
+### Two different failures
+
+`verify_run` and `Backtester.verify_replay` raise **two** exception types, and
+they mean opposite things:
+
+| Raised | Means |
+|---|---|
+| `ReplayDivergence` | The run is not reproducible. Two identical inputs gave different bytes. |
+| `ReceiptError` (a `ValueError`) | The run produced a value the canonical form cannot represent — a non-finite float, a foreign scalar type, a non-string object key. The run may be perfectly deterministic. |
+
+They are deliberately not merged. `except ReplayDivergence` will **not** catch a
+`ReceiptError`; catch both if you want "the verification did not succeed".
+
+### Behavior change in this release
+
+`Backtester.verify_replay` and `nano replay --verify` used to compare the two
+runs as Python dictionaries. They now compare canonical bytes, which is stricter
+in two ways that can surface as new failures in existing, previously-passing
+deployments:
+
+- A gate that returns a **non-`bool`, non-`float` scalar** — `numpy.bool_`,
+  `decimal.Decimal` from a NUMERIC database column — now raises `ReceiptError`
+  instead of quietly comparing equal. Convert at the gate boundary:
+  `bool(value)`, `float(value)`.
+- A gate whose answer changes *type* between runs while keeping the same value
+  (`True` one run, `1` the next) now raises `ReplayDivergence`. It always was
+  nondeterministic; the old comparison could not see it, because Python holds
+  `True == 1`.
+
+Both are intentional. A comparison that cannot distinguish `true` from `1`
+cannot underwrite a claim about bytes.
+
 ---
 
 ## 5. Authenticity — what a receipt is *not*
@@ -235,8 +295,14 @@ the emitted shape, in the same commit that regenerates `tests/golden/`.
 A **Nano version bump** also moves every golden receipt, because
 `identity.nanoVersion` is part of the artifact. That is not a format change and
 does not bump `receiptVersion`; regenerate the goldens with
-`py -3.11 tests/test_receipts.py`. The golden test distinguishes the two cases
+`py -3.11 tests/regen_goldens.py`. The golden test distinguishes the two cases
 in its failure message.
+
+The member names of every section are pinned separately, in
+`test_the_receipt_shape_is_pinned_to_this_version`. The goldens alone cannot
+guard the shape, because they are regenerated as a matter of routine — a new
+member could ride along in that regeneration unnoticed. Editing that pin is the
+explicit act that means `receiptVersion` has to move.
 
 ### You may depend on
 

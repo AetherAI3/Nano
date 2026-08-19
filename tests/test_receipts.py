@@ -9,7 +9,11 @@ either way, it is written against ``canonical_bytes``.
 """
 
 import json
+import subprocess
+import sys
+from decimal import Decimal
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -17,6 +21,7 @@ from nano import __version__ as NANO_VERSION
 from nano.bridge import Backtester, Decision, ReplayDivergence as BridgeDivergence
 from nano.compiler import compile_module, compile_source
 from nano.ir.graph import StrategyGraph
+from nano.ir.module import NanoModule
 from nano.ir.schema import NANO_IR_VERSION_1_0
 from nano.runtime.interpreter import MarketFrame, execute
 from nano.runtime.receipt import (
@@ -25,7 +30,6 @@ from nano.runtime.receipt import (
     ReplayDivergence,
     build_receipt,
     canonical_bytes,
-    canonical_text,
     differences,
     digest_of,
     frame_digest,
@@ -34,7 +38,8 @@ from nano.runtime.receipt import (
 )
 from nano.runtime.vm import run_module
 
-GOLDEN = Path(__file__).resolve().parent / "golden"
+ROOT = Path(__file__).resolve().parent.parent
+GOLDEN = ROOT / "tests" / "golden"
 
 
 # -- fixtures -----------------------------------------------------------------
@@ -130,6 +135,21 @@ def test_canonical_bytes_are_sorted_compact_and_ascii():
     assert canonical_bytes(document) == b'{"a":{"y":[1,2],"z":"\\u00e9"},"b":1}'
 
 
+def test_keys_sort_by_code_point_not_by_escaped_byte():
+    """Pins which of two plausible sort rules is the real one.
+
+    `json.dumps(sort_keys=True)` sorts the *unescaped* strings by Unicode code
+    point. A rule of "byte-wise over the escaped form" — which this document
+    claimed for one revision — would put `é` first, because its escape begins
+    with a backslash (0x5C) and `a` is 0x61. Reachable: `frame_digest` uses
+    signal names as object keys, and `host` keys are caller-supplied.
+
+    This is also where Nano departs from RFC 8785 / JCS, which sorts by UTF-16
+    code unit.
+    """
+    assert canonical_bytes({"z": 1, "é": 2, "a": 3}) == b'{"a":3,"z":1,"\\u00e9":2}'
+
+
 def test_canonical_bytes_carry_no_line_terminator():
     # The canonical form is the digested text and nothing else. Framing it as a
     # file or a JSONL record appends exactly one LF, which is not digested.
@@ -157,13 +177,13 @@ def test_non_finite_floats_are_refused(value):
 
 
 def test_float_formatting_is_pinned():
-    assert canonical_text({"v": 0.1 + 0.2}) == '{"v":0.30000000000000004}'
-    assert canonical_text({"v": 1e308}) == '{"v":1e+308}'
-    assert canonical_text({"v": 5e-324}) == '{"v":5e-324}'
+    assert canonical_bytes({"v": 0.1 + 0.2}) == b'{"v":0.30000000000000004}'
+    assert canonical_bytes({"v": 1e308}) == b'{"v":1e+308}'
+    assert canonical_bytes({"v": 5e-324}) == b'{"v":5e-324}'
     # An integral float keeps its fractional marker, so `3.0` and `3` do not
     # collide in the bytes even though Python says they are equal.
-    assert canonical_text({"v": 3.0}) == '{"v":3.0}'
-    assert canonical_text({"v": 3}) == '{"v":3}'
+    assert canonical_bytes({"v": 3.0}) == b'{"v":3.0}'
+    assert canonical_bytes({"v": 3}) == b'{"v":3}'
 
 
 def test_negative_zero_is_distinguishable_in_bytes_but_not_in_dicts():
@@ -617,6 +637,85 @@ def test_cli_receipt_output_is_a_single_json_lines_record(cli_files, capsys):
     assert json.loads(out)["receiptVersion"] == RECEIPT_VERSION
 
 
+def test_cli_receipt_bytes_are_exact_through_a_real_subprocess(cli_files):
+    """The framing promise is about bytes on a pipe, and only a pipe can test it.
+
+    `capsys` captures into an in-memory buffer that performs no newline
+    translation, so the two tests above are structurally blind to the bug this
+    one exists for: `print` goes through a text wrapper that rewrites `\\n` to
+    `os.linesep`, and on Windows the receipt was leaving with `\\r\\n` — two
+    framing bytes where `docs/receipts.md` §1 promises one. A consumer digesting
+    everything but the last byte got a mismatch.
+    """
+    strategy, bars = cli_files
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "nano.cli",
+            "replay",
+            str(strategy),
+            "--data",
+            str(bars),
+            "--report",
+            "receipt",
+        ],
+        cwd=str(ROOT),
+        capture_output=True,  # deliberately NOT text=True: raw bytes or nothing
+    )
+    assert done.returncode == 0, done.stderr.decode()
+
+    module = compile_module(PARAM_SOURCE)
+    frame = MarketFrame(
+        timestamps=(1768435200, 1768435260, 1768435320),
+        signals={"close": (100.0, 105.0, 101.0)},
+    )
+    expected = canonical_bytes(build_receipt(module, frame, run_module(module, frame)))
+
+    assert done.stdout == expected + b"\n"
+    assert not done.stdout.endswith(b"\r\n")
+    # The documented consumer recipe: strip the one framing byte, digest the rest.
+    assert digest_of(done.stdout[:-1]) == receipt_digest(
+        build_receipt(module, frame, run_module(module, frame))
+    )
+
+
+def test_cli_verify_compares_bytes_not_dict_equality(cli_files, capsys, monkeypatch):
+    """The other half of the bug this branch fixes.
+
+    `verify_replay` in the bridge is locked by its own test; `nano replay
+    --verify` was not, and reverting it to `again != receipt` left the suite
+    green. The two injected results are dict-equal and differ only in the JSON
+    type of one field.
+    """
+    from nano.cli import commands
+    from nano.runtime.effects import Intent
+    from nano.runtime.vm import ModuleResult
+
+    first = ModuleResult(
+        intents=(Intent(action="BUY", timestamp=0, asset="BTC", confidence=1.0),),
+        escalations=(),
+        log=(),
+    )
+    second = ModuleResult(
+        intents=(Intent(action="BUY", timestamp=0, asset="BTC", confidence=1),),
+        escalations=(),
+        log=(),
+    )
+    assert first.to_dict() == second.to_dict()  # the premise: dict-blind, byte-visible
+
+    results = iter([first, second])
+    monkeypatch.setattr(commands, "run_module", lambda *a, **k: next(results))
+
+    strategy, bars = cli_files
+    code, _, err = _cli(
+        ["replay", str(strategy), "--data", str(bars), "--verify"], capsys
+    )
+    assert code == 1
+    assert "not deterministic" in err
+    assert "/run/intents/0/confidence" in err
+
+
 def test_cli_json_report_still_has_its_original_shape(cli_files, capsys):
     """`--report json` is an existing surface; the receipt is added beside it."""
     strategy, bars = cli_files
@@ -626,6 +725,159 @@ def test_cli_json_report_still_has_its_original_shape(cli_files, capsys):
     legacy = json.loads(out)
     assert legacy["moduleHash"].startswith("sha256:")
     assert "receiptVersion" not in legacy
+
+
+# -- refusals that must name what they refused --------------------------------
+
+
+def test_a_foreign_scalar_is_named_by_module_and_class():
+    """`numpy.bool_` reports `bool` as its class name.
+
+    Naming it unqualified produced "bool is not canonically encodable (allowed:
+    ... boolean ...)", which reads as a bug in the encoder rather than a report
+    about the caller's value.
+    """
+    NumpyLikeBool = type("bool", (), {})
+    with pytest.raises(ReceiptError, match=r"test_receipts\.bool"):
+        canonical_bytes({"approved": NumpyLikeBool()})
+
+
+def test_a_decimal_is_refused_rather_than_silently_encoded():
+    """Any NUMERIC-column database driver hands back one of these."""
+    with pytest.raises(ReceiptError, match=r"decimal\.Decimal"):
+        canonical_bytes({"price": Decimal("1.5")})
+
+
+def test_a_mapping_that_is_not_a_dict_is_refused_with_a_path():
+    # `json.dumps` rejects this too, but with a bare TypeError pointing at
+    # nothing, which is useless inside a large `host` structure.
+    with pytest.raises(ReceiptError, match=r"/host/limits"):
+        canonical_bytes({"host": {"limits": MappingProxyType({"a": 1})}})
+
+
+def test_a_self_referential_document_is_refused_rather_than_recursing():
+    looped: dict = {"host": {}}
+    looped["host"]["self"] = looped
+    with pytest.raises(ReceiptError, match="contains itself"):
+        canonical_bytes(looped)
+
+
+def test_a_lone_surrogate_is_refused():
+    # `ensure_ascii` would turn this into a `\\udcff` escape that no consumer can
+    # decode, quietly breaking the "survives any transport" promise.
+    with pytest.raises(ReceiptError, match="surrogate"):
+        canonical_bytes({"detail": "bad \udcff byte"})
+
+
+def test_valid_non_ascii_text_still_encodes():
+    # The surrogate guard must not become a ban on international text.
+    assert canonical_bytes({"n": "stratégie ✓"}) == b'{"n":"strat\\u00e9gie \\u2713"}'
+
+
+# -- conventions the artifact promises ----------------------------------------
+
+
+def test_signal_names_are_sorted_not_left_in_frame_order():
+    """Otherwise the artifact inherits the column order of whatever CSV it read."""
+    frame = MarketFrame(
+        timestamps=(0, 60), signals={"zeta": (1.0, 2.0), "alpha": (3.0, 4.0)}
+    )
+    module = compile_module(ZSCORE_SOURCE)
+    receipt = build_receipt(module, frame, run_module(module, _frame(close=(1.0, 2.0))))
+    assert receipt["inputs"]["signals"] == ["alpha", "zeta"]
+    assert receipt["inputs"]["signals"] != list(frame.signals)
+
+
+def test_the_effect_manifest_keeps_declared_order_not_sorted_order():
+    """`moduleHash` is taken over the manifest as spelled.
+
+    Emitting a sorted copy beside that hash would make the receipt disagree with
+    the number printed next to it. `sign.emit` before `log.append` is canonical
+    `EFFECT_ORDER` and is *not* sorted order, which is what makes the two
+    distinguishable at all.
+    """
+    document = compile_module(ZSCORE_SOURCE).to_dict(include_hash=False)
+    document["effects"] = ["intent.emit", "sign.emit", "log.append"]
+    module = NanoModule.from_dict(document)
+    frame = _frame(close=(1.0, 3.0, 2.0, 8.0, 5.0))
+
+    effects = build_receipt(module, frame, run_module(module, frame))["identity"][
+        "effects"
+    ]
+    assert effects == ["intent.emit", "sign.emit", "log.append"]
+    assert effects != sorted(effects)
+
+
+def test_host_context_is_deep_copied_out_of_the_caller():
+    """A receipt is a record; it must not keep aliasing a live caller structure."""
+    module, frame = _drift_run()
+    live = {"deployment": {"id": "a"}}
+    receipt = build_receipt(module, frame, run_module(module, frame), host=live)
+    live["deployment"]["id"] = "b"
+    assert receipt["host"] == {"deployment": {"id": "a"}}
+
+
+def test_differences_reports_a_length_change_and_the_elements_too():
+    """A truncated log whose surviving entries also changed has two problems.
+
+    Reporting only the length would send a reader looking for one.
+    """
+    drift = differences({"log": [1, 2, 3]}, {"log": [9, 2]})
+    assert "/log[length]" in drift
+    assert "/log/0" in drift
+
+
+RECEIPT_SHAPE = {
+    "": {"receiptVersion", "identity", "inputs", "run", "provenance", "host"},
+    "identity": {
+        "nanoVersion",
+        "irVersion",
+        "compiler",
+        "module",
+        "moduleHash",
+        "tier",
+        "effects",
+        "warmupDeclared",
+        "reasoningRequired",
+        "params",
+    },
+    "inputs": {"bars", "signals", "frameHash", "firstTimestamp", "lastTimestamp"},
+    "run": {"intents", "escalations", "log", "warmupBarsSkipped"},
+    "provenance": {"sourceHash"},
+}
+
+
+def test_the_receipt_shape_is_pinned_to_this_version():
+    """EDITING `RECEIPT_SHAPE` MEANS BUMPING `RECEIPT_VERSION`.
+
+    The golden files pin the bytes, but they are regenerated as a matter of
+    routine — on every Nano version bump, because `identity.nanoVersion` is part
+    of the artifact. That makes them the wrong guard against a *shape* change,
+    which could ride along in the same regeneration unnoticed. This pins the
+    member names independently of any value in them.
+    """
+    module = compile_module(PARAM_SOURCE)
+    frame = _frame(close=(1.0, 2.0, 9.0, 9.5, 10.0))
+    receipt = build_receipt(
+        module, frame, run_module(module, frame), host={"operator": "ci"}
+    )
+    # A maximal receipt: every optional section present.
+    assert set(receipt) == RECEIPT_SHAPE[""]
+    for section in ("identity", "inputs", "run", "provenance"):
+        assert set(receipt[section]) == RECEIPT_SHAPE[section], section
+
+
+def test_optional_members_are_the_only_ones_a_minimal_receipt_omits():
+    """The pin above is maximal; this fixes exactly which members may be absent."""
+    module = compile_module(ZSCORE_SOURCE)
+    empty = MarketFrame(timestamps=(), signals={"close": ()})
+    receipt = build_receipt(module, empty, run_module(module, empty))
+    assert RECEIPT_SHAPE[""] - set(receipt) == {"host"}
+    assert RECEIPT_SHAPE["identity"] - set(receipt["identity"]) == {"params"}
+    assert RECEIPT_SHAPE["inputs"] - set(receipt["inputs"]) == {
+        "firstTimestamp",
+        "lastTimestamp",
+    }
 
 
 # -- pinned hashes ------------------------------------------------------------
@@ -671,7 +923,7 @@ def test_a_receipt_digest_addresses_exactly_the_stored_artifact():
 # -- golden files -------------------------------------------------------------
 
 
-def _golden_cases():
+def golden_cases():
     """Named runs whose exact bytes are checked into the repository."""
     plain = compile_module(ZSCORE_SOURCE)
     plain_frame = _frame(close=(1.0, 3.0, 2.0, 8.0, 5.0))
@@ -696,11 +948,11 @@ def _golden_cases():
     }
 
 
-@pytest.mark.parametrize("name", sorted(_golden_cases()))
+@pytest.mark.parametrize("name", sorted(golden_cases()))
 def test_golden_receipts_are_byte_for_byte_unchanged(name):
     """The receipt format is a published artifact; changing it must be deliberate.
 
-    Regenerate with `py -3.11 tests/test_receipts.py` after an *intentional*
+    Regenerate with `py -3.11 tests/regen_goldens.py` after an *intentional*
     change, and bump ``RECEIPT_VERSION`` in the same commit if the shape moved.
 
     Note that a Nano version bump legitimately moves every one of these, because
@@ -710,7 +962,7 @@ def test_golden_receipts_are_byte_for_byte_unchanged(name):
     path = GOLDEN / f"receipt_{name}.json"
     assert path.exists(), f"missing golden file {path.name}"
 
-    current = _golden_cases()[name]
+    current = golden_cases()[name]
     stored_bytes = path.read_bytes()
     if stored_bytes == canonical_bytes(current):
         return
@@ -724,31 +976,20 @@ def test_golden_receipts_are_byte_for_byte_unchanged(name):
     pytest.fail(
         f"{path.name} no longer matches: {hint}.\n"
         f"  drifted at: {', '.join(drift) or '(byte-level only)'}\n"
-        f"  regenerate: py -3.11 tests/test_receipts.py"
+        f"  regenerate: py -3.11 tests/regen_goldens.py"
     )
 
 
 def test_golden_files_parse_as_json_and_declare_the_current_version():
-    for name, receipt in _golden_cases().items():
+    for name, receipt in golden_cases().items():
         stored = json.loads((GOLDEN / f"receipt_{name}.json").read_bytes())
         assert stored["receiptVersion"] == RECEIPT_VERSION
-        assert stored == json.loads(canonical_text(receipt))
+        assert stored == json.loads(canonical_bytes(receipt))
 
 
 def test_the_golden_corpus_covers_more_than_one_shape():
     """A guard on the guard: an empty case list would make the checks vacuous."""
-    cases = _golden_cases()
+    cases = golden_cases()
     assert len(cases) >= 4
     assert {len(c["run"]["intents"]) for c in cases.values()} >= {0, 1}
     assert any(c["run"]["escalations"] for c in cases.values())
-
-
-def _rewrite_goldens():  # pragma: no cover - developer tool
-    GOLDEN.mkdir(exist_ok=True)
-    for name, receipt in _golden_cases().items():
-        (GOLDEN / f"receipt_{name}.json").write_bytes(canonical_bytes(receipt))
-        print(f"wrote receipt_{name}.json")
-
-
-if __name__ == "__main__":  # pragma: no cover - developer tool
-    _rewrite_goldens()
