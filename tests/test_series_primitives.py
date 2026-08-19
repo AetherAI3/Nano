@@ -1,10 +1,15 @@
 """Golden, gap, causality, typing, and replay tests for series primitives."""
 
+from pathlib import Path
+
 import pytest
 
 from nano.compiler import NanoTypeError, compile_module
-from nano.indicators import evaluate, lookup
+from nano.indicators import evaluate, lookup, names
 from nano.runtime import MarketFrame, run_module
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _frame(**signals):
@@ -129,6 +134,16 @@ def test_registry_signatures_and_warmups_are_exact():
         assert spec.signature_text() == signature
         periods = () if name == "BARS_SINCE" else (3,)
         assert spec.lookback(periods) == lookback
+
+
+def test_public_kernel_count_matches_registry():
+    count = len(names())
+    assert count == 40
+
+    expected = f"{count} deterministic kernels"
+    for relative_path in ("README.md", "docs/status.md"):
+        text = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+        assert expected in text
 
 
 @pytest.mark.parametrize(

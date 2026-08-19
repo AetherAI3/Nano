@@ -85,7 +85,7 @@ strategy Momentum {
 ```
 <!-- README-EXAMPLE:END -->
 
-`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 35 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
+`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 40 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
 
 ## Start with the strategy library
 
