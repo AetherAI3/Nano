@@ -3,20 +3,20 @@
   "type": "NanoStrategyCatalog",
   "schemaVersion": 1,
   "metadataVersion": "StrategyMetadataV1",
-  "strategyCount": 53,
+  "strategyCount": 55,
   "categoryCounts": {
     "event_volatility": 11,
-    "mean_reversion": 6,
+    "mean_reversion": 7,
     "momentum": 6,
     "risk": 7,
-    "trend": 7,
+    "trend": 8,
     "volatility": 4,
     "volume": 4,
     "watchdog": 8
   },
   "irMaturityCounts": {
     "baseline": 41,
-    "v1": 12
+    "v1": 14
   },
   "strategies": [
     {
@@ -477,6 +477,40 @@
       ],
       "sourcePath": "library/mean_reversion/opening_gap_fade.nano",
       "irPath": "library/mean_reversion/opening_gap_fade_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "mean_reversion/volatility_percentile_reclaim",
+      "slug": "volatility_percentile_reclaim",
+      "name": "VolatilityPercentileReclaim",
+      "category": "mean_reversion",
+      "irMaturity": "v1",
+      "irVersion": "1.0.0",
+      "regime": "range-like or orderly pullback behavior outside an exceptional volatility state. Do NOT use the gate as a claim that low volatility causes reversal; it only separates a familiar reclaim from a distributional shock. INPUTS: high, low, close (series<float>). Bars must be contiguous: ATR resets across gaps, and PERCENTRANK stays absent until a full new history is present.",
+      "conditions": "prior close at or below its prior lower band, current close above its current lower band, and ATR rank below 0.9 against exactly the preceding hundred ATR values. All three terms have independent mutation controls.",
+      "invalidation": "another close below the band, or ATR entering the excluded top decile. Either says the excursion is continuing or the volatility regime has changed; the host, not this rule, decides what to do with an existing position.",
+      "shape": "1d; a two-bar downside excursion and reclaim after enough contiguous history to compare today's range state with the preceding hundred ATR cells.",
+      "calibratedOn": "liquid US equity index proxies, daily. Bollinger 20/2 and ATR 14 are published conventions; 100 observations and 0.9 define the research regime split. None is a profitability claim, and cadence changes need review.",
+      "nearestConfused": [
+        {
+          "slug": "bollinger_lower_reclaim",
+          "id": "mean_reversion/bollinger_lower_reclaim",
+          "distinction": "that rule takes every strict lower-band reclaim. This one abstains when the same price shape occurs at an extreme ATR rank; the percentile gate, not a different band threshold, is the structural hypothesis."
+        },
+        {
+          "slug": "zscore_fade_trend_filtered",
+          "id": "mean_reversion/zscore_fade_trend_filtered",
+          "distinction": "that enters while z-score remains deeply negative and uses a long price trend as its regime gate. This waits for a full band reclaim and gates on the instrument's own volatility distribution."
+        }
+      ],
+      "provenance": "Bollinger-band conventions and Engle (1982) conditional-volatility research; the regime gate is an original hypothesis, with no source code copied.",
+      "requiredHostSignals": [
+        "close",
+        "high",
+        "low"
+      ],
+      "sourcePath": "library/mean_reversion/volatility_percentile_reclaim.nano",
+      "irPath": "library/mean_reversion/volatility_percentile_reclaim_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",
@@ -1118,6 +1152,40 @@
       ],
       "sourcePath": "library/trend/supertrend_flip_long.nano",
       "irPath": "library/trend/supertrend_flip_long_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "trend/volume_confirmed_channel_breakout",
+      "slug": "volume_confirmed_channel_breakout",
+      "name": "VolumeConfirmedChannelBreakout",
+      "category": "trend",
+      "irMaturity": "v1",
+      "irVersion": "1.0.0",
+      "regime": "liquid directional expansion after a range or consolidation. Do NOT fire in thin markets, opening auctions, or feeds where volume is synthetic: the participation term is only meaningful when bars measure comparable size. INPUTS: high, close, volume (series<float>). Volume must be real traded size from one consistently defined venue or consolidated feed.",
+      "conditions": "close above the preceding twenty-bar high and volume at least 1.5 times the preceding twenty-bar average. Price expansion without volume is explicitly a no-fire; high volume without a price break is also a no-fire.",
+      "invalidation": "a following close back inside the prior channel, especially on equal or greater volume. The rule proposes an entry only; the host owns exits.",
+      "shape": "1d; a close through a multi-week ceiling with visibly greater participation than the bars that built the ceiling.",
+      "calibratedOn": "liquid continuously traded instruments, daily. Twenty bars and 1.5 times prior average volume are public conventions, not performance claims. The volume multiple does not travel across venue or session changes.",
+      "nearestConfused": [
+        {
+          "slug": "donchian_high_breakout",
+          "id": "trend/donchian_high_breakout",
+          "distinction": "that price-only rule fires on every qualifying channel break and carries a short mirror. This long-only variant requires an independent participation confirmation and abstains on an ordinary-volume break, which is the essential condition pinned by its mutation control."
+        },
+        {
+          "slug": "volume_climax_reversal",
+          "id": "volume/volume_climax_reversal",
+          "distinction": "that is a one-bar exhaustion reversal below its trend with a high close-position requirement. This is continuation through a prior price boundary; volume confirms expansion rather than capitulation."
+        }
+      ],
+      "provenance": "Donchian channel concepts and Lee-Swaminathan (2000) volume/momentum research; original Nano expression, with no source code copied.",
+      "requiredHostSignals": [
+        "close",
+        "high",
+        "volume"
+      ],
+      "sourcePath": "library/trend/volume_confirmed_channel_breakout.nano",
+      "irPath": "library/trend/volume_confirmed_channel_breakout_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",

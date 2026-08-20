@@ -107,7 +107,7 @@ jobs:
                           "assert baseline_control_frames.__module__ == "
                           "'nano.library.contribution'; "
                           "catalog = load_catalog(); "
-                          "assert catalog['strategyCount'] == 53; "
+                          "assert catalog['strategyCount'] == 55; "
                           "assert catalog_diagnostics() == ()"
                       ),
                   ],
