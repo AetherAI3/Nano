@@ -42,11 +42,11 @@ from nano.runtime.vm import run_module
 def test_catalog_corpus_exercises_contribution_controls_and_both_ir_versions():
     audit = audit_catalog_corpus()
 
-    assert audit.strategy_count == 53
+    assert audit.strategy_count == 55
     assert audit.baseline_ir_count == 41
-    assert audit.v1_ir_count == 12
+    assert audit.v1_ir_count == 14
     assert audit.watchdog_count == 8
-    assert audit.control_cases == 53
+    assert audit.control_cases == 55
     assert audit.defects == ()
 
 

@@ -15,7 +15,7 @@ The library holds two kinds of entry, and the difference is worth understanding 
 
 | | **Baseline entries** | **v1 entries** |
 | --- | --- | --- |
-| Count | 41 | 12 |
+| Count | 41 | 14 |
 | Source shape | one `every`, one `if`, AND-chained comparisons of a named signal against a literal | `param`/`input`/`let` declarations, arithmetic, `else`, offsets |
 | Where the numbers come from | the **host** computes every indicator and injects it as a named series | the host supplies **OHLCV**; Nano computes the indicators |
 | Compiled IR | `0.1.0`, byte-stable | `1.0.0`, carries `sourceHash` and `moduleHash` |
@@ -27,7 +27,7 @@ The practical difference for a host is the size of the contract. A baseline entr
 
 ## Learn, compare, contribute
 
-The current library contains 53 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 41 baseline and 12 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 55 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 41 baseline and 14 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
@@ -44,8 +44,8 @@ python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
 | Category | Strategies |
 | --- | --- |
 | `momentum/` | `rsi_oversold_reversal`, `stochastic_oversold`, `williams_r_reversal`, `roc_momentum`, `absolute_momentum_filter`†, `stochastic_reclaim`† |
-| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme`, `bollinger_lower_reclaim`†, `zscore_fade_trend_filtered`†, `opening_gap_fade`† |
-| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long`, `ema_pullback_continuation`†, `macd_zero_line_reclaim`†, `donchian_high_breakout`† |
+| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme`, `bollinger_lower_reclaim`†, `zscore_fade_trend_filtered`†, `opening_gap_fade`†, `volatility_percentile_reclaim`† |
+| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long`, `ema_pullback_continuation`†, `macd_zero_line_reclaim`†, `donchian_high_breakout`†, `volume_confirmed_channel_breakout`† |
 | `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout`, `squeeze_release_expansion`†, `atr_regime_halt`† |
 | `volume/` | `volume_spike_confirmation`, `obv_trend`, `volume_climax_reversal`†, `vwap_band_reversion`† |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
