@@ -37,6 +37,7 @@ from .commands import (
     command_check,
     command_compile,
     command_indicators,
+    command_intent,
     command_library,
     command_replay,
     command_version,
@@ -59,6 +60,7 @@ examples:
   nano visualize strategy.nano --format mermaid
   nano library search trend
   nano library show ema_pullback_continuation
+  nano intent compile "when is spy earnings" --json
 """
 
 
@@ -197,6 +199,37 @@ def build_parser() -> argparse.ArgumentParser:
         "check", help="verify catalogability and byte-identical regeneration"
     )
     library_check.set_defaults(handler=command_library)
+
+    intent = subcommands.add_parser(
+        "intent",
+        help="parse natural-language text into a host-governed Intent plan",
+    )
+    intent_actions = intent.add_subparsers(
+        dest="intent_action", metavar="ACTION", required=True
+    )
+
+    intent_parse = intent_actions.add_parser(
+        "parse", help="show normalized tokens, entities, relations, and frame"
+    )
+    intent_parse.add_argument("phrase", metavar="PHRASE")
+    intent_parse.set_defaults(handler=command_intent)
+
+    intent_compile = intent_actions.add_parser(
+        "compile", help="emit Nano Intent IR 0.1.0"
+    )
+    intent_compile.add_argument("phrase", metavar="PHRASE")
+    intent_compile.add_argument(
+        "--json",
+        action="store_true",
+        help="emit byte-stable canonical JSON instead of pretty JSON",
+    )
+    intent_compile.set_defaults(handler=command_intent)
+
+    intent_explain = intent_actions.add_parser(
+        "explain", help="show the receipt and ranked interpretations"
+    )
+    intent_explain.add_argument("phrase", metavar="PHRASE")
+    intent_explain.set_defaults(handler=command_intent)
 
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)

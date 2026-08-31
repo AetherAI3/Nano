@@ -1,0 +1,1879 @@
+{
+  "fixtureBundle": "atsv2-golden",
+  "fixtureVersion": "0.1.0",
+  "nanoIntentVersion": "0.1.0",
+  "schema": "../schemas/nano-intent-0.1.0.schema.json",
+  "fixtures": [
+    {
+      "id": "security_topic_noun",
+      "source": "spy earnings",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:55d8c5a50d5be80971f405ec978bc10c5366a63e9cb065828705ee88e0a60749",
+        "normalized": "spy earnings",
+        "form": "noun_phrase",
+        "confidence": 0.98,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              0,
+              3
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "earnings",
+            "canonical": "earnings",
+            "span": [
+              4,
+              12
+            ]
+          }
+        ],
+        "operation": "open",
+        "response": {
+          "mode": "tile",
+          "budgetClass": "none"
+        },
+        "steps": [
+          {
+            "kind": "ui.open",
+            "capability": "terminal.tile.earnings",
+            "args": {
+              "symbol": "SPY",
+              "topic": "earnings"
+            }
+          }
+        ],
+        "effects": [
+          "ui.open"
+        ],
+        "confirmation": {
+          "mode": "none",
+          "reason": "no_consent_required"
+        },
+        "receipt": {
+          "frame": "security_topic_noun_phrase",
+          "reasonCodes": [
+            "NOUN_PHRASE",
+            "SECURITY",
+            "TOPIC",
+            "MARKET_TOPIC",
+            "LOCAL_CAPABILITY_ONLY",
+            "BUDGET_NONE_LOCAL"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:55d8c5a50d5be80971f405ec978bc10c5366a63e9cb065828705ee88e0a60749",
+          "normalized": "spy earnings",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                0,
+                3
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                4,
+                12
+              ],
+              "text": "earnings"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                0,
+                3
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "earnings",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "earnings",
+              "resolved": true,
+              "span": [
+                4,
+                12
+              ],
+              "specificity": 108
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "earnings",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                0,
+                12
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "open",
+          "response": {
+            "budgetClass": "none",
+            "mode": "tile"
+          },
+          "effects": [
+            "ui.open"
+          ],
+          "confirmation": {
+            "mode": "none",
+            "reason": "no_consent_required"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "security_topic_local",
+      "source": "show spy earnings",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:babf1d4f080bc67a259ef766c165ad41e1f6dc78247d8783b029f46cc9a68fc7",
+        "normalized": "show spy earnings",
+        "form": "local_imperative",
+        "confidence": 0.99,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              5,
+              8
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "earnings",
+            "canonical": "earnings",
+            "span": [
+              9,
+              17
+            ]
+          }
+        ],
+        "operation": "open",
+        "response": {
+          "mode": "tile",
+          "budgetClass": "none"
+        },
+        "steps": [
+          {
+            "kind": "ui.open",
+            "capability": "terminal.tile.earnings",
+            "args": {
+              "symbol": "SPY",
+              "topic": "earnings"
+            }
+          }
+        ],
+        "effects": [
+          "ui.open"
+        ],
+        "confirmation": {
+          "mode": "none",
+          "reason": "no_consent_required"
+        },
+        "receipt": {
+          "frame": "security_topic_local_imperative",
+          "reasonCodes": [
+            "LOCAL_IMPERATIVE",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "LOCAL_CAPABILITY_ONLY",
+            "BUDGET_NONE_LOCAL"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:babf1d4f080bc67a259ef766c165ad41e1f6dc78247d8783b029f46cc9a68fc7",
+          "normalized": "show spy earnings",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "imperative"
+              ],
+              "span": [
+                0,
+                4
+              ],
+              "text": "show"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                5,
+                8
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                9,
+                17
+              ],
+              "text": "earnings"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                5,
+                8
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "earnings",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "earnings",
+              "resolved": true,
+              "span": [
+                9,
+                17
+              ],
+              "specificity": 108
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "earnings",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                5,
+                17
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "open",
+          "response": {
+            "budgetClass": "none",
+            "mode": "tile"
+          },
+          "effects": [
+            "ui.open"
+          ],
+          "confirmation": {
+            "mode": "none",
+            "reason": "no_consent_required"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "security_topic_temporal",
+      "source": "when is spy earnings",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:948e3567d3b65b6471b90f61be51b9265c8af640e6488d5d3baeb37f0e43e6db",
+        "normalized": "when is spy earnings",
+        "form": "temporal_question",
+        "confidence": 0.97,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              8,
+              11
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "earnings",
+            "canonical": "earnings",
+            "span": [
+              12,
+              20
+            ]
+          }
+        ],
+        "operation": "lookup",
+        "response": {
+          "mode": "compact_answer",
+          "budgetClass": "micro"
+        },
+        "steps": [
+          {
+            "kind": "data.read",
+            "capability": "market.earnings.calendar",
+            "args": {
+              "symbol": "SPY"
+            }
+          },
+          {
+            "kind": "llm.call",
+            "capability": "fast_nonthinking",
+            "args": {
+              "answerStyle": "structured_micro"
+            }
+          }
+        ],
+        "effects": [
+          "data.read",
+          "llm.call"
+        ],
+        "confirmation": {
+          "mode": "submit_is_consent",
+          "reason": "clear_question"
+        },
+        "receipt": {
+          "frame": "security_topic_temporal",
+          "reasonCodes": [
+            "TEMPORAL_INTERROGATIVE",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "LLM_REQUIRED_FOR_LANGUAGE_RESPONSE",
+            "BUDGET_MICRO_STRUCTURED"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:948e3567d3b65b6471b90f61be51b9265c8af640e6488d5d3baeb37f0e43e6db",
+          "normalized": "when is spy earnings",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "interrogative"
+              ],
+              "span": [
+                0,
+                4
+              ],
+              "text": "when"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "filler"
+              ],
+              "span": [
+                5,
+                7
+              ],
+              "text": "is"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                8,
+                11
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                12,
+                20
+              ],
+              "text": "earnings"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                8,
+                11
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "earnings",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "earnings",
+              "resolved": true,
+              "span": [
+                12,
+                20
+              ],
+              "specificity": 108
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "earnings",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                8,
+                20
+              ]
+            },
+            {
+              "dependent": "earnings",
+              "head": "temporal_question",
+              "kind": "question_targets",
+              "span": [
+                0,
+                20
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "lookup",
+          "response": {
+            "budgetClass": "micro",
+            "mode": "compact_answer"
+          },
+          "effects": [
+            "data.read",
+            "llm.call"
+          ],
+          "confirmation": {
+            "mode": "submit_is_consent",
+            "reason": "clear_question"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "security_topic_forecast",
+      "source": "describe the predictions of spy earnings over the next 3 quarters",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:38e32233619bb2ebc2138e09cb12ab9bec770bf60bf876673579035503dbabaf",
+        "normalized": "describe spy earnings predictions over the next 3 quarters",
+        "form": "analytical_request",
+        "confidence": 0.98,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              9,
+              12
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "earnings",
+            "canonical": "earnings",
+            "span": [
+              13,
+              21
+            ]
+          },
+          {
+            "kind": "horizon",
+            "raw": "next 3 quarters",
+            "canonical": {
+              "quarters": 3
+            },
+            "span": [
+              43,
+              58
+            ]
+          }
+        ],
+        "operation": "forecast",
+        "response": {
+          "mode": "compact_answer",
+          "budgetClass": "research"
+        },
+        "steps": [
+          {
+            "kind": "data.read",
+            "capability": "market.earnings.history",
+            "args": {
+              "symbol": "SPY"
+            }
+          },
+          {
+            "kind": "data.read",
+            "capability": "market.earnings.estimates",
+            "args": {
+              "quarters": 3,
+              "symbol": "SPY"
+            }
+          },
+          {
+            "kind": "llm.call",
+            "capability": "fast_nonthinking",
+            "args": {
+              "answerStyle": "market_research"
+            }
+          }
+        ],
+        "effects": [
+          "data.read",
+          "llm.call"
+        ],
+        "confirmation": {
+          "mode": "submit_is_consent",
+          "reason": "clear_question"
+        },
+        "receipt": {
+          "frame": "security_topic_forecast",
+          "reasonCodes": [
+            "ANALYTICAL_VERB",
+            "FORECAST_TOPIC",
+            "EXPLICIT_HORIZON",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "LLM_REQUIRED_FOR_FORECAST_SYNTHESIS",
+            "BUDGET_RESEARCH_FORECAST"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:38e32233619bb2ebc2138e09cb12ab9bec770bf60bf876673579035503dbabaf",
+          "normalized": "describe spy earnings predictions over the next 3 quarters",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "analytical"
+              ],
+              "span": [
+                0,
+                8
+              ],
+              "text": "describe"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                9,
+                12
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                13,
+                21
+              ],
+              "text": "earnings"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "analytical"
+              ],
+              "span": [
+                22,
+                33
+              ],
+              "text": "predictions"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "filler"
+              ],
+              "span": [
+                34,
+                38
+              ],
+              "text": "over"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "filler"
+              ],
+              "span": [
+                39,
+                42
+              ],
+              "text": "the"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "time"
+              ],
+              "span": [
+                43,
+                47
+              ],
+              "text": "next"
+            },
+            {
+              "kind": "number",
+              "span": [
+                48,
+                49
+              ],
+              "text": "3"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "time_unit"
+              ],
+              "span": [
+                50,
+                58
+              ],
+              "text": "quarters"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                9,
+                12
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "earnings",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "earnings",
+              "resolved": true,
+              "span": [
+                13,
+                21
+              ],
+              "specificity": 108
+            },
+            {
+              "canonical": {
+                "quarters": 3
+              },
+              "catalog": "core",
+              "kind": "horizon",
+              "raw": "next 3 quarters",
+              "resolved": true,
+              "span": [
+                43,
+                58
+              ],
+              "specificity": 300
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "earnings",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                9,
+                21
+              ]
+            },
+            {
+              "dependent": "next 3 quarters",
+              "head": "request",
+              "kind": "bounded_by",
+              "span": [
+                43,
+                58
+              ]
+            },
+            {
+              "dependent": "earnings",
+              "head": "analytical_request",
+              "kind": "question_targets",
+              "span": [
+                0,
+                58
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "forecast",
+          "response": {
+            "budgetClass": "research",
+            "mode": "compact_answer"
+          },
+          "effects": [
+            "data.read",
+            "llm.call"
+          ],
+          "confirmation": {
+            "mode": "submit_is_consent",
+            "reason": "clear_question"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "security_comparison_tile",
+      "source": "spy qqq volatility",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:b4814f696d6920301aa807a6767a73e5825057c604beb486ddccfc985e993b79",
+        "normalized": "spy qqq volatility",
+        "form": "noun_phrase",
+        "confidence": 0.98,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              0,
+              3
+            ]
+          },
+          {
+            "kind": "security",
+            "raw": "qqq",
+            "canonical": "QQQ",
+            "span": [
+              4,
+              7
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "volatility",
+            "canonical": "volatility",
+            "span": [
+              8,
+              18
+            ]
+          }
+        ],
+        "operation": "compare",
+        "response": {
+          "mode": "tile",
+          "budgetClass": "none"
+        },
+        "steps": [
+          {
+            "kind": "ui.open",
+            "capability": "terminal.tile.volatility_comparison",
+            "args": {
+              "symbols": [
+                "SPY",
+                "QQQ"
+              ],
+              "topic": "volatility"
+            }
+          }
+        ],
+        "effects": [
+          "ui.open"
+        ],
+        "confirmation": {
+          "mode": "none",
+          "reason": "no_consent_required"
+        },
+        "receipt": {
+          "frame": "security_comparison_noun_phrase",
+          "reasonCodes": [
+            "NOUN_PHRASE",
+            "MULTIPLE_SECURITIES",
+            "TOPIC",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "LOCAL_CAPABILITY_ONLY",
+            "BUDGET_NONE_LOCAL"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:b4814f696d6920301aa807a6767a73e5825057c604beb486ddccfc985e993b79",
+          "normalized": "spy qqq volatility",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                0,
+                3
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                4,
+                7
+              ],
+              "text": "qqq"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                8,
+                18
+              ],
+              "text": "volatility"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                0,
+                3
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "QQQ",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "qqq",
+              "resolved": true,
+              "span": [
+                4,
+                7
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "volatility",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "volatility",
+              "resolved": true,
+              "span": [
+                8,
+                18
+              ],
+              "specificity": 110
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "volatility",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                0,
+                18
+              ]
+            },
+            {
+              "dependent": "volatility",
+              "head": "QQQ",
+              "kind": "subject_topic",
+              "span": [
+                4,
+                18
+              ]
+            },
+            {
+              "dependent": "QQQ",
+              "head": "SPY",
+              "kind": "compared_with",
+              "span": [
+                0,
+                7
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "compare",
+          "response": {
+            "budgetClass": "none",
+            "mode": "tile"
+          },
+          "effects": [
+            "ui.open"
+          ],
+          "confirmation": {
+            "mode": "none",
+            "reason": "no_consent_required"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "security_volatility_causal",
+      "source": "why is spy volatility higher than qqq",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:145c75399170e9cf66f4f0bf5258c1aea73b2b41dcf93d9477458523417cb42e",
+        "normalized": "why is spy volatility higher than qqq",
+        "form": "analytical_request",
+        "confidence": 0.96,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              7,
+              10
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "volatility",
+            "canonical": "volatility",
+            "span": [
+              11,
+              21
+            ]
+          },
+          {
+            "kind": "security",
+            "raw": "qqq",
+            "canonical": "QQQ",
+            "span": [
+              34,
+              37
+            ]
+          }
+        ],
+        "operation": "compare",
+        "response": {
+          "mode": "compact_answer",
+          "budgetClass": "standard"
+        },
+        "steps": [
+          {
+            "kind": "data.read",
+            "capability": "market.volatility.compare",
+            "args": {
+              "symbols": [
+                "SPY",
+                "QQQ"
+              ]
+            }
+          },
+          {
+            "kind": "llm.call",
+            "capability": "fast_nonthinking",
+            "args": {
+              "answerStyle": "market_analysis"
+            }
+          }
+        ],
+        "effects": [
+          "data.read",
+          "llm.call"
+        ],
+        "confirmation": {
+          "mode": "submit_is_consent",
+          "reason": "clear_question"
+        },
+        "receipt": {
+          "frame": "security_topic_comparison",
+          "reasonCodes": [
+            "CAUSAL_INTERROGATIVE",
+            "COMPARISON_RELATION",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "LLM_REQUIRED_FOR_ANALYSIS",
+            "BUDGET_STANDARD_ANALYSIS"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:145c75399170e9cf66f4f0bf5258c1aea73b2b41dcf93d9477458523417cb42e",
+          "normalized": "why is spy volatility higher than qqq",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "interrogative"
+              ],
+              "span": [
+                0,
+                3
+              ],
+              "text": "why"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "filler"
+              ],
+              "span": [
+                4,
+                6
+              ],
+              "text": "is"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                7,
+                10
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                11,
+                21
+              ],
+              "text": "volatility"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "qualifier"
+              ],
+              "span": [
+                22,
+                28
+              ],
+              "text": "higher"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "comparison"
+              ],
+              "span": [
+                29,
+                33
+              ],
+              "text": "than"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                34,
+                37
+              ],
+              "text": "qqq"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                7,
+                10
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "volatility",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "volatility",
+              "resolved": true,
+              "span": [
+                11,
+                21
+              ],
+              "specificity": 110
+            },
+            {
+              "canonical": "QQQ",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "qqq",
+              "resolved": true,
+              "span": [
+                34,
+                37
+              ],
+              "specificity": 400
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "volatility",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                7,
+                21
+              ]
+            },
+            {
+              "dependent": "volatility",
+              "head": "QQQ",
+              "kind": "subject_topic",
+              "span": [
+                11,
+                37
+              ]
+            },
+            {
+              "dependent": "QQQ",
+              "head": "SPY",
+              "kind": "compared_with",
+              "span": [
+                7,
+                37
+              ]
+            },
+            {
+              "dependent": "volatility",
+              "head": "analytical_request",
+              "kind": "question_targets",
+              "span": [
+                0,
+                37
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "compare",
+          "response": {
+            "budgetClass": "standard",
+            "mode": "compact_answer"
+          },
+          "effects": [
+            "data.read",
+            "llm.call"
+          ],
+          "confirmation": {
+            "mode": "submit_is_consent",
+            "reason": "clear_question"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "ordered_local_analysis",
+      "source": "open spy chart and explain today's move",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:d8ff7560b417dfe6cf1af92479300f03d3c160d77766708c642072f0c360a66f",
+        "normalized": "open spy chart and explain today's move",
+        "form": "compound_request",
+        "confidence": 0.97,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              5,
+              8
+            ]
+          },
+          {
+            "kind": "topic",
+            "raw": "chart",
+            "canonical": "chart",
+            "span": [
+              9,
+              14
+            ]
+          },
+          {
+            "kind": "time",
+            "raw": "today",
+            "canonical": "today",
+            "span": [
+              27,
+              32
+            ]
+          }
+        ],
+        "operation": "compound",
+        "response": {
+          "mode": "compact_answer",
+          "budgetClass": "standard"
+        },
+        "steps": [
+          {
+            "kind": "ui.open",
+            "capability": "terminal.tile.chart",
+            "args": {
+              "symbol": "SPY",
+              "topic": "chart"
+            }
+          },
+          {
+            "kind": "data.read",
+            "capability": "market.price.context",
+            "args": {
+              "symbol": "SPY"
+            }
+          },
+          {
+            "kind": "llm.call",
+            "capability": "fast_nonthinking",
+            "args": {
+              "answerStyle": "market_analysis"
+            }
+          }
+        ],
+        "effects": [
+          "ui.open",
+          "data.read",
+          "llm.call"
+        ],
+        "confirmation": {
+          "mode": "submit_is_consent",
+          "reason": "clear_compound_question"
+        },
+        "receipt": {
+          "frame": "ordered_local_analysis",
+          "reasonCodes": [
+            "LOCAL_IMPERATIVE",
+            "ORDERED_CONJUNCTION",
+            "ANALYTICAL_VERB",
+            "MARKET_TOPIC",
+            "SECURITY",
+            "ONE_COALESCED_LLM_CALL",
+            "BUDGET_STANDARD_ANALYSIS"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:d8ff7560b417dfe6cf1af92479300f03d3c160d77766708c642072f0c360a66f",
+          "normalized": "open spy chart and explain today's move",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "imperative",
+                "time"
+              ],
+              "span": [
+                0,
+                4
+              ],
+              "text": "open"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                5,
+                8
+              ],
+              "text": "spy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "topic"
+              ],
+              "span": [
+                9,
+                14
+              ],
+              "text": "chart"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "conjunction"
+              ],
+              "span": [
+                15,
+                18
+              ],
+              "text": "and"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "analytical"
+              ],
+              "span": [
+                19,
+                26
+              ],
+              "text": "explain"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "time"
+              ],
+              "span": [
+                27,
+                32
+              ],
+              "text": "today"
+            },
+            {
+              "kind": "punctuation",
+              "span": [
+                32,
+                33
+              ],
+              "text": "'"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "filler"
+              ],
+              "span": [
+                33,
+                34
+              ],
+              "text": "s"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "qualifier"
+              ],
+              "span": [
+                35,
+                39
+              ],
+              "text": "move"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                5,
+                8
+              ],
+              "specificity": 400
+            },
+            {
+              "canonical": "chart",
+              "catalog": "market",
+              "kind": "topic",
+              "raw": "chart",
+              "resolved": true,
+              "span": [
+                9,
+                14
+              ],
+              "specificity": 105
+            },
+            {
+              "canonical": "today",
+              "catalog": "core",
+              "kind": "time",
+              "raw": "today",
+              "resolved": true,
+              "span": [
+                27,
+                32
+              ],
+              "specificity": 200
+            }
+          ],
+          "relations": [
+            {
+              "dependent": "chart",
+              "head": "SPY",
+              "kind": "subject_topic",
+              "span": [
+                5,
+                14
+              ]
+            },
+            {
+              "dependent": "today",
+              "head": "request",
+              "kind": "bounded_by",
+              "span": [
+                27,
+                32
+              ]
+            },
+            {
+              "dependent": "analysis",
+              "head": "local_action",
+              "kind": "precedes",
+              "span": [
+                0,
+                39
+              ]
+            }
+          ],
+          "confidenceComponents": {
+            "binding": 1.0,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "compound",
+          "response": {
+            "budgetClass": "standard",
+            "mode": "compact_answer"
+          },
+          "effects": [
+            "ui.open",
+            "data.read",
+            "llm.call"
+          ],
+          "confirmation": {
+            "mode": "submit_is_consent",
+            "reason": "clear_compound_question"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "web_trade_refusal",
+      "source": "buy spy",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:1cfbef9a7c4567961612722531f9709638c187651ffe9b2806f944a26d0938eb",
+        "normalized": "buy spy",
+        "form": "prohibited_or_unsupported",
+        "confidence": 1.0,
+        "entities": [
+          {
+            "kind": "security",
+            "raw": "spy",
+            "canonical": "SPY",
+            "span": [
+              4,
+              7
+            ]
+          }
+        ],
+        "operation": "trade_request",
+        "response": {
+          "mode": "refusal",
+          "budgetClass": "none"
+        },
+        "steps": [
+          {
+            "kind": "trade.request",
+            "capability": "market.trade.request",
+            "args": {
+              "symbol": "SPY"
+            }
+          }
+        ],
+        "effects": [
+          "trade.request"
+        ],
+        "confirmation": {
+          "mode": "host_decides",
+          "reason": "host_policy_controls_trade_requests"
+        },
+        "receipt": {
+          "frame": "trade_request",
+          "reasonCodes": [
+            "TRADE_VERB",
+            "HOST_GOVERNED_PROHIBITION",
+            "SECURITY",
+            "NO_MODEL_FOR_REFUSAL",
+            "BUDGET_NONE_PROHIBITED"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:1cfbef9a7c4567961612722531f9709638c187651ffe9b2806f944a26d0938eb",
+          "normalized": "buy spy",
+          "tokens": [
+            {
+              "kind": "word",
+              "roles": [
+                "trade"
+              ],
+              "span": [
+                0,
+                3
+              ],
+              "text": "buy"
+            },
+            {
+              "kind": "word",
+              "roles": [
+                "security"
+              ],
+              "span": [
+                4,
+                7
+              ],
+              "text": "spy"
+            }
+          ],
+          "entities": [
+            {
+              "canonical": "SPY",
+              "catalog": "market",
+              "kind": "security",
+              "raw": "spy",
+              "resolved": true,
+              "span": [
+                4,
+                7
+              ],
+              "specificity": 400
+            }
+          ],
+          "relations": [],
+          "confidenceComponents": {
+            "binding": 0.8,
+            "lexical": 1.0,
+            "structure": 0.98
+          },
+          "operation": "trade_request",
+          "response": {
+            "budgetClass": "none",
+            "mode": "refusal"
+          },
+          "effects": [
+            "trade.request"
+          ],
+          "confirmation": {
+            "mode": "host_decides",
+            "reason": "host_policy_controls_trade_requests"
+          },
+          "warnings": [],
+          "unresolvedEntities": [],
+          "alternateInterpretations": []
+        }
+      }
+    },
+    {
+      "id": "ambiguous_fragment",
+      "source": "unknown short fragment",
+      "ir": {
+        "nanoIntentVersion": "0.1.0",
+        "sourceHash": "sha256:4876dca92db7c7ea01eee9836e7e6aaad1e35ca622f0ea789278da7f895ac34c",
+        "normalized": "unknown short fragment",
+        "form": "ambiguous",
+        "confidence": 0.35,
+        "entities": [],
+        "operation": "interpret",
+        "response": {
+          "mode": "interpretations",
+          "budgetClass": "none"
+        },
+        "steps": [],
+        "effects": [],
+        "confirmation": {
+          "mode": "none",
+          "reason": "ambiguous_input"
+        },
+        "receipt": {
+          "frame": "unresolved_fragment",
+          "reasonCodes": [
+            "AMBIGUOUS_INPUT",
+            "NO_EXECUTABLE_FRAME",
+            "BUDGET_NONE_AMBIGUOUS"
+          ],
+          "compiler": {
+            "name": "nano-intent-compiler",
+            "version": "0.1.0"
+          },
+          "catalogs": [
+            {
+              "id": "market",
+              "precedence": 100,
+              "version": "0.1.0"
+            },
+            {
+              "id": "core",
+              "precedence": 10,
+              "version": "0.1.0"
+            }
+          ],
+          "sourceHash": "sha256:4876dca92db7c7ea01eee9836e7e6aaad1e35ca622f0ea789278da7f895ac34c",
+          "normalized": "unknown short fragment",
+          "tokens": [
+            {
+              "kind": "word",
+              "span": [
+                0,
+                7
+              ],
+              "text": "unknown"
+            },
+            {
+              "kind": "word",
+              "span": [
+                8,
+                13
+              ],
+              "text": "short"
+            },
+            {
+              "kind": "word",
+              "span": [
+                14,
+                22
+              ],
+              "text": "fragment"
+            }
+          ],
+          "entities": [],
+          "relations": [],
+          "confidenceComponents": {
+            "binding": 0.25,
+            "lexical": 0.75,
+            "structure": 0.35
+          },
+          "operation": "interpret",
+          "response": {
+            "budgetClass": "none",
+            "mode": "interpretations"
+          },
+          "effects": [],
+          "confirmation": {
+            "mode": "none",
+            "reason": "ambiguous_input"
+          },
+          "warnings": [
+            "UNRESOLVED_WORD:short:SUGGESTIONS=chart,share,show"
+          ],
+          "unresolvedEntities": [],
+          "alternateInterpretations": [
+            {
+              "confidence": 0.42,
+              "form": "local_imperative",
+              "operation": "open",
+              "rank": 1,
+              "reasonCodes": [
+                "FUZZY_ORDINARY_VOCABULARY",
+                "SUGGESTED_CHART"
+              ]
+            },
+            {
+              "confidence": 0.3,
+              "form": "ambiguous",
+              "operation": "request_clarification",
+              "rank": 2,
+              "reasonCodes": [
+                "INSUFFICIENT_STRUCTURE"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
