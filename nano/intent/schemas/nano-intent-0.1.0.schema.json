@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AetherAI3/Nano/raw/main/nano/intent/schemas/nano-intent-0.1.0.schema.json",
+  "title": "Nano Intent IR 0.1.0",
+  "description": "A deterministic, model-neutral command proposal. Nano proposes; the host decides and acts.",
+  "$comment": "nanoIntentVersion is independent of strategy nanoIrVersion. Patch releases may clarify or add optional receipt diagnostics; incompatible field or meaning changes require a new contract version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "nanoIntentVersion",
+    "sourceHash",
+    "normalized",
+    "form",
+    "confidence",
+    "entities",
+    "operation",
+    "response",
+    "steps",
+    "effects",
+    "confirmation",
+    "receipt"
+  ],
+  "properties": {
+    "nanoIntentVersion": { "const": "0.1.0" },
+    "sourceHash": { "$ref": "#/$defs/sourceHash" },
+    "normalized": { "type": "string", "maxLength": 4096 },
+    "form": {
+      "enum": [
+        "noun_phrase",
+        "local_imperative",
+        "factual_question",
+        "temporal_question",
+        "analytical_request",
+        "compound_request",
+        "external_action_request",
+        "prohibited_or_unsupported",
+        "ambiguous"
+      ]
+    },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "entities": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/entity" }
+    },
+    "operation": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "response": { "$ref": "#/$defs/response" },
+    "steps": {
+      "type": "array",
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "effects": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 8,
+      "items": { "$ref": "#/$defs/effect" }
+    },
+    "confirmation": { "$ref": "#/$defs/confirmation" },
+    "receipt": { "$ref": "#/$defs/receipt" }
+  },
+  "$defs": {
+    "sourceHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "span": {
+      "type": "array",
+      "prefixItems": [
+        { "type": "integer", "minimum": 0 },
+        { "type": "integer", "minimum": 0 }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "jsonValue": {
+      "oneOf": [
+        { "type": ["string", "number", "boolean", "null"] },
+        { "type": "array", "items": { "$ref": "#/$defs/jsonValue" } },
+        { "type": "object", "additionalProperties": { "$ref": "#/$defs/jsonValue" } }
+      ]
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "raw", "canonical", "span"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "raw": { "type": "string" },
+        "canonical": { "$ref": "#/$defs/jsonValue" },
+        "span": { "$ref": "#/$defs/span" }
+      }
+    },
+    "receiptEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "raw", "canonical", "span", "catalog", "resolved", "specificity"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "raw": { "type": "string" },
+        "canonical": { "$ref": "#/$defs/jsonValue" },
+        "span": { "$ref": "#/$defs/span" },
+        "catalog": { "type": "string", "minLength": 1 },
+        "resolved": { "type": "boolean" },
+        "specificity": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "budgetClass"],
+      "properties": {
+        "mode": {
+          "enum": ["tile", "compact_answer", "agent_thread", "confirmation_preview", "refusal", "interpretations"]
+        },
+        "budgetClass": { "enum": ["none", "micro", "standard", "research"] }
+      }
+    },
+    "effect": {
+      "enum": ["ui.open", "ui.focus", "ui.navigate", "data.read", "llm.call", "external.write", "trade.request", "log.append"]
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "capability", "args"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/effect" },
+        "capability": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "args": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": { "$ref": "#/$defs/jsonValue" }
+        }
+      }
+    },
+    "confirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "reason"],
+      "properties": {
+        "mode": { "enum": ["none", "submit_is_consent", "explicit_confirmation", "host_decides"] },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 256 }
+      }
+    },
+    "token": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "text", "span"],
+      "properties": {
+        "kind": { "enum": ["word", "number", "security_shape", "punctuation"] },
+        "text": { "type": "string" },
+        "span": { "$ref": "#/$defs/span" },
+        "roles": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "relation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "head", "dependent", "span"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1 },
+        "head": { "type": "string" },
+        "dependent": { "type": "string" },
+        "span": { "$ref": "#/$defs/span" }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "precedence"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "precedence": { "type": "integer" }
+      }
+    },
+    "alternate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "form", "operation", "confidence", "reasonCodes"],
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1 },
+        "form": { "type": "string", "minLength": 1 },
+        "operation": { "type": "string", "minLength": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reasonCodes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame",
+        "reasonCodes",
+        "compiler",
+        "catalogs",
+        "sourceHash",
+        "normalized",
+        "tokens",
+        "entities",
+        "relations",
+        "confidenceComponents",
+        "operation",
+        "response",
+        "effects",
+        "confirmation",
+        "warnings",
+        "unresolvedEntities",
+        "alternateInterpretations"
+      ],
+      "properties": {
+        "frame": { "type": "string", "minLength": 1 },
+        "reasonCodes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "compiler": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version"],
+          "properties": {
+            "name": { "const": "nano-intent-compiler" },
+            "version": { "const": "0.1.0" }
+          }
+        },
+        "catalogs": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "#/$defs/catalog" } },
+        "sourceHash": { "$ref": "#/$defs/sourceHash" },
+        "normalized": { "type": "string", "maxLength": 4096 },
+        "tokens": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/token" } },
+        "entities": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/receiptEntity" } },
+        "relations": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/relation" } },
+        "confidenceComponents": {
+          "type": "object",
+          "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "operation": { "type": "string", "minLength": 1 },
+        "response": { "$ref": "#/$defs/response" },
+        "effects": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/effect" } },
+        "confirmation": { "$ref": "#/$defs/confirmation" },
+        "warnings": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+        "unresolvedEntities": { "type": "array", "items": { "$ref": "#/$defs/receiptEntity" } },
+        "alternateInterpretations": { "type": "array", "items": { "$ref": "#/$defs/alternate" } }
+      }
+    }
+  }
+}

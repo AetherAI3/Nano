@@ -41,6 +41,15 @@ from ..compiler import (
 from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
+from ..intent import (
+    CatalogError,
+    IntentInputError,
+    IntentValidationError,
+    canonical_bytes as canonical_intent_bytes,
+    compile_intent,
+    explain_intent,
+    parse_intent,
+)
 from ..library.catalog import (
     CatalogValidationError,
     catalog_diagnostics,
@@ -541,6 +550,39 @@ def command_indicators(args: Any, console: Console) -> int:
 
 
 # ---------------------------------------------------------------------------
+# nano intent
+# ---------------------------------------------------------------------------
+
+
+def command_intent(args: Any, console: Console) -> int:
+    """Parse, compile, or explain a deterministic natural-language intent."""
+
+    try:
+        if args.intent_action == "parse":
+            console.say(
+                json.dumps(
+                    parse_intent(args.phrase).to_dict(),
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+            return EXIT_OK
+        if args.intent_action == "explain":
+            console.say(explain_intent(args.phrase))
+            return EXIT_OK
+
+        ir = compile_intent(args.phrase)
+        if args.json:
+            console.emit(canonical_intent_bytes(ir) + b"\n")
+        else:
+            console.say(json.dumps(ir.to_dict(), indent=2, ensure_ascii=False))
+        return EXIT_OK
+    except (CatalogError, IntentInputError, IntentValidationError, ValueError) as exc:
+        console.warn(f"error: intent rejected: {exc}")
+        return EXIT_DIAGNOSTICS
+
+
+# ---------------------------------------------------------------------------
 # nano library
 # ---------------------------------------------------------------------------
 
@@ -679,6 +721,7 @@ __all__ = [
     "command_check",
     "command_compile",
     "command_indicators",
+    "command_intent",
     "command_library",
     "command_replay",
     "command_version",

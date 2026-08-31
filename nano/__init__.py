@@ -11,6 +11,7 @@ Package map:
 | Package | Role |
 |---|---|
 | ``nano.compiler`` | `.nano` -> IR: lexer, parser, codegen |
+| ``nano.intent`` | natural language -> independently-versioned host plan |
 | ``nano.types`` | the type system, and look-ahead protection |
 | ``nano.indicators`` | typed indicator signatures + deterministic kernels |
 | ``nano.ir`` | both IR document versions, and the DAG runtimes execute |
@@ -18,7 +19,7 @@ Package map:
 | ``nano.bridge`` | decision-gate adapter, backtester, optional provenance |
 | ``nano.watchdog`` | the restricted profile for host-governed controls |
 | ``nano.data`` | the one place that reads a file |
-| ``nano.cli`` | check, compile, replay, visualize |
+| ``nano.cli`` | check, compile, replay, visualize, intent |
 | ``nano.aethercode`` | editor language services |
 | ``nano.memory`` / ``nano.loop`` | compiled-pattern cache, loop IR |
 

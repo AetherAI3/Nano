@@ -48,6 +48,14 @@ That is the risk breaker from the [strategy library](nano/library/risk/max_drawd
 
 A rule and an approval are different jobs. Nano makes the rule compact, versioned, and replayable; your application owns data quality, policy, persistence, and real-world effects. That separation makes a decision trail easier to inspect without giving a script authority over your infrastructure.
 
+Nano also ships an independently versioned **Intent frontend** for short human
+requests. It compiles phrases such as `spy earnings` or
+`when is spy earnings` into typed, auditable, host-governed command plans without
+changing the strategy language or calling a model. Try
+`nano intent compile "when is spy earnings" --json`; see the
+[Intent compiler architecture](docs/intent-compiler.md) for the separate AST,
+IR `0.1.0`, catalogs, effects, consent policy, and canonical fixtures.
+
 ## Quick start
 
 From a fresh checkout, run the bundled Momentum strategy and then the test suite:
