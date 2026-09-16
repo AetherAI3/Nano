@@ -12,7 +12,7 @@ from .catalog import (DEFAULT_VOCABULARY, KINDS, SEMANTIC_FIELDS, SLUG,
 
 _SHA = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _CONVENTIONAL = re.compile(r"^(feat|fix|refactor|docs|test|chore|perf|build|ci)"
-                           r"(?:\(([^)]+)\))?!?:\s*(.+)$", re.I)
+                           r"(?:\(([^)]+)\))?(!?):\s*(.+)$", re.I)
 _TYPE = {"feat": "feature", "perf": "refactor", "build": "chore", "ci": "chore"}
 _PREFIX = {"feature": "feat", "fix": "fix", "refactor": "refactor",
            "docs": "docs", "test": "test", "chore": "chore"}
@@ -165,7 +165,7 @@ def classify_record(record: ProjectRecord | Mapping, *,
             phrase(normalized, "label:" + label)
     conventional = _CONVENTIONAL.match(record.title)
     if conventional:
-        kind, scope, _ = conventional.groups()
+        kind, scope, _, _ = conventional.groups()
         add("type", _TYPE.get(kind.casefold(), kind.casefold()), "conventional-title")
         if scope:
             phrase(scope, "title-scope:" + scope)
@@ -213,7 +213,7 @@ def classify_record(record: ProjectRecord | Mapping, *,
     if any(v != "unknown" for v in status.values()) and not record.observed_at:
         diagnostics.append("STATUS_OBSERVATION_TIME_MISSING")
     status["observedAt"] = record.observed_at or None
-    base_title = conventional.group(3) if conventional else record.title
+    base_title = conventional.group(4) if conventional else record.title
     def remove_semantic_tag(match):
         found = vocabulary.lookup(match.group(1))
         return "" if found and found[0] in ("type", "area", "tech") else match.group(0)
@@ -224,7 +224,8 @@ def classify_record(record: ProjectRecord | Mapping, *,
     suggested = record.title
     if len(types) == 1 and types[0] in _PREFIX and base_title:
         scope = f"({areas[0]})" if len(areas) == 1 else ""
-        suggested = f"{_PREFIX[types[0]]}{scope}: {base_title}"
+        breaking = conventional.group(3) if conventional else ""
+        suggested = f"{_PREFIX[types[0]]}{scope}{breaking}: {base_title}"
     chips = [tag["value"] for tag in tags]
     if status["review"] == "pending":
         chips.append("pending review")

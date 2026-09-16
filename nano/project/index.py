@@ -47,6 +47,9 @@ class ProjectIndex:
             self._projects.setdefault(record.project_id, set()).add(index)
             values = [(tag["facet"], tag["value"]) for tag in annotation["tags"]]
             values += [(f, annotation["status"][f]) for f in STATUS_VALUES]
+            # A draft is still open; "open not draft" excludes drafts.
+            if annotation["status"]["state"] == "draft":
+                values.append(("state", "open"))
             values += [("kind", record.kind), ("repo", record.repository.casefold()),
                        ("author", record.author.casefold())]
             if record.number is not None:

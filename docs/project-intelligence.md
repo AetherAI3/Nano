@@ -132,6 +132,7 @@ record/project identities, full source SHA, original and suggested titles,
 evidence-bearing tags, status, explicit dependencies, diagnostics, and capsule.
 annotationHash identifies this derived output; it is not a signature or proof
 of authenticated input. Naming is a suggestion only; Nano never writes GitHub.
+Suggested titles preserve an existing conventional breaking-change marker (!).
 
 ## Search contract
 
@@ -152,6 +153,9 @@ tag, number, sha, path, text, after, before.
 Short aliases: technology -> tech, repository -> repo, status -> state.
 #41 is number:41. Bracketed chips accept known phrases or a literal tag value.
 Explicit label filters match labels exactly; tag matches any semantic tag value.
+Open includes draft PRs; use "open not draft" to exclude drafts. Lifecycle group
+counts keep draft and ordinary open records separate. Hosts use state=draft
+only for an open draft, and state=closed/merged for completed PRs.
 
 Quoted text is literal, including words such as "not" or "pending review".
 Unknown bare words remain full-text predicates. Only the documented filler

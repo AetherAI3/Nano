@@ -88,6 +88,12 @@ def test_naming_is_a_suggestion_and_preserves_unknown_literal_tags():
     assert classify_record(record(title="Release notes", labels=[], files=[]))["suggestedTitle"] == "Release notes"
 
 
+@pytest.mark.parametrize("title", ["feat(frontend)!: replace CSS API", "feat!: replace CSS API"])
+def test_naming_preserves_breaking_change_marker(title):
+    result = classify_record(record(title=title, tag_overrides={"area": ["frontend"]}))
+    assert result["suggestedTitle"] == "feat(frontend)!: replace CSS API"
+
+
 def test_record_input_is_detached_and_frozen():
     source = record()
     value = ProjectRecord.from_dict(source)
@@ -166,6 +172,17 @@ def test_exclusions_and_or_use_complete_meaning_and_unknown_is_not_success():
 def test_unknown_state_does_not_satisfy_not_merged():
     index = ProjectIndex([record(state="unknown")])
     assert index.search("not merged", project_id="alpha")["total"] == 0
+
+
+def test_open_includes_drafts_with_explicit_draft_exclusion_available():
+    index = ProjectIndex([record("open"), record("draft", state="draft"),
+                          record("closed", state="closed"), record("merged", state="merged"),
+                          record("unknown", state="unknown")])
+    result = index.search("open PRs group by state", project_id="alpha")
+    assert {item["recordId"] for item in result["items"]} == {"open", "draft"}
+    assert result["groups"] == [{"value": "draft", "count": 1}, {"value": "open", "count": 1}]
+    assert [item["recordId"] for item in index.search("open not draft", project_id="alpha")["items"]] == ["open"]
+    assert {item["recordId"] for item in index.search("not open", project_id="alpha")["items"]} == {"closed", "merged"}
 
 
 def test_group_counts_cover_all_matches_before_pagination():
