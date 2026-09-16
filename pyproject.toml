@@ -63,4 +63,6 @@ nano = [
   "library/*/*.json",
   "intent/schemas/*.json",
   "intent/fixtures/*.json",
+  "project/fixtures/*.json",
+  "project/schemas/*.json",
 ]

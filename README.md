@@ -58,6 +58,24 @@ IR `0.1.0`, catalogs, effects, consent policy, and canonical fixtures.
 
 ## Quick start
 
+### Project search and compact memory
+
+Nano also supports general application discovery through `nano.project`:
+classify PRs, commits, and memory records into evidence-bearing tags; compile
+searches such as `frontend css pending review`; group results; suggest titles;
+and emit compact agent summaries. It uses no model or network calls.
+
+```bash
+nano project parse "frontend css pending review group by area"
+nano project search nano/project/fixtures/records.json "css" --project-id example-project
+```
+
+The host supplies authorized records and current status observations. Nano
+does not rename PRs or upload memory. See the [project intelligence contract
+and APR integration guide](docs/project-intelligence.md).
+
+### Strategy quick start
+
 From a fresh checkout, run the bundled Momentum strategy and then the test suite:
 
 ```bash

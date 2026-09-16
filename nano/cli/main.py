@@ -44,6 +44,7 @@ from .commands import (
     command_visualize,
 )
 from .render import FORMATS
+from ..project.cli import command_project
 
 _EPILOG = """\
 exit codes:
@@ -230,6 +231,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     intent_explain.add_argument("phrase", metavar="PHRASE")
     intent_explain.set_defaults(handler=command_intent)
+
+    project = subcommands.add_parser("project", help="classify and search PR, commit, and memory records")
+    project_actions = project.add_subparsers(dest="project_action", required=True)
+    project_parse = project_actions.add_parser("parse", help="compile a read-only project search")
+    project_parse.add_argument("query")
+    project_parse.set_defaults(handler=command_project)
+    project_classify = project_actions.add_parser("classify", help="derive tags and a compact capsule")
+    project_classify.add_argument("file", type=Path)
+    project_classify.set_defaults(handler=command_project)
+    project_search = project_actions.add_parser("search", help="search a supplied JSON record snapshot")
+    project_search.add_argument("file", type=Path)
+    project_search.add_argument("query")
+    project_search.add_argument("--project-id", required=True)
+    project_search.add_argument("--limit", type=int, default=20)
+    project_search.add_argument("--offset", type=int, default=0)
+    project_search.set_defaults(handler=command_project)
 
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)

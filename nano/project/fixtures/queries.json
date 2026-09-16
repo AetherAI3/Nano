@@ -1,0 +1,33 @@
+[
+  {
+    "source": "frontend css pending review",
+    "expectedIds": [
+      "pr:9001:41"
+    ]
+  },
+  {
+    "source": "open PRs with failed CI",
+    "expectedIds": [
+      "pr:9001:42"
+    ]
+  },
+  {
+    "source": "css",
+    "expectedIds": [
+      "pr:9001:41",
+      "memory:9001:css"
+    ]
+  },
+  {
+    "source": "memories css",
+    "expectedIds": [
+      "memory:9001:css"
+    ]
+  },
+  {
+    "source": "commits memory graph",
+    "expectedIds": [
+      "commit:9001:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ]
+  }
+]

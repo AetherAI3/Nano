@@ -52,7 +52,7 @@ jobs:
           python-version: "3.10"
       - name: Build wheel
         run: python -m pip wheel --no-deps --wheel-dir dist .
-      - name: Verify packaged strategy assets
+      - name: Verify packaged strategy and project assets
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -61,7 +61,7 @@ jobs:
           wheel = next(Path("dist").glob("*.whl"))
           expected = {
               path.as_posix()
-              for root in (Path("nano/examples"), Path("nano/library"))
+              for root in (Path("nano/examples"), Path("nano/library"), Path("nano/project"))
               for path in root.rglob("*")
               if path.suffix in {".nano", ".json"}
           }
@@ -69,19 +69,25 @@ jobs:
               packaged = set(archive.namelist())
 
           missing = sorted(expected - packaged)
-          assert not missing, f"wheel is missing documented strategy assets: {missing}"
+          assert not missing, f"wheel is missing documented assets: {missing}"
 
           required_modules = {
               "nano/library/__init__.py",
               "nano/library/catalog.py",
               "nano/library/contribution.py",
+              "nano/project/__init__.py",
+              "nano/project/catalog.py",
+              "nano/project/records.py",
+              "nano/project/query.py",
+              "nano/project/index.py",
+              "nano/project/cli.py",
           }
           missing_modules = sorted(required_modules - packaged)
           assert not missing_modules, (
-              f"wheel is missing library validation modules: {missing_modules}"
+              f"wheel is missing required modules: {missing_modules}"
           )
           PY
-      - name: Verify installed library validation imports
+      - name: Verify installed library and project discovery
         run: |
           python - <<'PY'
           import subprocess
@@ -108,7 +114,13 @@ jobs:
                           "'nano.library.contribution'; "
                           "catalog = load_catalog(); "
                           "assert catalog['strategyCount'] == 55; "
-                          "assert catalog_diagnostics() == ()"
+                          "assert catalog_diagnostics() == (); "
+                          "import json; from importlib.resources import files; "
+                          "from nano.project import ProjectIndex; "
+                          "data = files('nano.project').joinpath('fixtures/records.json').read_text(); "
+                          "result = ProjectIndex(json.loads(data)).search("
+                          "'frontend css pending review', project_id='example-project'); "
+                          "assert [x['recordId'] for x in result['items']] == ['pr:9001:41']"
                       ),
                   ],
                   cwd=outside_checkout,

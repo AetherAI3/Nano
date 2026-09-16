@@ -4,6 +4,7 @@ Nano is an **alpha reference implementation**. This page distinguishes code that
 
 | Area | Status | Evidence and boundary |
 | --- | --- | --- |
+| Project search and semantic annotations | Implemented in Nano; host integration separate | `nano/project/` derives tags with evidence, suggests titles, compiles bounded read-only queries, groups supplied records, and emits compact capsules. The host owns corpus completeness, freshness, GitHub, and APR graph persistence. See [project-intelligence.md](project-intelligence.md). |
 | `.nano` lexer, parser, and canonical code generation | Implemented | `nano/compiler/` parses the v1.0 grammar and produces `StrategyGraph` (baseline IR) or `NanoModule` (v1.0 IR). |
 | Static typing and look-ahead protection | Implemented | `nano/types/` types `series<T>`, resolves indicator periods at compile time, and rejects any series offset that is negative or not a compile-time constant. |
 | Computed indicators | Implemented | `nano/indicators/` ships 40 deterministic kernels with pinned degenerate-case conventions. The feed-signal form still works. |
