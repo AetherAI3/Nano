@@ -1,0 +1,76 @@
+[
+  {
+    "id": "pr:9001:41",
+    "project_id": "example-project",
+    "kind": "pr",
+    "repository": "example/project",
+    "number": 41,
+    "author": "brandon",
+    "title": "feat(frontend): add CSS search filters",
+    "files": [
+      "site/components/search.css"
+    ],
+    "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "open",
+    "review": "pending",
+    "ci": "passed",
+    "ci_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "review_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observed_at": "2026-09-16T10:00:00Z",
+    "updated_at": "2026-09-16T09:00:00Z",
+    "depends_on": [
+      "pr:9001:40"
+    ]
+  },
+  {
+    "id": "pr:9001:42",
+    "project_id": "example-project",
+    "kind": "pr",
+    "repository": "example/project",
+    "number": 42,
+    "author": "brandon",
+    "title": "fix(api): repair project lookup",
+    "files": [
+      "api/routes.py"
+    ],
+    "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "state": "open",
+    "review": "approved",
+    "ci": "failed",
+    "ci_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "review_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "observed_at": "2026-09-16T10:00:00Z",
+    "updated_at": "2026-09-16T09:00:00Z",
+    "depends_on": []
+  },
+  {
+    "id": "memory:9001:css",
+    "project_id": "example-project",
+    "kind": "memory",
+    "repository": "example/project",
+    "title": "CSS conventions for project cards",
+    "source_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "tag_overrides": {
+      "type": [
+        "docs"
+      ],
+      "area": [
+        "frontend"
+      ],
+      "tech": [
+        "css"
+      ]
+    }
+  },
+  {
+    "id": "commit:9001:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "project_id": "example-project",
+    "kind": "commit",
+    "repository": "example/project",
+    "title": "docs(memory): document graph labels",
+    "source_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "files": [
+      "docs/memory.md"
+    ]
+  }
+]

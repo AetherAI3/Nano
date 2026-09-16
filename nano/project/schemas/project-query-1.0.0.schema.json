@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nano project query 1.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "nanoProjectQueryVersion",
+    "source",
+    "vocabularyHash",
+    "valid",
+    "anyOf",
+    "groupBy",
+    "sort",
+    "diagnostics"
+  ],
+  "properties": {
+    "nanoProjectQueryVersion": {
+      "const": "1.0.0"
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "vocabularyHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "anyOf": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "allOf"
+        ],
+        "properties": {
+          "allOf": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/$defs/predicate"
+            }
+          }
+        }
+      }
+    },
+    "groupBy": {
+      "enum": [
+        null,
+        "type",
+        "area",
+        "tech",
+        "relation",
+        "state",
+        "review",
+        "ci",
+        "kind",
+        "repo",
+        "author"
+      ]
+    },
+    "sort": {
+      "enum": [
+        "updated",
+        "number",
+        "title"
+      ]
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "span"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "span": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "predicate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "value",
+        "exclude"
+      ],
+      "properties": {
+        "field": {
+          "enum": [
+            "type",
+            "area",
+            "tech",
+            "relation",
+            "state",
+            "review",
+            "ci",
+            "kind",
+            "repo",
+            "author",
+            "label",
+            "tag",
+            "number",
+            "sha",
+            "path",
+            "text",
+            "after",
+            "before"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "exclude": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "state"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": [
+                  "open",
+                  "closed",
+                  "merged",
+                  "draft",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "review"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "changes_requested",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "ci"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": [
+                  "passed",
+                  "failed",
+                  "running",
+                  "queued",
+                  "cancelled",
+                  "none",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "kind"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": [
+                  "pr",
+                  "commit",
+                  "memory"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "number"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "pattern": "^[1-9][0-9]{0,9}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "const": "sha"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "pattern": "^[0-9a-f]{7,64}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "field": {
+                "enum": [
+                  "after",
+                  "before"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+                "format": "date"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "diagnostics": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "diagnostics": {
+            "minItems": 1
+          }
+        }
+      }
+    }
+  ]
+}

@@ -12,6 +12,7 @@ Package map:
 |---|---|
 | ``nano.compiler`` | `.nano` -> IR: lexer, parser, codegen |
 | ``nano.intent`` | natural language -> independently-versioned host plan |
+| ``nano.project`` | project search, evidence-bearing tags, compact agent context |
 | ``nano.types`` | the type system, and look-ahead protection |
 | ``nano.indicators`` | typed indicator signatures + deterministic kernels |
 | ``nano.ir`` | both IR document versions, and the DAG runtimes execute |
