@@ -7,14 +7,20 @@
 ### Trading and agent rules that run the same way every time — with a receipt.
 
 [![CI](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/aether-nano?style=flat-square&logo=pypi&logoColor=white&color=22d3ee)](https://pypi.org/project/aether-nano/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
+[![GitHub stars](https://img.shields.io/github/stars/AetherAI3/Nano?style=flat-square&logo=github&color=facc15)](https://github.com/AetherAI3/Nano/stargazers)
 
 ### **[→ Browse the Strategy Library](https://aethersystems.net/nano)**
 
 Read every strategy in this repo — source, compiled IR, signals and the corpus
 provenance policy — in your browser. No install, no account. Open any one of them
 straight into an editor.
+
+<img src="assets/nano-demo.gif" alt="Nano CLI demo: install, browse deterministic strategies, compile an intent, and parse a project query" width="820" />
+
+[Install](#install-and-explore) · [Strategy library](nano/library/README.md) · [Language](docs/language.md) · [Receipts](docs/receipts.md) · [Contribute](docs/first-contribution.md)
 
 </div>
 
@@ -34,6 +40,19 @@ strategy MaxDrawdownBreaker {
 ```
 
 That is the risk breaker from the [strategy library](nano/library/risk/max_drawdown_breaker.nano), with its comment header trimmed: when portfolio drawdown reaches 5 percent, propose a `PAUSE` and escalate to a named risk desk. Nano cannot halt anything by itself — your application's gate decides whether to act on the proposal. That separation is the whole design.
+
+## Install and explore
+
+```bash
+pip install aether-nano
+nano library search momentum
+nano intent compile "when is spy earnings" --json
+```
+
+The package has zero required dependencies and includes the compiler, runtime,
+CLI, 55-strategy conformance library, 40 deterministic indicators, Intent
+frontend, and project-search fixtures. Nano does not fetch market data or take
+actions: hosts supply observations and retain final authority.
 
 ### Why that matters when money is on the line
 
@@ -58,25 +77,10 @@ IR `0.1.0`, catalogs, effects, consent policy, and canonical fixtures.
 
 ## Quick start
 
-### Project search and compact memory
+### Strategy replay from source
 
-Nano also supports general application discovery through `nano.project`:
-classify PRs, commits, and memory records into evidence-bearing tags; compile
-searches such as `frontend css pending review`; group results; suggest titles;
-and emit compact agent summaries. It uses no model or network calls.
-
-```bash
-nano project parse "frontend css pending review group by area"
-nano project search nano/project/fixtures/records.json "css" --project-id example-project
-```
-
-The host supplies authorized records and current status observations. Nano
-does not rename PRs or upload memory. See the [project intelligence contract
-and APR integration guide](docs/project-intelligence.md).
-
-### Strategy quick start
-
-From a fresh checkout, run the bundled Momentum strategy and then the test suite:
+Clone the repository to run the bundled Momentum strategy and the full test
+suite:
 
 ```bash
 git clone https://github.com/AetherAI3/Nano.git
@@ -112,6 +116,22 @@ strategy Momentum {
 <!-- README-EXAMPLE:END -->
 
 `RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 40 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
+
+### Project search and compact memory
+
+Nano also supports general application discovery through `nano.project`:
+classify PRs, commits, and memory records into evidence-bearing tags; compile
+searches such as `frontend css pending review`; group results; suggest titles;
+and emit compact agent summaries. It uses no model or network calls.
+
+```bash
+nano project parse "frontend css pending review group by area"
+nano project search nano/project/fixtures/records.json "css" --project-id example-project
+```
+
+The host supplies authorized records and current status observations. Nano
+does not rename PRs or upload memory. See the [project intelligence contract
+and APR integration guide](docs/project-intelligence.md).
 
 ## Start with the strategy library
 
