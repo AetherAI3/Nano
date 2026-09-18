@@ -1,4 +1,4 @@
-Ù÷ZkÎzåÆ¹ïÇõçÖïmí½9ož]Û‡Ñ½÷óWoM<ãŸ5kmZoFõ­\×F¸÷¿tkÞœs×:<div align="center">
+<div align="center">
 
 <img src="https://raw.githubusercontent.com/AetherAI3/Nano/main/assets/nano-hex.png" alt="Nano logo" width="210" />
 
