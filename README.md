@@ -1,6 +1,6 @@
-<div align="center">
+��Zk�z�ƹ����֝�m��9o�]ۇѽ��WoM<�5kmZoF���\�F���tkޜs�:<div align="center">
 
-<img src="assets/nano-hex.png" alt="Nano logo" width="210" />
+<img src="https://raw.githubusercontent.com/AetherAI3/Nano/main/assets/nano-hex.png" alt="Nano logo" width="210" />
 
 # Nano
 
@@ -8,8 +8,8 @@
 
 [![CI](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml/badge.svg)](https://github.com/AetherAI3/Nano/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/aether-nano?style=flat-square&logo=pypi&logoColor=white&color=22d3ee)](https://pypi.org/project/aether-nano/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](https://github.com/AetherAI3/Nano/blob/main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-38bdf8.svg)](https://github.com/AetherAI3/Nano/blob/main/pyproject.toml)
 [![GitHub stars](https://img.shields.io/github/stars/AetherAI3/Nano?style=flat-square&logo=github&color=facc15)](https://github.com/AetherAI3/Nano/stargazers)
 
 ### **[→ Browse the Strategy Library](https://aethersystems.net/nano)**
@@ -18,9 +18,9 @@ Read every strategy in this repo — source, compiled IR, signals and the corpus
 provenance policy — in your browser. No install, no account. Open any one of them
 straight into an editor.
 
-<img src="assets/nano-demo.gif" alt="Nano CLI demo: install, browse deterministic strategies, compile an intent, and parse a project query" width="820" />
+<img src="https://raw.githubusercontent.com/AetherAI3/Nano/main/assets/nano-demo.gif" alt="Nano CLI demo: install, browse deterministic strategies, compile an intent, and parse a project query" width="820" />
 
-[Install](#install-and-explore) · [Strategy library](nano/library/README.md) · [Language](docs/language.md) · [Receipts](docs/receipts.md) · [Contribute](docs/first-contribution.md)
+[Install](#install-and-explore) · [Strategy library](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md) · [Language](https://github.com/AetherAI3/Nano/blob/main/docs/language.md) · [Receipts](https://github.com/AetherAI3/Nano/blob/main/docs/receipts.md) · [Contribute](https://github.com/AetherAI3/Nano/blob/main/docs/first-contribution.md)
 
 </div>
 
@@ -39,7 +39,7 @@ strategy MaxDrawdownBreaker {
 }
 ```
 
-That is the risk breaker from the [strategy library](nano/library/risk/max_drawdown_breaker.nano), with its comment header trimmed: when portfolio drawdown reaches 5 percent, propose a `PAUSE` and escalate to a named risk desk. Nano cannot halt anything by itself — your application's gate decides whether to act on the proposal. That separation is the whole design.
+That is the risk breaker from the [strategy library](https://github.com/AetherAI3/Nano/blob/main/nano/library/risk/max_drawdown_breaker.nano), with its comment header trimmed: when portfolio drawdown reaches 5 percent, propose a `PAUSE` and escalate to a named risk desk. Nano cannot halt anything by itself — your application's gate decides whether to act on the proposal. That separation is the whole design.
 
 ## Install and explore
 
@@ -72,7 +72,7 @@ requests. It compiles phrases such as `spy earnings` or
 `when is spy earnings` into typed, auditable, host-governed command plans without
 changing the strategy language or calling a model. Try
 `nano intent compile "when is spy earnings" --json`; see the
-[Intent compiler architecture](docs/intent-compiler.md) for the separate AST,
+[Intent compiler architecture](https://github.com/AetherAI3/Nano/blob/main/docs/intent-compiler.md) for the separate AST,
 IR `0.1.0`, catalogs, effects, consent policy, and canonical fixtures.
 
 ## Quick start
@@ -115,7 +115,7 @@ strategy Momentum {
 ```
 <!-- README-EXAMPLE:END -->
 
-`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 40 deterministic kernels. Nano still never *fetches* market data. See the [language reference](docs/language.md) for both contracts.
+`RSI(14)` is the **feed-signal form**: the host computes and injects the `RSI` series. v1.0 adds a **computed form** — `RSI(close, 14)`, where `close` is a declared `input` and Nano derives the series itself from 40 deterministic kernels. Nano still never *fetches* market data. See the [language reference](https://github.com/AetherAI3/Nano/blob/main/docs/language.md) for both contracts.
 
 ### Project search and compact memory
 
@@ -131,13 +131,13 @@ nano project search nano/project/fixtures/records.json "css" --project-id exampl
 
 The host supplies authorized records and current status observations. Nano
 does not rename PRs or upload memory. See the [project intelligence contract
-and APR integration guide](docs/project-intelligence.md).
+and APR integration guide](https://github.com/AetherAI3/Nano/blob/main/docs/project-intelligence.md).
 
 ## Start with the strategy library
 
-The [strategy library](nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas — and deterministic watchdog controls — translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
+The [strategy library](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md) is Nano's community on-ramp: a small, tested corpus of familiar trading ideas — and deterministic watchdog controls — translated into the DSL. Every entry pairs readable `.nano` source with expected IR, so quant researchers can learn the language, compare conventions, and contribute a new rule with confidence.
 
-**[Your first contribution →](docs/first-contribution.md)** walks the whole path once, with a real rule: idea, source, generated IR, deterministic replay, CI, pull request. One command generates the IR fixture and checks the entry before you push it.
+**[Your first contribution →](https://github.com/AetherAI3/Nano/blob/main/docs/first-contribution.md)** walks the whole path once, with a real rule: idea, source, generated IR, deterministic replay, CI, pull request. One command generates the IR fixture and checks the entry before you push it.
 
 The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems.net/nano)** — search and filter by category, cadence or signal, read the source and compiled IR side by side, and open any strategy directly in an editor. Nothing to install, no account needed.
 
@@ -153,13 +153,13 @@ Strategy names and indicator names such as Bollinger Bands are used nominatively
 to identify the calculation each entry implements. No affiliation with or
 endorsement by any trademark holder is implied. The contribution policy forbids
 copying proprietary platform source and treats absent provenance as unspecified,
-not original — see the [library README](nano/library/README.md#provenance).
+not original — see the [library README](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md#provenance).
 
-[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](nano/library/README.md) · [Your first contribution →](docs/first-contribution.md) · [Add a strategy →](CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml)
+[Browse online →](https://aethersystems.net/nano) · [Browse in-repo →](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md) · [Your first contribution →](https://github.com/AetherAI3/Nano/blob/main/docs/first-contribution.md) · [Add a strategy →](https://github.com/AetherAI3/Nano/blob/main/CONTRIBUTING.md#add-a-strategy) · [Propose a language change →](https://github.com/AetherAI3/Nano/issues/new?template=language-change.yml)
 
 ## From rule to governed decision
 
-![From a Nano strategy to a host-governed decision](assets/nano-governed-decision-flow.svg)
+![From a Nano strategy to a host-governed decision](https://raw.githubusercontent.com/AetherAI3/Nano/main/assets/nano-governed-decision-flow.svg)
 
 Nano owns parsing, IR validation, and deterministic reference evaluation. The host supplies the `MarketFrame`, applies its `DecisionGate`, stores the result, and performs any real-world action. The same graph and frame produce the same reference result; bridge replay is deterministic when the host gate is deterministic too.
 
@@ -171,7 +171,7 @@ Nano owns parsing, IR validation, and deterministic reference evaluation. The ho
 | Named numeric signal series and AND-only threshold conditions | Policy, approvals, persistence, and external effects |
 | Proposed `buy`, `sell`, `execute`, `pause`, and `observe` intents | API calls, exchange execution, and any action with consequences |
 
-v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. It still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](docs/status.md) separates implemented behavior from experimental work and future ideas.
+v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. It still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](https://github.com/AetherAI3/Nano/blob/main/docs/status.md) separates implemented behavior from experimental work and future ideas.
 
 ## Deterministic watchdogs and compliance controls
 
@@ -219,7 +219,7 @@ strategy TrustedRouteWatchdog {
 
 Nano does not inspect the network, disable traffic, or decide that a network is hostile. The host measures the route state and supplies `TRUSTED_ROUTE`. Nano only evaluates the declared threshold and returns proposed intents with an ordered execution log.
 
-Working versions of these rules live in [`nano/library/watchdog/`](nano/library/watchdog/), alongside the signal conventions a host has to implement — see [the category's section in the library README](nano/library/README.md#watchdog-signals-watchdog). Contributing one follows the [same path as a strategy](docs/first-contribution.md).
+Working versions of these rules live in [`nano/library/watchdog/`](https://github.com/AetherAI3/Nano/tree/main/nano/library/watchdog), alongside the signal conventions a host has to implement — see [the category's section in the library README](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md#watchdog-signals-watchdog). Contributing one follows the [same path as a strategy](https://github.com/AetherAI3/Nano/blob/main/docs/first-contribution.md).
 
 The application's gate can then consider additional context, require operator consent, reject the proposal, or authorize an independently implemented enforcement mechanism.
 
@@ -310,17 +310,17 @@ Nano stays approachable by keeping its contract narrow and changes reviewable. C
 - **Application engineers** who can improve integrations, replay coverage, documentation, or developer experience.
 - **Language contributors** who can start a focused proposal before changing grammar or IR.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow and the [issue templates](.github/ISSUE_TEMPLATE/) for a clear place to begin.
+See [CONTRIBUTING.md](https://github.com/AetherAI3/Nano/blob/main/CONTRIBUTING.md) for the contribution workflow and the [issue templates](https://github.com/AetherAI3/Nano/tree/main/.github/ISSUE_TEMPLATE) for a clear place to begin.
 
 ## Documentation
 
 | Need | Start here |
 | --- | --- |
-| Explore or contribute a strategy | [Strategy library](nano/library/README.md) |
-| Learn the grammar and runtime semantics | [Language reference](docs/language.md) |
-| Understand module boundaries | [Architecture](docs/architecture.md) |
-| Check implemented versus experimental work | [Status](docs/status.md) |
-| Integrate or contribute | [Contributing](CONTRIBUTING.md) |
-| Report a security concern | [Security policy](SECURITY.md) |
+| Explore or contribute a strategy | [Strategy library](https://github.com/AetherAI3/Nano/blob/main/nano/library/README.md) |
+| Learn the grammar and runtime semantics | [Language reference](https://github.com/AetherAI3/Nano/blob/main/docs/language.md) |
+| Understand module boundaries | [Architecture](https://github.com/AetherAI3/Nano/blob/main/docs/architecture.md) |
+| Check implemented versus experimental work | [Status](https://github.com/AetherAI3/Nano/blob/main/docs/status.md) |
+| Integrate or contribute | [Contributing](https://github.com/AetherAI3/Nano/blob/main/CONTRIBUTING.md) |
+| Report a security concern | [Security policy](https://github.com/AetherAI3/Nano/blob/main/SECURITY.md) |
 
-The [paper series](docs/papers/README.md) records design arguments and research directions; source and tests define current behavior.
+The [paper series](https://github.com/AetherAI3/Nano/blob/main/docs/papers/README.md) records design arguments and research directions; source and tests define current behavior.
