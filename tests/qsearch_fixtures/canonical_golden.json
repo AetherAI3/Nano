@@ -1,0 +1,25 @@
+{
+ "payload": {
+  "z": [
+   1,
+   2.5,
+   -0.0,
+   true,
+   null,
+   "ünïcode ☃"
+  ],
+  "a": {
+   "nested": {
+    "k": [
+     []
+    ]
+   },
+   "b": ""
+  },
+  "m": 1e-09,
+  "big": 12345678901234567890,
+  "neg": -3.0
+ },
+ "digest": "sha256:dafbeda9f917f45c1e86c1cbad59a4b9c30ed5a74d662aabffcf4424fedb833d",
+ "job_4var_digest": "sha256:c51a2a7655b390d289bbb61d12d918c99fa5c817829583c2e62330323ef1b425"
+}
