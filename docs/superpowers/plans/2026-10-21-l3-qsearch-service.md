@@ -56,7 +56,7 @@ Q = [[-0.5477386934673368, -0.5, -0.5, -0.5, -0.5, -0.5],
      [-0.5, -0.5, -0.5, -0.3165829145728643, -0.5, -0.5],
      [-0.5, -0.5, -0.5, -0.5, -1.0, -0.5],
      [-0.5, -0.5, -0.5, -0.5, -0.5, -0.40452261306532666]]
-gammas = [0.2, 0.4]; betas = [0.4, 0.2]; nuclei = [[0, 1, 2], [3, 4, 5]]
+gammas = [0.2, 0.4]; betas = [0.4, 0.2]; ATLAS frozen nuclei = [[0, 1, 2], [3, 4, 5]] (vertex-disjoint); greedy find_nuclei packs four: [[0,1,2],[0,3,4],[1,3,5],[2,4,5]]
 ordinary on fake_fez: logical rzz 30, native cz 144 (spec expects joint5 ≈ 103)
 ```
 
@@ -139,8 +139,9 @@ PAIR02 = [[-0.5477386934673368, -0.5, -0.5, -0.5, -0.5, -0.5],
           [-0.5, -0.5, -0.5, -0.5, -0.5, -0.40452261306532666]]
 
 
-def test_dense_pair02_gives_two_edge_disjoint_triangles():
-    assert find_nuclei(PAIR02) == [(0, 1, 2), (3, 4, 5)]
+def test_dense_pair02_greedy_packs_four_edge_disjoint_triangles():
+    # K6: lexicographic greedy claims 12 of 15 edges; (0,5), (1,4), (2,3) remain, no triangle
+    assert find_nuclei(PAIR02) == [(0, 1, 2), (0, 3, 4), (1, 3, 5), (2, 4, 5)]
 
 
 def test_no_couplings_gives_no_nuclei():
@@ -1520,7 +1521,7 @@ def test_auto_compiles_both_and_keeps_smaller(pair02):
     plan = compile_program(pair02)
     cands = plan.candidates
     assert set(cands) == {"ordinary", "joint5"} and cands["ordinary"]["logical_2q"] == 30
-    assert plan.nuclei == [[0, 1, 2], [3, 4, 5]] or plan.variant == "ordinary"
+    assert plan.nuclei == [[0, 1, 2], [0, 3, 4], [1, 3, 5], [2, 4, 5]] or plan.variant == "ordinary"
     chosen = min(cands, key=lambda k: (cands[k]["native_2q"], k != "ordinary"))
     assert plan.variant == chosen and plan.metrics == cands[chosen]
     assert plan.compiled_plan_digest.startswith("sha256:") and plan.coupling_map == "heavy_hex_d3"
