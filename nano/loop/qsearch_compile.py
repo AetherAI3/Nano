@@ -86,14 +86,22 @@ def _transpile(circuit, job: QSearchJob):
 
 
 def _qpy_sha256(circuit) -> str:
-    """SHA-256 of the QPY bytes, under a fixed name.
+    """SHA-256 of the QPY bytes of the circuit's gates, under a fixed name, without its layout.
 
-    Unnamed qiskit circuits get a process-global counter name (``circuit-43``)
-    that QPY serializes, so the copy is renamed to keep the digest stable.
+    Two parts of a transpiled circuit vary between identical compiles and are
+    dropped: the process-global counter name of an unnamed circuit
+    (``circuit-43``), and the ``TranspileLayout``, whose placement of idle
+    ancilla qubits is not stable across runs. Registers, instructions, global
+    phase and metadata are kept; ``measurement_map`` in the plan records where
+    each logical bit is read.
     """
-    from qiskit import qpy
+    from qiskit import QuantumCircuit, qpy
+    bare = QuantumCircuit(*circuit.qregs, *circuit.cregs, name=QPY_CIRCUIT_NAME,
+                          global_phase=circuit.global_phase, metadata=dict(circuit.metadata or {}))
+    for inst in circuit.data:
+        bare.append(inst)
     buffer = io.BytesIO()
-    qpy.dump(circuit.copy(name=QPY_CIRCUIT_NAME), buffer)
+    qpy.dump(bare, buffer)
     return hashlib.sha256(buffer.getvalue()).hexdigest()
 
 
