@@ -3,7 +3,8 @@
 Child-process code: imports numpy, qiskit and ``aether_atlas`` at call time.
 The logical program comes from ATLAS ``build_nucleus_program`` (ordinary QAOA
 or joint5 with ``find_nuclei`` nuclei); the native program is the same circuit
-transpiled to ``{cz, rz, sx, x}`` on a heavy-hex coupling map. ``variant ==
+transpiled to ``{cz, rz, sx, x}`` on a heavy-hex coupling map (or to FakeFez,
+whose recorded basis is the ISA's own gate names). ``variant ==
 "auto"`` compiles both candidates and keeps the smaller native 2Q count.
 ``compiled_plan_digest`` binds the ISA bytes and inspection so a receipt names
 one specific compiled program.
@@ -41,6 +42,7 @@ class CompiledProgram:
     physical_qubits: int
     compiled_plan_digest: str
     compile_record: dict[str, Any] = field(default_factory=dict)
+    inspection: dict[str, Any] = field(default_factory=dict)   # the digest's inspection block
 
 
 def heavy_hex_map(n: int):
@@ -79,10 +81,18 @@ def _transpile(circuit, job: QSearchJob):
         return isa, f"heavy_hex_d{_heavy_hex_distance(cm)}"
     try:
         from qiskit_ibm_runtime.fake_provider import FakeFez
-    except ImportError as exc:
-        raise TargetUnavailable("qiskit_ibm_runtime fake provider is not importable") from exc
-    isa = transpile(circuit, backend=FakeFez(), optimization_level=job.opt_level, seed_transpiler=job.compile_seed)
+        backend = FakeFez()
+    except Exception as exc:  # noqa: BLE001 - any import or construction failure means the target is absent
+        raise TargetUnavailable("qiskit_ibm_runtime FakeFez is not available") from exc
+    isa = transpile(circuit, backend=backend, optimization_level=job.opt_level, seed_transpiler=job.compile_seed)
     return isa, "fake_fez"
+
+
+def _basis(isa, job: QSearchJob) -> list[str]:
+    """Gate names the plan is expressed in: ``BASIS`` for heron, the ISA's own ops for Fez."""
+    if job.target == "heron_heavy_hex":
+        return list(BASIS)
+    return sorted(name for name in isa.count_ops() if name not in ("measure", "barrier"))
 
 
 def _qpy_sha256(circuit) -> str:
@@ -130,16 +140,21 @@ def compile_program(job: QSearchJob) -> CompiledProgram:
     chosen_nuclei = nuclei if chosen == "joint5" else []
     measurement_map = [[isa.find_bit(inst.qubits[0]).index, isa.find_bit(inst.clbits[0]).index]
                        for inst in isa.data if inst.operation.name == "measure"]
-    record = {"target": job.target, "coupling_map": cm_name, "physical_qubits": isa.num_qubits, "basis": list(BASIS),
+    record = {"target": job.target, "coupling_map": cm_name, "physical_qubits": isa.num_qubits, "basis": _basis(isa, job),
               "opt_level": job.opt_level, "seed": job.compile_seed, "candidates": candidates}
+    # The initial layout without ancillas is stable across identical compiles (only ancilla labels move).
+    initial_layout = ([int(q) for q in isa.layout.initial_index_layout(filter_ancillas=True)]
+                      if isa.layout is not None else None)
+    inspection = {"ops": {k: int(v) for k, v in isa.count_ops().items()}, **metrics,
+                  "measurement_map": measurement_map, "initial_layout": initial_layout}
     digest = canonical_digest({"schema": PLAN_SCHEMA,
                                **{k: record[k] for k in ("target", "coupling_map", "physical_qubits", "basis", "opt_level", "seed")},
                                "variant": chosen, "nuclei": chosen_nuclei, "qpy_sha256": _qpy_sha256(isa),
-                               "inspection": {"ops": {k: int(v) for k, v in isa.count_ops().items()}, **metrics,
-                                              "measurement_map": measurement_map}})
+                               "inspection": inspection})
     return CompiledProgram(variant=chosen, nuclei=chosen_nuclei, logical=logical, isa=isa, mapping=mapping,
                            metrics=metrics, candidates=candidates, coupling_map=cm_name,
-                           physical_qubits=isa.num_qubits, compiled_plan_digest=digest, compile_record=record)
+                           physical_qubits=isa.num_qubits, compiled_plan_digest=digest, compile_record=record,
+                           inspection=inspection)
 
 
 __all__ = ["BASIS", "CompiledProgram", "HEAVY_HEX_DISTANCES", "PLAN_SCHEMA", "TargetUnavailable",

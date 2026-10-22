@@ -152,7 +152,8 @@ def ok_receipt(job: QSearchJob, result: Mapping[str, Any]) -> dict[str, Any]:
         "metrics": dict(result["metrics"]),
         "backend": {
             "kind": result["kind"], "id": result["backend_id"],
-            "chi_max": result["chi_max"], "chi_reached": result["chi_reached"], "truncated": result["truncated"],
+            "chi_max": result["chi_max"], "chi_reached": result["chi_reached"],
+            "chi_source": result.get("chi_source"), "truncated": result["truncated"],
             "shots": result["shots"], "seed": result["seed"], "wall_s": result["wall_s"],
             "attempts": result["attempts"],
         },

@@ -113,10 +113,12 @@ def test_ok_receipt_agree_within_tolerance(job):
 def test_ok_receipt_disagree_and_truncated(job):
     res = _engine_result(job, (("1100", 600), ("0000", 424)))
     assert res["best_sample_energy"] > job.classical_min_energy + 0.1    # above the floor
-    res.update(kind="mps", chi_max=8, chi_reached=8, truncated=True)
+    assert ok_receipt(job, res)["backend"]["chi_source"] is None        # statevector results carry none
+    res.update(kind="mps", chi_max=8, chi_reached=8, chi_source="peak_log", truncated=True)
     body = ok_receipt(job, res)
     assert body["status"] == "TRUNCATED" and body["audit"]["agree"] is False
     assert body["backend"]["chi_reached"] == 8 and body["backend"]["truncated"] is True
+    assert body["backend"]["chi_source"] == "peak_log"
 
 
 def test_ok_receipt_top_is_capped_at_eight(job):

@@ -1,4 +1,5 @@
 import json
+import sys
 from dataclasses import replace
 
 import pytest
@@ -9,7 +10,7 @@ pytest.importorskip("aether_atlas")
 
 from nano_qsearch.canonical import canonical_digest        # noqa: E402
 from nano_qsearch.job import parse_job                      # noqa: E402
-from nano_qsearch.compile import BASIS, compile_program, heavy_hex_map   # noqa: E402
+from nano_qsearch.compile import BASIS, TargetUnavailable, compile_program, heavy_hex_map   # noqa: E402
 
 
 @pytest.fixture
@@ -31,7 +32,7 @@ def test_auto_compiles_both_and_keeps_smaller(pair02):
     plan = compile_program(pair02)
     cands = plan.candidates
     assert set(cands) == {"ordinary", "joint5"} and cands["ordinary"]["logical_2q"] == 30
-    assert plan.nuclei == [[0, 1, 2], [0, 3, 4], [1, 3, 5], [2, 4, 5]] or plan.variant == "ordinary"
+    assert plan.variant == "joint5" and plan.nuclei == [[0, 1, 2], [0, 3, 4], [1, 3, 5], [2, 4, 5]]
     chosen = min(cands, key=lambda k: (cands[k]["native_2q"], k != "ordinary"))
     assert plan.variant == chosen and plan.metrics == cands[chosen]
     assert plan.compiled_plan_digest.startswith("sha256:") and plan.coupling_map == "heavy_hex_d3"
@@ -59,5 +60,36 @@ def test_joint5_without_nuclei_is_an_error(fixtures_dir):
     assert plan.variant == "ordinary" and plan.metrics["native_2q"] == 0
 
 
-def test_digest_is_deterministic(four):
-    assert compile_program(four).compiled_plan_digest == compile_program(four).compiled_plan_digest
+@pytest.mark.parametrize("name", ["job_4var.json", "job_pair02.json"])
+def test_digest_is_deterministic(fixtures_dir, name):
+    job = parse_job(json.loads((fixtures_dir / name).read_text(encoding="utf-8")))
+    a, b = compile_program(job), compile_program(job)
+    assert a.compiled_plan_digest == b.compiled_plan_digest and a.inspection == b.inspection
+
+
+def test_heavy_hex_map_refuses_oversized_jobs():
+    with pytest.raises(ValueError):
+        heavy_hex_map(10_000)
+
+
+@pytest.mark.parametrize("name", ["job_4var.json", "job_pair02.json"])
+def test_inspection_reads_every_logical_bit_once(fixtures_dir, name):
+    job = parse_job(json.loads((fixtures_dir / name).read_text(encoding="utf-8")))
+    plan = compile_program(job)
+    mmap = plan.inspection["measurement_map"]
+    assert len(mmap) == job.n and sorted(clbit for _, clbit in mmap) == list(range(job.n))
+    assert len(plan.inspection["initial_layout"]) == job.n
+    assert plan.compile_record["basis"] == BASIS
+
+
+def test_fake_fez_unavailable_raises_target_unavailable(four, monkeypatch):
+    monkeypatch.setitem(sys.modules, "qiskit_ibm_runtime.fake_provider", None)
+    with pytest.raises(TargetUnavailable):
+        compile_program(replace(four, target="fake_fez"))
+
+
+def test_fake_fez_records_the_isa_basis(four):
+    pytest.importorskip("qiskit_ibm_runtime")
+    plan = compile_program(replace(four, target="fake_fez"))
+    ops = set(plan.isa.count_ops()) - {"measure", "barrier"}
+    assert plan.coupling_map == "fake_fez" and plan.compile_record["basis"] == sorted(ops)
