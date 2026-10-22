@@ -124,7 +124,10 @@ def _reject_constant(name: str) -> None:
 
 
 def _read_key(path: str, name: str) -> bytes:
-    data = Path(path).read_bytes()
+    try:
+        data = Path(path).read_bytes()
+    except OSError as exc:
+        raise ValueError(f"{name} is unreadable ({type(exc).__name__})") from None
     if len(data) < MIN_KEY_BYTES:
         raise ValueError(f"{name} must hold at least {MIN_KEY_BYTES} bytes")
     return data

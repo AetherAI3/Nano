@@ -37,7 +37,13 @@ from `nano/`.
 Inside `nano_qsearch/`, everything the parent process runs uses only the
 standard library: `canonical`, `job`, `receipt`, `auth`, `store`, `service`,
 `runtime_mps` and `runtime_ibm`. Only the child entry point `_engine.py`, with
-`compile.py`, imports numpy, qiskit, qiskit-aer and `aether_atlas`.
+`compile.py`, imports numpy, qiskit, qiskit-aer and `aether_atlas`. One exception:
+once every IBM gate is open, `runtime_ibm` compiles in the service process
+(today the delegate refuses before that matters).
+
+Samples come from the logical ATLAS program. The native Heron-basis program is
+compiled for its gate counts and `compiled_plan_digest` only; for noiseless
+statevector and MPS simulation the two give the same distribution.
 
 ## Install
 
@@ -51,6 +57,11 @@ ATLAS is not on PyPI. The engine child finds it through
 base `aether-nano` install still has no dependencies, and the service starts
 without the `quantum` extra. In that case every run becomes a NOT_RUN receipt
 whose reason names the engine error class.
+
+Jobs whose `compile.target` is `fake_fez` or `ibm_fez` also need
+`qiskit-ibm-runtime` (for `FakeFez`), which the `quantum` extra does not
+install. Without it those jobs are stored as NOT_RUN `engine: TargetUnavailable`.
+Predator's default target, `heron_heavy_hex`, needs nothing extra.
 
 ## Keys
 
@@ -298,7 +309,9 @@ not retried.
 
 The child's environment is the service's minus every variable whose name
 starts with `NANO_QSEARCH_KEY`, `NANO_QSEARCH_REQUEST_KEY`, `AETHER_AQRC_`,
-`QISKIT_IBM` or `IBM_`, so key paths and IBM credentials never reach it. The
+`QISKIT_IBM`, `IBM_`, `IBMQ`, `QE_TOKEN` or `PREDATOR_QSEARCH_`, so the service's
+key paths and the usual IBM credential variables do not reach it. This is a
+denylist and defence in depth; the real boundary is the OS user the service runs as. The
 child has no pipes to the service: its stdout goes to the null device and its
 stderr to a file in the job's temporary directory. On a nonzero exit the
 service writes one line to its own stderr with the exit code and the last 400
@@ -315,7 +328,7 @@ absorb.
 file, the job grants QPU seconds (`limits.max_qpu_s > 0`), and the target is
 `fake_fez` or `ibm_fez`. Even when every gate is open, submission is delegated
 to ATLAS `aqrc.campaign_runtime`. That runtime today admits only
-compiler-validation children, so the delegate still refuses. **In practice,
+compiler-validation children, so the delegate imports it and still refuses without calling it. **In practice,
 every IBM job is REFUSED today**, and a recovered IBM job is never resubmitted.
 
 ## Predator side

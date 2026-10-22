@@ -12,10 +12,10 @@
 
 ## Pinned context (read before any task)
 
-- Nano worktree: `C:\Users\lilbe\AppData\Local\Temp\claude\C--Users-lilbe-Documents-GitHub-Nano\72d117b3-d6f6-45c7-bc87-482e7d9cf209\scratchpad\wt-l3-nano`, branch `feat/v2-l3-qsearch-service` from Nano `origin/main` `e19bf1c`.
+- Nano worktree: `<scratchpad>\wt-l3-nano`, branch `feat/v2-l3-qsearch-service` from Nano `origin/main` `e19bf1c`.
 - ATLAS worktree: `...\scratchpad\wt-atlas`, branch `feat/qcompiler-find-nuclei` from ATLAS `origin/main`. Only `aether-atlas/aether_atlas/qcompiler/nuclei.py` and `aether-atlas/tests/test_qcompiler_nuclei.py` are committed there.
 - Predator-M read-only worktree (detached at `0b949cab`): `...\scratchpad\wt-predator-ro`. Never edited. Used only to generate fixtures and for the integration test (`NANO_QSEARCH_PREDATOR_PATH`).
-- Quantum code runs only with system Python `C:\Users\lilbe\AppData\Local\Programs\Python\Python312\python.exe` **from PowerShell** (Git Bash segfaults on qiskit import). Aer MPS access-violates intermittently on this host: every Aer job runs in a child process with up to 4 retries and `OMP_NUM_THREADS=1`.
+- Quantum code runs only with system Python `<system Python 3.12>` **from PowerShell** (Git Bash segfaults on qiskit import). Aer MPS access-violates intermittently on this host: every Aer job runs in a child process with up to 4 retries and `OMP_NUM_THREADS=1`.
 - Known pre-existing failure on this host: `tests/test_provenance.py::test_decide_returns_inner_decision_unchanged` fails because the installed `aether_protocol_c` rejects floats. Not ours; do not touch.
 - Commit messages: conventional type prefix, end with a blank line then `Co-Authored-By: Claude Mythos 5.1 <noreply@anthropic.com>`. Never `--no-verify`.
 - Wire contract is frozen (Predator-M `predator_gen3/discovery/qsearch_bridge.py::QSearchJobV1.to_payload()` in, `predator/drive/qsearch_backend.py::QSearchReceiptV1.from_payload` out). If it must change, write the request in the hand-off section at the bottom; do not change it.
@@ -3030,17 +3030,21 @@ def test_predator_backend_accepts_sealed_receipt(fixtures_dir, tmp_path):
 - **pair02 nuclei.** `find_nuclei` on the dense K6 pair02 objective packs four edge-disjoint triangles, `[(0,1,2),(0,3,4),(1,3,5),(2,4,5)]`, not the hand-picked vertex-disjoint pair from the Fez campaign.
 - **Compiled-plan digest.** QPY stores a process-wide circuit name and the transpile layout, both nondeterministic across processes; the digest hashes a layout-free copy under a fixed name and records `initial_layout` and `measurement_map` in its inspection block.
 - **Bond dimension.** `chi_reached` is the peak bond dimension parsed from Aer's `MPS_log_data` (`chi_source: peak_log`); the final-state bonds under-report (pair02: final 6, peak 8). If the log cannot be trusted the receipt says `chi_source: final` and marks the run truncated; programs with no two-qubit gate report `no_2q`.
+- **IBM submission.** `atlas_campaign_submit` imports ATLAS `aqrc.campaign_runtime` but does not call it; it returns REFUSED because no q-search stage purpose is qualified there (see Hand-off).
+- **Sampling.** Samples come from the logical ATLAS program; the native ISA program is compiled for metrics and the digest only (equivalent for noiseless simulation).
 - **Hardening beyond the plan** (from two-stage review): engine output is audited before a receipt is built (`ReceiptAuditError` → NOT_RUN); service caps on shots, chi and seeds return sealed REFUSED receipts; per-job wall budget across retries; least-privilege child environment; socket idle timeout; exclusive data-dir lock; bind before recovery; at most two attempts per job, an attempt counted only once a concurrency slot is held; recovery uses the runtime kind recorded at accept time and never runs hardware; generic 401 body.
 
 ## Evidence
 
-All runs on 2026-10-21/22, Windows 10, system Python 3.12.10 (`C:\Users\lilbe\AppData\Local\Programs\Python\Python312\python.exe`), qiskit 2.3.1, qiskit-aer 0.17.2, numpy 1.26.4, SQLite 3.49.1, ATLAS at `feat/qcompiler-find-nuclei`, Predator-M read-only at `origin/main` 17ee3368 (wire-contract files unchanged since 0b949cab).
+All runs on 2026-10-21/22, Windows 10, system Python 3.12.10 (`<system Python 3.12>`), qiskit 2.3.1, qiskit-aer 0.17.2, numpy 1.26.4, SQLite 3.49.1, ATLAS at `feat/qcompiler-find-nuclei`, Predator-M read-only at `origin/main` 17ee3368 (wire-contract files unchanged since 0b949cab).
 
 **Test suites** (from the worktree root, `NANO_QSEARCH_ATLAS_PATH`, `NANO_QSEARCH_PREDATOR_PATH`, `OMP_NUM_THREADS=1` set):
 
 ```
 python -m pytest -q -W ignore::DeprecationWarning --ignore=tests/test_provenance.py
 ```
+
+Result: `1468 passed, 1 skipped` (the skip is the unrelated README test-count check in `tests/test_docs.py`).
 
 `tests/test_provenance.py` has 7 pre-existing failures on this host: the installed `aether_protocol_c` rejects float fields (`CommitmentError: ... float values are not canonically reproducible`). The file and `nano/bridge` are untouched by this branch. A plain venv with only `pytest` and `pip install -e .` (no qiskit, no ATLAS) collects everything and skips the engine tests.
 

@@ -38,7 +38,8 @@ MIN_ATTEMPT_S = 1.0       # no child run is started with less than this much of 
 SERVICE_KINDS = ("auto", "mps", "statevector", "ibm")
 STDERR_TAIL_BYTES = 400
 # Never handed to the engine child: seal and request keys, and anything that could authorise IBM hardware.
-SECRET_ENV_PREFIXES = ("NANO_QSEARCH_KEY", "NANO_QSEARCH_REQUEST_KEY", "AETHER_AQRC_", "QISKIT_IBM", "IBM_")
+SECRET_ENV_PREFIXES = ("NANO_QSEARCH_KEY", "NANO_QSEARCH_REQUEST_KEY", "AETHER_AQRC_", "QISKIT_IBM", "IBM_", "IBMQ", "QE_TOKEN",
+                       "PREDATOR_QSEARCH_")
 CHILD_OPTIONS = ("engine_path", "python", "wall_s_override")
 IBM_OPTIONS = ("compile_fn", "submit_fn", "environ")
 
