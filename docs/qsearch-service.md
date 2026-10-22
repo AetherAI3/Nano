@@ -164,19 +164,25 @@ through every retry, an engine result that failed the audit, an unexpected
 exception (`service: <ExceptionClass>`), or a recovery rule (below). A reason
 never carries an exception message, only a class name or a fixed sentence.
 
-`TRUNCATED` is an MPS result whose peak bond dimension reached `chi_max`.
-`backend.chi_reached` is that peak. `backend.chi_source` records how it was
-measured:
+`TRUNCATED` is an MPS result that may have cut a bond. `backend.chi_reached`
+is the peak bond dimension, and `backend.chi_source` records how it was
+measured, which also decides `truncated`. An MPS receipt has one of three
+values:
 
 - `peak_log`: the per-step bond-dimension log from an extra Aer run with
   `mps_log_data=True`, so it includes bonds that were truncated mid-circuit.
-  This is the normal case.
+  This is the normal case. `truncated = chi_reached >= chi_max`, which errs on
+  the safe side: a state whose rank is exactly `chi_max` is also marked
+  truncated.
 - `final`: the log was missing or would not parse, so only the final bonds of
-  the state were available. Mid-circuit growth may be under-reported.
-- `null`: a statevector receipt, which has no bond dimension.
+  the state were available, and those can under-report a mid-circuit cut.
+  `chi_reached` is the largest final bond, and `truncated` is always `true`
+  when the program has a two-qubit gate.
+- `no_2q`: the program has no two-qubit gate, so every bond stays at 1.
+  `chi_reached = 1` and `truncated = false`.
 
-`truncated = chi_reached >= chi_max`. This errs on the safe side: a state
-whose rank is exactly `chi_max` is also marked truncated.
+A statevector receipt has `chi_source`, `chi_reached` and `truncated` all
+`null`, because it has no bond dimension.
 
 Before an OK or TRUNCATED receipt is built, the engine result is audited.
 Every sample's energy is recomputed from the job, `best_sample_energy` must be
@@ -214,8 +220,20 @@ row left behind by a store failure.
 Every Aer job runs in a fresh child interpreter (`NANO_QSEARCH_PYTHON`, or
 the service's own interpreter by default) with `OMP_NUM_THREADS=1`. A crash,
 meaning a nonzero exit, no output file, or output that is not a JSON object,
-is retried up to 4 times. The engine reports a deterministic error as an
-error class only. On Windows, run the service and the engine tests from
+is retried up to 4 times. All runs of one job share a single wall-clock
+budget (`limits.max_wall_s`, at most 3600 s, 600 s when unset): once it is
+spent, the job is NOT_RUN with `engine: TimeoutExpired`, however many retries
+remain. The engine reports a deterministic error, including a failed import
+such as a wrong `NANO_QSEARCH_ATLAS_PATH`, as an error class only, and it is
+not retried.
+
+The child's environment is the service's minus every variable whose name
+starts with `NANO_QSEARCH_KEY`, `NANO_QSEARCH_REQUEST_KEY`, `AETHER_AQRC_`,
+`QISKIT_IBM` or `IBM_`, so key paths and IBM credentials never reach it. The
+child has no pipes to the service: its stdout goes to the null device and its
+stderr to a file in the job's temporary directory. On a nonzero exit the
+service writes one line to its own stderr with the exit code and the last 400
+bytes of that file. That text never enters a receipt. On Windows, run the service and the engine tests from
 PowerShell with the system Python: importing qiskit segfaults under Git Bash on
 some hosts, and Aer MPS intermittently access-violates, which the retries
 absorb.

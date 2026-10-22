@@ -79,6 +79,53 @@ def test_pair02_mps_reports_peak_bond_dimension_from_the_log(fixtures_dir):
     assert max(final) < res["chi_reached"] <= job.chi_max and res["truncated"] is False
 
 
+def test_untrusted_log_falls_back_to_final_and_reports_truncated(fixtures_dir, monkeypatch):
+    body, job = _job(fixtures_dir, "job_pair02.json")
+    monkeypatch.setattr(_engine, "_peak_from_log", lambda before, after, final: None)
+    res = run_engine(body, "mps")
+    # the final bonds can under-report a mid-circuit cut, so the fallback is conservatively truncated
+    assert res["chi_source"] == "final" and res["truncated"] is True and res["chi_reached"] <= job.chi_max
+
+
+def test_no_coupling_job_on_mps_has_nothing_to_truncate(fixtures_dir):
+    body = json.loads((fixtures_dir / "job_4var.json").read_text(encoding="utf-8"))
+    q = body["qubo"]["q"]
+    body["qubo"]["q"] = [[q[i][j] if i == j else 0.0 for j in range(4)] for i in range(4)]
+    body["audit"]["classical_min_energy"] = sum(q[i][i] for i in range(4))
+    res = run_engine(_redigest(body), "mps")
+    assert "error" not in res, res
+    assert res["chi_source"] == "no_2q" and res["chi_reached"] == 1 and res["truncated"] is False
+
+
+def test_truncated_rule_per_source():
+    assert _engine._truncated(1, "no_2q", 1) is False
+    assert _engine._truncated(2, "final", 64) is True
+    assert _engine._truncated(63, "peak_log", 64) is False and _engine._truncated(64, "peak_log", 64) is True
+
+
+def test_import_failure_in_child_is_a_deterministic_error(fixtures_dir, monkeypatch):
+    body, _ = _job(fixtures_dir, "job_4var.json")
+    monkeypatch.setitem(sys.modules, "nano_qsearch.job", None)       # as if the package path were wrong
+    assert run_engine(body, "statevector") == {"error": {"type": "ModuleNotFoundError"}}
+
+
+def test_main_writes_import_failure_and_exits_zero(fixtures_dir, tmp_path, monkeypatch):
+    body, _ = _job(fixtures_dir, "job_4var.json")
+    job_path, out_path = tmp_path / "job.json", tmp_path / "out.json"
+    job_path.write_text(json.dumps(body), encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "nano_qsearch.compile", None)
+    assert _engine.main(["--job", str(job_path), "--out", str(out_path), "--kind", "mps"]) == 0
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {"error": {"type": "ModuleNotFoundError"}}
+
+
+def test_main_writes_serialisation_failure_as_error_class(tmp_path, monkeypatch):
+    job_path, out_path = tmp_path / "job.json", tmp_path / "out.json"
+    job_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(_engine, "run_engine", lambda body, kind: {"mean": float("nan")})
+    assert _engine.main(["--job", str(job_path), "--out", str(out_path), "--kind", "statevector"]) == 0
+    assert json.loads(out_path.read_text(encoding="utf-8")) == {"error": {"type": "ValueError"}}
+
+
 def test_peak_from_log_takes_only_this_runs_suffix():
     before = "{I0:cx on qubits 1,0, BD=[9 9],  }"
     after = "{I0:cx on qubits 1,0, BD=[9 9],  I0:cx on qubits 1,0, BD=[2 1],  internal_swap on qubits 2,1, BD=[2 4],  " \

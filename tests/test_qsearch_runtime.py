@@ -1,9 +1,11 @@
 import json
 import textwrap
+import time
 from dataclasses import replace
 
 import pytest
 
+from nano_qsearch import runtime_mps
 from nano_qsearch.job import parse_job
 from nano_qsearch.runtime_mps import MAX_ATTEMPTS, MpsRuntime, StatevectorRuntime, build_runtime, select_kind
 
@@ -67,7 +69,64 @@ def test_crash_retries_then_not_run(job, tmp_path, monkeypatch):
     monkeypatch.setenv("CRASH_MARKER", str(marker))
     body = MpsRuntime(engine_path=_fake_engine(tmp_path, CRASH_ENGINE)).run(job)
     assert body["status"] == "NOT_RUN" and body["reason"] == "engine: CalledProcessError"
-    assert int(marker.read_text()) == MAX_ATTEMPTS
+    assert MAX_ATTEMPTS == 5 and int(marker.read_text()) == 5        # one run plus four retries, pinned literally
+
+
+def test_child_failure_logs_tail_to_service_stderr_not_receipt(job, tmp_path, monkeypatch, capsys):
+    marker = tmp_path / "count"
+    monkeypatch.setenv("CRASH_MARKER", str(marker))
+    engine = _fake_engine(tmp_path, 'import sys\nsys.stderr.write("x" * 2000 + "TAIL-SECRET\\n")\n' + CRASH_ENGINE)
+    body = MpsRuntime(engine_path=engine).run(job)
+    err = capsys.readouterr().err
+    assert body["reason"] == "engine: CalledProcessError" and "TAIL-SECRET" not in json.dumps(body)
+    lines = [ln for ln in err.splitlines() if ln.startswith("nano-qsearch: engine child exited 3:")]
+    assert len(lines) == 5 and all("TAIL-SECRET" in ln and len(ln) < 500 for ln in lines)
+
+
+def test_wall_budget_is_per_job_not_per_attempt(job, tmp_path, monkeypatch):
+    marker = tmp_path / "count"
+    monkeypatch.setenv("CRASH_MARKER", str(marker))
+    engine = _fake_engine(tmp_path, "import time\ntime.sleep(0.6)\n" + CRASH_ENGINE)
+    started = time.monotonic()
+    body = MpsRuntime(engine_path=engine, wall_s_override=1).run(job)
+    elapsed = time.monotonic() - started
+    assert body["status"] == "NOT_RUN" and body["reason"] == "engine: TimeoutExpired"
+    attempts = int(marker.read_text()) if marker.exists() else 0
+    assert attempts <= 2 and elapsed < 3.5
+
+
+def test_os_error_never_raises(job, tmp_path, monkeypatch):
+    def boom(*args, **kwargs):
+        raise PermissionError("no temp dir")
+    monkeypatch.setattr(runtime_mps.tempfile, "TemporaryDirectory", boom)
+    body = MpsRuntime(engine_path=_fake_engine(tmp_path, OK_ENGINE)).run(job)
+    assert body["status"] == "NOT_RUN" and body["reason"] == "engine: PermissionError"
+
+
+LEAK_PROBE = '''
+import argparse, json, os, pathlib
+p = argparse.ArgumentParser(); p.add_argument("--job"); p.add_argument("--out"); p.add_argument("--kind"); a = p.parse_args()
+prefixes = ("NANO_QSEARCH_KEY", "NANO_QSEARCH_REQUEST_KEY", "AETHER_AQRC_", "QISKIT_IBM", "IBM_")
+leak = any(k.upper().startswith(prefixes) for k in os.environ)
+kept = os.environ.get("NANO_QSEARCH_ATLAS_PATH") == os.environ.get("PROBE_EXPECT_ATLAS")
+pathlib.Path(a.out).write_text(json.dumps({"error": {"type": "LEAK" if leak else ("Clean" if kept else "LostAtlas")}}))
+'''
+
+
+def test_child_env_drops_keys_and_ibm_credentials(job, tmp_path, monkeypatch):
+    for name in ("NANO_QSEARCH_KEY_PATH", "NANO_QSEARCH_REQUEST_KEY_PATH", "AETHER_AQRC_HW_GO",
+                 "AETHER_AQRC_AUTHORITY_PATH", "QISKIT_IBM_TOKEN", "IBM_CLOUD_API_KEY"):
+        monkeypatch.setenv(name, "secret")
+    monkeypatch.setenv("NANO_QSEARCH_ATLAS_PATH", str(tmp_path))
+    monkeypatch.setenv("PROBE_EXPECT_ATLAS", str(tmp_path))
+    assert StatevectorRuntime(engine_path=_fake_engine(tmp_path, LEAK_PROBE)).run(job)["reason"] == "engine: Clean"
+
+
+def test_child_env_probe_detects_a_leak(job, tmp_path, monkeypatch):
+    # positive control: the probe does report LEAK when a secret reaches the child
+    monkeypatch.setenv("QISKIT_IBM_TOKEN", "secret")
+    monkeypatch.setattr(runtime_mps, "SECRET_ENV_PREFIXES", ("NOTHING_",))
+    assert StatevectorRuntime(engine_path=_fake_engine(tmp_path, LEAK_PROBE)).run(job)["reason"] == "engine: LEAK"
 
 
 def test_crash_twice_then_success_counts_attempts(job, tmp_path, monkeypatch):
@@ -156,7 +215,17 @@ def test_build_runtime_kinds():
         build_runtime("gpu")
 
 
-def test_child_env_has_single_thread_and_job_round_trips(job, tmp_path):
+def test_build_runtime_gives_each_runtime_only_its_own_options(tmp_path):
+    from nano_qsearch.runtime_ibm import IbmRuntime
+    assert isinstance(build_runtime("ibm", python="x", engine_path=tmp_path, wall_s_override=1), IbmRuntime)
+    sv = build_runtime("statevector", python="x", environ={}, submit_fn=None)
+    assert isinstance(sv, StatevectorRuntime) and sv._python == "x"
+    with pytest.raises(TypeError):
+        build_runtime("mps", pythn="typo")
+
+
+def test_child_env_has_single_thread_and_job_round_trips(job, tmp_path, monkeypatch):
+    monkeypatch.setenv("OMP_NUM_THREADS", "8")       # the parent must force 1 whatever it inherits
     engine = _fake_engine(tmp_path, '''
 import argparse, json, pathlib, os, sys
 p = argparse.ArgumentParser(); p.add_argument("--job"); p.add_argument("--out"); p.add_argument("--kind"); a = p.parse_args()

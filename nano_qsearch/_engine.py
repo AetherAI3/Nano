@@ -9,6 +9,11 @@ Samples come from the ATLAS logical program (transpiled for the simulator at
 ``optimization_level=0``); the native plan is compiled for its metrics and
 digest (``nano_qsearch.compile``). The output file is written to ``<out>.tmp``
 and moved into place, so the parent never reads a half-written result.
+
+``nano_qsearch.job`` and ``nano_qsearch.compile`` are imported at call time,
+inside ``main``'s error handling, so a broken path (for example a wrong
+``NANO_QSEARCH_ATLAS_PATH``) is a deterministic ``ModuleNotFoundError`` result,
+not a crash the parent would retry.
 """
 from __future__ import annotations
 
@@ -19,17 +24,28 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 if __package__ in (None, ""):          # executed as a script: make ``nano_qsearch`` importable
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nano_qsearch.compile import CompiledProgram, compile_program  # noqa: E402
-from nano_qsearch.job import QSearchJob, parse_job                  # noqa: E402
+if TYPE_CHECKING:
+    from nano_qsearch.compile import CompiledProgram
+    from nano_qsearch.job import QSearchJob
 
 EXACT_CAP = 20
 KINDS = ("statevector", "mps")
 _BOND_DIMS = re.compile(r"BD=\[([0-9 ]*)\]")
+
+
+def parse_job(body: Any) -> QSearchJob:
+    from nano_qsearch.job import parse_job as _parse_job
+    return _parse_job(body)
+
+
+def compile_program(job: QSearchJob) -> CompiledProgram:
+    from nano_qsearch.compile import compile_program as _compile_program
+    return _compile_program(job)
 
 
 def _simulator(kind: str, chi_max: int, *, log: bool = False):
@@ -135,18 +151,24 @@ def _peak_from_log(before: str | None, after: str | None, final: list[int]) -> i
     return max(max(row) for row in lists)
 
 
+def _has_two_qubit_gate(circuit) -> bool:
+    return any(len(inst.qubits) >= 2 and inst.operation.name != "barrier" for inst in circuit.data)
+
+
 def _chi_reached(compiled: CompiledProgram, chi_max: int) -> tuple[int, str]:
     """Peak bond dimension of the logical program on MPS at ``chi_max``, and where it came from.
 
-    ``save_matrix_product_state`` gives only the final bonds, which can be
-    smaller than a bond reached (and truncated) mid-circuit, so the program is
-    run once more with ``mps_log_data=True`` and the per-step bond log is
-    parsed: ``(max(peak_from_log, max(final)), "peak_log")``. When the log is
-    absent or does not parse, ``(max(final), "final")``. The logged bonds are
-    post-truncation, so the result never exceeds ``chi_max``; callers report
-    ``truncated = chi_reached >= chi_max``, which is conservative (an exact
-    state whose rank is exactly ``chi_max`` is also reported truncated).
+    A program with no two-qubit gate keeps every bond at 1: ``(1, "no_2q")``.
+    Otherwise ``save_matrix_product_state`` gives only the final bonds, which
+    can be smaller than a bond reached (and truncated) mid-circuit, so the
+    program is run once more with ``mps_log_data=True`` and the per-step bond
+    log is parsed: ``(max(peak_from_log, max(final)), "peak_log")``. When the
+    log is absent or does not parse, ``(max(final), "final")``. The logged
+    bonds are post-truncation, so the result never exceeds ``chi_max``. See
+    ``_truncated`` for how each source becomes the ``truncated`` flag.
     """
+    if not _has_two_qubit_gate(compiled.logical):
+        return 1, "no_2q"
     from qiskit import QuantumCircuit
     simulator = _simulator("mps", chi_max, log=True)
     _, before = _mps_snapshot(QuantumCircuit(1), simulator)       # no two-qubit steps: logs nothing
@@ -156,6 +178,21 @@ def _chi_reached(compiled: CompiledProgram, chi_max: int) -> tuple[int, str]:
     if peak is None:
         return final_max, "final"
     return max(peak, final_max), "peak_log"
+
+
+def _truncated(chi_reached: int, chi_source: str, chi_max: int) -> bool:
+    """Whether the MPS run may have cut a bond, erring on the side of saying yes.
+
+    ``no_2q``: nothing to truncate. ``final``: the log could not be trusted and
+    the final bonds can under-report a mid-circuit cut, so always True.
+    ``peak_log``: ``chi_reached >= chi_max`` (an exact state whose rank is
+    exactly ``chi_max`` is also reported truncated).
+    """
+    if chi_source == "no_2q":
+        return False
+    if chi_source == "final":
+        return True
+    return chi_reached >= chi_max
 
 
 def run_engine(body: Any, kind: str) -> dict[str, Any]:
@@ -174,7 +211,10 @@ def run_engine(body: Any, kind: str) -> dict[str, Any]:
             raise RuntimeError("simulator rejected the circuit")
         samples = _counts_to_samples(job, result.get_counts())
         total = sum(c for _, c, _ in samples)
-        chi_reached, chi_source = _chi_reached(compiled, job.chi_max) if kind == "mps" else (None, None)
+        chi_reached, chi_source, truncated = None, None, None
+        if kind == "mps":
+            chi_reached, chi_source = _chi_reached(compiled, job.chi_max)
+            truncated = _truncated(chi_reached, chi_source, job.chi_max)
         exact = mean_ideal = tvd = None
         if job.n <= EXACT_CAP:
             energies = _state_energies(job)
@@ -185,7 +225,7 @@ def run_engine(body: Any, kind: str) -> dict[str, Any]:
             "variant": compiled.variant, "nuclei": compiled.nuclei, "compiled_plan_digest": compiled.compiled_plan_digest,
             "compile": compiled.compile_record, "metrics": compiled.metrics,
             "chi_max": job.chi_max if kind == "mps" else None, "chi_reached": chi_reached, "chi_source": chi_source,
-            "truncated": (chi_reached >= job.chi_max) if kind == "mps" else None,
+            "truncated": truncated,
             "shots": job.shots, "seed": job.backend_seed, "wall_s": round(time.perf_counter() - started, 6), "attempts": 1,
             "samples": samples, "best_sample_energy": samples[0][2],
             "mean_energy_sample": sum(c * e for _, c, e in samples) / total,
@@ -203,15 +243,22 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         body = json.loads(Path(args.job).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        result = {"error": {"type": type(exc).__name__}}
-    else:
         result = run_engine(body, args.kind)
+    except Exception as exc:  # noqa: BLE001 - unreadable job file, or anything run_engine let through
+        result = {"error": {"type": type(exc).__name__}}
     out = Path(args.out)
     tmp = out.with_name(out.name + ".tmp")
-    tmp.write_text(json.dumps(result, sort_keys=True, allow_nan=False), encoding="utf-8")
+    tmp.write_text(_serialize(result), encoding="utf-8")
     os.replace(tmp, out)
     return 0
+
+
+def _serialize(result: Any) -> str:
+    """The result as strict JSON; a result that will not serialise becomes its error class."""
+    try:
+        return json.dumps(result, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError, RecursionError) as exc:
+        return json.dumps({"error": {"type": type(exc).__name__}}, sort_keys=True)
 
 
 if __name__ == "__main__":
