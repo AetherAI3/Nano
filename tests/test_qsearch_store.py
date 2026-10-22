@@ -1,5 +1,6 @@
 # tests/test_qsearch_store.py
 import json
+import sqlite3
 import threading
 
 import pytest
@@ -101,6 +102,37 @@ def test_mark_attempt_fallback_is_thread_safe(tmp_path, monkeypatch):
     for t in threads: t.start()
     for t in threads: t.join()
     assert sorted(seen) == list(range(1, 9)) and s.get(D1).attempts == 8
+    s.close()
+
+
+class _FailingSelectOnce:
+    """Forwards to a real connection, except the first ``SELECT attempts`` raises (``execute`` is read-only on the C type)."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self.failed = False
+
+    def execute(self, sql, *args):
+        if not self.failed and sql.startswith("SELECT attempts"):
+            self.failed = True
+            raise sqlite3.OperationalError("injected")
+        return self._conn.execute(sql, *args)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def test_mark_attempt_fallback_rolls_back_a_failed_transaction(tmp_path, monkeypatch):
+    monkeypatch.setattr(store_mod, "_HAS_RETURNING", False)
+    s = JobStore(tmp_path / "qsearch.sqlite3")
+    s.begin(D1, "{}")
+    proxy = _FailingSelectOnce(s._db)
+    s._db = proxy
+    with pytest.raises(sqlite3.OperationalError):
+        s.mark_attempt(D1)
+    assert proxy.failed and s._db.in_transaction is False        # the UPDATE was rolled back, nothing left open
+    assert s.mark_attempt(D1) == 1 and s.get(D1).attempts == 1
+    s._db = proxy._conn
     s.close()
 
 

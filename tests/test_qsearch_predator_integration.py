@@ -7,6 +7,11 @@ itself imports nothing from Predator. Each test serves a ``QSearchService`` on
 an ephemeral localhost port and submits ``job_pair02.json`` through
 ``NanoRuntimeQSearchBackend``, so the receipt is checked by Predator's
 ``QSearchReceiptV1.from_payload``, seal and audit included.
+
+This module is the evidence for gate G-W3, so it skips only when
+``NANO_QSEARCH_PREDATOR_PATH`` is unset. Setting it declares an engine run: a
+path that is not a Predator checkout fails collection, and a missing Predator
+module, ``qiskit_aer`` or ``aether_atlas`` is a collection error, never a skip.
 """
 import contextlib
 import json
@@ -14,17 +19,22 @@ import os
 import secrets
 import time
 import urllib.request
+from pathlib import Path
 
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.engine]
-if not os.environ.get("NANO_QSEARCH_PREDATOR_PATH"):
+_PREDATOR = os.environ.get("NANO_QSEARCH_PREDATOR_PATH")
+if not _PREDATOR:
     pytest.skip("NANO_QSEARCH_PREDATOR_PATH not set", allow_module_level=True)
-pytest.importorskip("qiskit_aer")
-pytest.importorskip("aether_atlas")
-qsearch_backend = pytest.importorskip("predator.drive.qsearch_backend")
-qsearch_bridge = pytest.importorskip("predator_gen3.discovery.qsearch_bridge")
-execution = pytest.importorskip("predator.drive.execution")
+if not (Path(_PREDATOR) / "predator" / "drive" / "qsearch_backend.py").is_file():
+    pytest.fail(f"NANO_QSEARCH_PREDATOR_PATH={_PREDATOR!r} is not a Predator-M checkout "
+                "(no predator/drive/qsearch_backend.py); unset it to skip the integration test", pytrace=False)
+
+import aether_atlas  # noqa: E402,F401  - the engine child needs it; with the variable set, absence is an error
+import qiskit_aer  # noqa: E402,F401
+from predator.drive import execution, qsearch_backend  # noqa: E402
+from predator_gen3.discovery import qsearch_bridge  # noqa: E402
 
 from nano_qsearch.auth import AUTH_HEADER, sign_request                                  # noqa: E402
 from nano_qsearch.service import SUBMIT_PATH, QSearchService, ServiceConfig, serve_in_thread   # noqa: E402
@@ -46,6 +56,7 @@ def _job_from_fixture(fixtures_dir):
                                       qubo=tuple(tuple(r) for r in body["qubo"]["q"]), offset=body["qubo"]["offset"],
                                       policy=policy, classical_min_energy=body["audit"]["classical_min_energy"])
     assert job.job_digest == body["job_digest"]          # Predator and the fixture agree on the wire body
+    assert job.to_payload() == body                      # ... field for field, not only by digest
     return job
 
 

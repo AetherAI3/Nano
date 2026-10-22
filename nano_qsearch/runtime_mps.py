@@ -34,7 +34,7 @@ STATEVECTOR_CAP = 20
 MAX_ATTEMPTS = 5          # one run plus four retries
 DEFAULT_WALL_S = 600
 MAX_WALL_S = 3600
-MIN_ATTEMPT_S = 1.0       # the shortest timeout any single child run is given
+MIN_ATTEMPT_S = 1.0       # no child run is started with less than this much of the job's budget left
 SERVICE_KINDS = ("auto", "mps", "statevector", "ibm")
 STDERR_TAIL_BYTES = 400
 # Never handed to the engine child: seal and request keys, and anything that could authorise IBM hardware.
@@ -108,12 +108,14 @@ class _ChildRuntime:
     kind = ""
 
     def __init__(self, *, engine_path: Path = ENGINE_PATH, python: str | None = None,
-                 wall_s_override: int | None = None) -> None:
+                 wall_s_override: float | None = None) -> None:
+        if wall_s_override is not None and not wall_s_override > 0:
+            raise ValueError("wall_s_override must be > 0")
         self._engine = Path(engine_path)
         self._python = python or os.environ.get("NANO_QSEARCH_PYTHON") or sys.executable
         self._wall_override = wall_s_override
 
-    def _timeout(self, job: QSearchJob) -> int:
+    def _timeout(self, job: QSearchJob) -> float:
         if self._wall_override is not None:
             return self._wall_override
         return min(job.max_wall_s or DEFAULT_WALL_S, MAX_WALL_S)
@@ -149,16 +151,24 @@ class _ChildRuntime:
             return not_run_receipt(job, f"engine: {type(exc).__name__}")
 
     def _run(self, job: QSearchJob) -> dict[str, Any]:
-        """Up to ``MAX_ATTEMPTS`` child runs, all inside one wall-clock budget for the job."""
-        deadline = time.monotonic() + self._timeout(job)
+        """Up to ``MAX_ATTEMPTS`` child runs, all inside one wall-clock budget for the job.
+
+        A budget below ``MIN_ATTEMPT_S`` runs nothing, and a retry is started
+        only while at least ``MIN_ATTEMPT_S`` of the budget is left. Each run
+        is given exactly what is left, so no run outlives the budget.
+        """
+        budget = self._timeout(job)
+        if budget < MIN_ATTEMPT_S:
+            return not_run_receipt(job, "engine: TimeoutExpired")
+        deadline = time.monotonic() + budget
         with tempfile.TemporaryDirectory(prefix="nano-qsearch-", ignore_cleanup_errors=True) as tmp:
             workdir = Path(tmp)
             for attempt in range(1, MAX_ATTEMPTS + 1):
                 remaining = deadline - time.monotonic()
-                if remaining <= 0:
+                if remaining <= 0 or (attempt > 1 and remaining < MIN_ATTEMPT_S):
                     return not_run_receipt(job, "engine: TimeoutExpired")
                 try:
-                    result = self._attempt(job, workdir, max(MIN_ATTEMPT_S, remaining))
+                    result = self._attempt(job, workdir, remaining)
                 except subprocess.TimeoutExpired:
                     return not_run_receipt(job, "engine: TimeoutExpired")
                 except (OSError, ValueError) as exc:

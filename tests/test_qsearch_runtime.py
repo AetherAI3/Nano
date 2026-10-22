@@ -1,4 +1,8 @@
+import errno
 import json
+import os
+import shutil
+import sys
 import textwrap
 import time
 from dataclasses import replace
@@ -92,7 +96,76 @@ def test_wall_budget_is_per_job_not_per_attempt(job, tmp_path, monkeypatch):
     elapsed = time.monotonic() - started
     assert body["status"] == "NOT_RUN" and body["reason"] == "engine: TimeoutExpired"
     attempts = int(marker.read_text()) if marker.exists() else 0
-    assert attempts <= 2 and elapsed < 3.5
+    # the first run gets the whole 1 s budget; less than MIN_ATTEMPT_S is left after it, so no retry starts
+    assert attempts <= 1 and elapsed < 2.5
+
+
+def test_budget_below_min_attempt_makes_zero_attempts(job, tmp_path, monkeypatch):
+    marker = tmp_path / "count"
+    monkeypatch.setenv("CRASH_MARKER", str(marker))
+    budget = runtime_mps.MIN_ATTEMPT_S / 2
+    body = MpsRuntime(engine_path=_fake_engine(tmp_path, CRASH_ENGINE + "\n" + OK_ENGINE),
+                      wall_s_override=budget).run(job)
+    assert body["status"] == "NOT_RUN" and body["reason"] == "engine: TimeoutExpired" and not marker.exists()
+    # positive control: the same engine with a full budget runs and succeeds on its first attempt
+    monkeypatch.setenv("CRASH_TIMES", "0")
+    ok = MpsRuntime(engine_path=_fake_engine(tmp_path, CRASH_ENGINE + "\n" + OK_ENGINE), wall_s_override=30).run(job)
+    assert ok["status"] == "OK" and marker.read_text() == "1"
+
+
+@pytest.mark.parametrize("bad", [0, -1, 0.0])
+def test_wall_override_must_be_positive(bad):
+    with pytest.raises(ValueError):
+        MpsRuntime(wall_s_override=bad)
+
+
+def _rmtree_reporting_busy_dir(calls):
+    """``shutil.rmtree`` that deletes, then reports the root as not removable through rmtree's own error callback.
+
+    That is what Windows does when a lingering grandchild holds a file open: the
+    file's PermissionError is swallowed by ``TemporaryDirectory``'s handler and
+    the final ``rmdir`` fails with ENOTEMPTY. ``ignore_cleanup_errors`` acts only
+    on errors routed through the callback (``onexc`` from 3.12, ``onerror``
+    before), so the fake must route it there rather than raise directly.
+    """
+    real = shutil.rmtree
+
+    def fake(path, *args, onerror=None, onexc=None, **kwargs):
+        calls.append(path)
+        real(path, ignore_errors=True)
+        try:
+            raise OSError(errno.ENOTEMPTY, "directory not empty", path)
+        except OSError as exc:
+            if onexc is not None:
+                onexc(os.rmdir, path, exc)
+            else:
+                onerror(os.rmdir, path, sys.exc_info())
+    return fake
+
+
+def test_cleanup_errors_are_ignored(job, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(shutil, "rmtree", _rmtree_reporting_busy_dir(calls))    # what TemporaryDirectory.cleanup calls
+    body = StatevectorRuntime(engine_path=_fake_engine(tmp_path, OK_ENGINE)).run(job)
+    assert len(calls) == 1 and body["status"] == "OK" and body["backend"]["attempts"] == 1
+    # positive control: without ignore_cleanup_errors the same cleanup failure escapes
+    with pytest.raises(OSError):
+        with runtime_mps.tempfile.TemporaryDirectory(prefix="nano-qsearch-control-"):
+            pass
+    assert len(calls) == 2
+
+
+@pytest.mark.engine
+def test_real_engine_import_error_is_not_run_and_not_retried(job, tmp_path, monkeypatch, capfd):
+    pytest.importorskip("qiskit")
+    empty = tmp_path / "no-atlas"
+    empty.mkdir()
+    monkeypatch.setenv("NANO_QSEARCH_ATLAS_PATH", str(empty))
+    monkeypatch.delenv("NANO_QSEARCH_PYTHON", raising=False)
+    body = StatevectorRuntime().run(job)                      # the real nano_qsearch/_engine.py child
+    err = capfd.readouterr().err
+    assert body["status"] == "NOT_RUN" and body["reason"] == "engine: ModuleNotFoundError", body
+    assert "engine child exited" not in err                   # a clean exit with an error result: one attempt
 
 
 def test_os_error_never_raises(job, tmp_path, monkeypatch):

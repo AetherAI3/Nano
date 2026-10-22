@@ -152,6 +152,13 @@ def _peak_from_log(before: str | None, after: str | None, final: list[int]) -> i
 
 
 def _has_two_qubit_gate(circuit) -> bool:
+    """True when any instruction other than ``barrier`` spans two or more qubits.
+
+    Multi-qubit save, snapshot and control-flow instructions count too, even
+    though they entangle nothing. That errs toward measuring the bond peak
+    (``peak_log``) instead of reporting ``no_2q``, which is the safe direction:
+    it can only cost one extra simulation, never hide a truncation.
+    """
     return any(len(inst.qubits) >= 2 and inst.operation.name != "barrier" for inst in circuit.data)
 
 

@@ -269,9 +269,10 @@ Every Aer job runs in a fresh child interpreter (`NANO_QSEARCH_PYTHON`, or
 the service's own interpreter by default) with `OMP_NUM_THREADS=1`. A crash,
 meaning a nonzero exit, no output file, or output that is not a JSON object,
 is retried up to 4 times. All runs of one job share a single wall-clock
-budget (`limits.max_wall_s`, at most 3600 s, 600 s when unset): once it is
-spent, the job is NOT_RUN with `engine: TimeoutExpired`, however many retries
-remain. The engine reports a deterministic error, including a failed import
+budget (`limits.max_wall_s`, at most 3600 s, 600 s when unset). Each run is
+given only what is left of it, and no retry starts with less than 1 s left:
+once it is spent, the job is NOT_RUN with `engine: TimeoutExpired`, however
+many retries remain. The engine reports a deterministic error, including a failed import
 such as a wrong `NANO_QSEARCH_ATLAS_PATH`, as an error class only, and it is
 not retried.
 

@@ -117,7 +117,8 @@ class JobStore:
                     if cur.rowcount == 1 else [])
             self._db.execute("COMMIT")
         except BaseException:
-            self._db.execute("ROLLBACK")
+            if self._db.in_transaction:     # a failed COMMIT may already have ended it; never mask the cause
+                self._db.execute("ROLLBACK")
             raise
         return rows
 
