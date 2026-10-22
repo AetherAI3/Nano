@@ -5,9 +5,9 @@ import json
 
 import pytest
 
-from nano.loop.qsearch_canonical import canonical_json
-from nano.loop.qsearch_job import parse_job
-from nano.loop.qsearch_receipt import (
+from nano_qsearch.canonical import canonical_json
+from nano_qsearch.job import parse_job
+from nano_qsearch.receipt import (
     RECEIPT_SCHEMA, SEAL_PREFIX, SealError, not_run_receipt, ok_receipt, refused_receipt,
     seal_receipt, verify_seal,
 )
@@ -88,7 +88,7 @@ def test_ok_receipt_top_is_capped_at_eight(job):
 def test_zero_classical_min_gives_zero_gap(job, fixtures_dir):
     body = json.loads((fixtures_dir / "job_4var.json").read_text(encoding="utf-8"))
     # build a job whose classical min is exactly 0 by editing and re-signing
-    from nano.loop.qsearch_canonical import canonical_digest
+    from nano_qsearch.canonical import canonical_digest
     body["audit"]["classical_min_energy"] = 0.0
     unsigned = {k: v for k, v in body.items() if k != "job_digest"}
     zero_job = parse_job({**unsigned, "job_digest": canonical_digest(unsigned)})

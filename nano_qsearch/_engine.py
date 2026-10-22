@@ -6,7 +6,7 @@ raises to its caller: a deterministic failure is written as
 ``{"error": {"type": "<class name>"}}`` (never the message, which could leak
 into a sealed artifact), and a hard crash is a nonzero exit the parent retries.
 Samples come from the logical program; the native plan is compiled for its
-metrics and digest (``qsearch_compile``).
+metrics and digest (``nano_qsearch.compile``).
 """
 from __future__ import annotations
 
@@ -17,11 +17,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-if __package__ in (None, ""):          # executed as a script: make ``nano`` importable
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+if __package__ in (None, ""):          # executed as a script: make ``nano_qsearch`` importable
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nano.loop.qsearch_compile import CompiledProgram, compile_program  # noqa: E402
-from nano.loop.qsearch_job import QSearchJob, parse_job                  # noqa: E402
+from nano_qsearch.compile import CompiledProgram, compile_program  # noqa: E402
+from nano_qsearch.job import QSearchJob, parse_job                  # noqa: E402
 
 EXACT_CAP = 20
 KINDS = ("statevector", "mps")

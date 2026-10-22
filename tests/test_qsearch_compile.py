@@ -7,9 +7,9 @@ pytestmark = pytest.mark.engine
 pytest.importorskip("qiskit")
 pytest.importorskip("aether_atlas")
 
-from nano.loop.qsearch_canonical import canonical_digest        # noqa: E402
-from nano.loop.qsearch_job import parse_job                      # noqa: E402
-from nano.loop.qsearch_compile import BASIS, compile_program, heavy_hex_map   # noqa: E402
+from nano_qsearch.canonical import canonical_digest        # noqa: E402
+from nano_qsearch.job import parse_job                      # noqa: E402
+from nano_qsearch.compile import BASIS, compile_program, heavy_hex_map   # noqa: E402
 
 
 @pytest.fixture

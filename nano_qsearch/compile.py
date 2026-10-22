@@ -15,8 +15,8 @@ import io
 from dataclasses import dataclass, field
 from typing import Any
 
-from .qsearch_canonical import canonical_digest
-from .qsearch_job import QSearchJob
+from .canonical import canonical_digest
+from .job import QSearchJob
 
 BASIS = ["cz", "rz", "sx", "x"]
 HEAVY_HEX_DISTANCES = (3, 5, 7, 9, 11)

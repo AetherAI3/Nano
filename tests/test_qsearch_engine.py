@@ -11,11 +11,12 @@ pytestmark = pytest.mark.engine
 pytest.importorskip("qiskit_aer")
 pytest.importorskip("aether_atlas")
 
-from nano.loop.qsearch_canonical import canonical_digest           # noqa: E402
-from nano.loop.qsearch_job import parse_job                        # noqa: E402
-from nano.loop._qsearch_engine import run_engine                    # noqa: E402
+from nano_qsearch.canonical import canonical_digest           # noqa: E402
+from nano_qsearch.job import parse_job                        # noqa: E402
+from nano_qsearch._engine import run_engine                    # noqa: E402
 
-ENGINE = Path(__file__).resolve().parents[1] / "nano" / "loop" / "_qsearch_engine.py"
+ROOT = Path(__file__).resolve().parents[1]
+ENGINE = ROOT / "nano_qsearch" / "_engine.py"
 
 
 def _job(fixtures_dir, name):
@@ -24,7 +25,7 @@ def _job(fixtures_dir, name):
 
 
 def _child_env():
-    parts = [str(ENGINE.parents[2])]
+    parts = [str(ENGINE.parents[1])]
     if os.environ.get("NANO_QSEARCH_ATLAS_PATH"):
         parts.insert(0, os.environ["NANO_QSEARCH_ATLAS_PATH"])
     if os.environ.get("PYTHONPATH"):

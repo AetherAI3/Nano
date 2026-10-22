@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from nano.loop.qsearch_canonical import canonical_digest
-from nano.loop.qsearch_job import JobValidationError, QSearchJob, parse_job
+from nano_qsearch.canonical import canonical_digest
+from nano_qsearch.job import JobValidationError, QSearchJob, parse_job
 
 
 @pytest.fixture

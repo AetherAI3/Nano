@@ -1,4 +1,4 @@
-# nano/loop/qsearch_auth.py
+# nano_qsearch/auth.py
 """Request authentication for ``POST /qsearch/v1/submit``.
 
 A caller proves possession of the request key (a file separate from the

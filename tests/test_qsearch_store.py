@@ -4,7 +4,7 @@ import threading
 
 import pytest
 
-from nano.loop.qsearch_store import JobRecord, JobStore
+from nano_qsearch.store import JobRecord, JobStore
 
 D1 = "sha256:" + "1" * 64
 D2 = "sha256:" + "2" * 64

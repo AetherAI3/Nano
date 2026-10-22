@@ -3,7 +3,7 @@ import math
 
 import pytest
 
-from nano.loop.qsearch_canonical import (
+from nano_qsearch.canonical import (
     CanonicalizationError, canonical_digest, canonical_json, validate_digest,
 )
 

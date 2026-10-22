@@ -1,4 +1,4 @@
-# nano/loop/qsearch_receipt.py
+# nano_qsearch/receipt.py
 """Shape and seal ``predator.qsearch.receipt.v1`` payloads.
 
 Every receipt the service emits goes through ``seal_receipt``: HMAC-SHA256
@@ -14,8 +14,8 @@ import hmac
 from collections.abc import Mapping
 from typing import Any
 
-from .qsearch_canonical import canonical_digest, canonical_json
-from .qsearch_job import QSearchJob
+from .canonical import canonical_digest, canonical_json
+from .job import QSearchJob
 
 RECEIPT_SCHEMA = "predator.qsearch.receipt.v1"
 SEAL_PREFIX = "hmac-sha256:"
@@ -106,7 +106,7 @@ def ok_receipt(job: QSearchJob, result: Mapping[str, Any]) -> dict[str, Any]:
             "tvd_ideal": result["tvd_ideal"],
             "exact_min_energy": result["exact_min_energy"],
         },
-        "service": {"name": SERVICE_NAME, "engine": "nano.loop._qsearch_engine"},
+        "service": {"name": SERVICE_NAME, "engine": "nano_qsearch._engine"},
     }
 
 

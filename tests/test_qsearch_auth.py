@@ -1,7 +1,7 @@
 # tests/test_qsearch_auth.py
 import pytest
 
-from nano.loop.qsearch_auth import (
+from nano_qsearch.auth import (
     AUTH_HEADER, WINDOW_S, AuthError, MemoryNonceStore, sign_request, verify_request,
 )
 

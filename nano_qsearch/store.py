@@ -1,4 +1,4 @@
-# nano/loop/qsearch_store.py
+# nano_qsearch/store.py
 """Durable job and nonce store for the q-search service (SQLite, stdlib).
 
 A job row is keyed by ``job_digest`` and moves ACCEPTED → DONE exactly once.

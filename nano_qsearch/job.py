@@ -1,4 +1,4 @@
-# nano/loop/qsearch_job.py
+# nano_qsearch/job.py
 """Parse and validate a ``predator.qsearch.job.v1`` body into a ``QSearchJob``.
 
 The body is Predator-M ``QSearchJobV1.to_payload()``. Validation is strict and
@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from .qsearch_canonical import canonical_digest, validate_digest
+from .canonical import canonical_digest, validate_digest
 
 JOB_SCHEMA = "predator.qsearch.job.v1"
 VARIANTS = ("auto", "ordinary", "joint5")
