@@ -1,6 +1,10 @@
+import dataclasses
+import errno
 import http.client
 import itertools
 import json
+import os
+import re
 import socket
 import sqlite3
 import threading
@@ -861,7 +865,7 @@ def test_http_other_paths_methods_and_empty_auth(tmp_path, body_bytes):
             signed = {AUTH_HEADER: sign_request(REQUEST_KEY, "POST", path, body_bytes, ts=int(time.time()), nonce=f"f{i}" * 16)}
             status, data = _http(port, "POST", path, body_bytes, signed)
             assert (status, json.loads(data)) == (404, {"error": "not found"}), path
-        for method in ("GET", "PUT", "DELETE", "PATCH", "OPTIONS"):
+        for method in ("GET", "PUT", "DELETE", "PATCH", "OPTIONS", "TRACE"):
             status, data = _http(port, method, PATH, b"{}" if method in ("PUT", "PATCH") else None)
             assert (status, json.loads(data)) == (404, {"error": "not found"}), method
         assert _http(port, "HEAD", PATH) == (404, b"")
@@ -869,6 +873,273 @@ def test_http_other_paths_methods_and_empty_auth(tmp_path, body_bytes):
         assert (status, json.loads(data)) == (401, {"error": "unauthorized"}) and rt.calls == 0
         status, data = _http(port, "POST", PATH, body_bytes, _headers(body_bytes, int(time.time()), nonce="f9" * 16))
         assert status == 200 and json.loads(data)["status"] == "OK" and rt.calls == 1      # positive control
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+        svc.close()
+
+
+# --- review fixes: attempts count only once a run starts ----------------------
+
+class _SpySlots:
+    """Wraps the service's semaphore and signals once a second caller is waiting at it."""
+
+    def __init__(self, inner):
+        self._inner = inner
+        self._mu = threading.Lock()
+        self.entered = 0
+        self.second_waiting = threading.Event()
+
+    def __enter__(self):
+        with self._mu:
+            self.entered += 1
+            if self.entered >= 2:
+                self.second_waiting.set()
+        return self._inner.__enter__()
+
+    def __exit__(self, *exc):
+        return self._inner.__exit__(*exc)
+
+
+def _wait_for(predicate, timeout=10.0):
+    deadline = time.monotonic() + timeout
+    while not predicate():
+        assert time.monotonic() < deadline, "condition never became true"
+        time.sleep(0.01)
+
+
+def test_a_job_queued_for_a_slot_has_not_used_an_attempt_and_recovery_runs_it_in_full(tmp_path, fixtures_dir, body_bytes):
+    # B is a non-IBM job: what matters is that a crash while B waits for a slot leaves it at attempts == 0,
+    # so recovery spends B's original attempt rather than its single re-run (B ends at 1, not 2). An IBM
+    # row only ever reaches "hardware jobs are never resubmitted" now with attempts >= 1 when its run really
+    # started; a still-queued IBM row (attempts == 0) keeps the existing conservative rule on recovery.
+    body_b = _job_bytes(fixtures_dir, lambda b: b["backend"].__setitem__("seed", 8))
+    digest_a, digest_b = json.loads(body_bytes)["job_digest"], json.loads(body_b)["job_digest"]
+    live = tmp_path / "live"
+    rt = FakeRuntime()
+    rt.slow.clear()                                       # A blocks inside the runtime, holding the only slot
+    svc = QSearchService(_config(live, max_concurrent=1), runtime_factory=lambda kind: rt)
+    spy = svc._slots = _SpySlots(svc._slots)
+    results = {}
+
+    def go(name, body, nonce):
+        results[name] = svc.submit("POST", PATH, body, _headers(body, 1000, nonce=nonce), now=1000)
+
+    threads = {"a": threading.Thread(target=go, args=("a", body_bytes, "b1" * 16)),
+               "b": threading.Thread(target=go, args=("b", body_b, "b2" * 16))}
+    crashed = tmp_path / "crashed"
+    crashed.mkdir()
+    try:
+        threads["a"].start()
+        _wait_for(lambda: rt.calls == 1)
+        threads["b"].start()
+        assert spy.second_waiting.wait(10)                # B is at the slot A holds
+        assert svc.store.get(digest_a).attempts == 1
+        assert svc.store.get(digest_b).state == "ACCEPTED" and svc.store.get(digest_b).attempts == 0
+        # "crash" now: snapshot the store exactly as a dying process would leave it on disk
+        src = sqlite3.connect(str(live / "qsearch.sqlite3"))
+        dst = sqlite3.connect(str(crashed / "qsearch.sqlite3"))
+        try:
+            src.backup(dst)
+        finally:
+            src.close()
+            dst.close()
+    finally:
+        rt.slow.set()
+        for t in threads.values():
+            t.join()
+        svc.close()
+    assert results["a"][0] == results["b"][0] == 200       # positive control: the live process finished both
+    rt2 = FakeRuntime()
+    svc2 = QSearchService(_config(crashed), runtime_factory=lambda kind: rt2)
+    try:
+        assert sorted(svc2.recover()) == sorted([digest_a, digest_b]) and rt2.calls == 2
+        rec_a, rec_b = svc2.store.get(digest_a), svc2.store.get(digest_b)
+        assert (rec_a.state, rec_a.attempts) == ("DONE", 2)      # A had started: this was its one re-run
+        assert (rec_b.state, rec_b.attempts) == ("DONE", 1)      # B never started: this was its first attempt
+        assert json.loads(rec_b.receipt_json)["status"] == "OK"
+    finally:
+        svc2.close()
+
+
+def test_a_refusal_records_no_attempt(tmp_path, body_bytes):
+    rt = FakeRuntime()
+    svc = QSearchService(_config(tmp_path, max_variables=3), runtime_factory=lambda kind: rt)
+    try:
+        status, receipt = svc.submit("POST", PATH, body_bytes, _headers(body_bytes, 1000), now=1000)
+        assert status == 200 and receipt["status"] == "REFUSED" and rt.calls == 0
+        assert svc.store.get(receipt["job_digest"]).attempts == 0
+    finally:
+        svc.close()
+
+
+def test_a_mark_attempt_failure_is_503_and_runs_nothing(service, body_bytes):
+    svc, rt = service
+
+    def broken_mark(digest):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    svc.store.mark_attempt = broken_mark
+    status, out = svc.submit("POST", PATH, body_bytes, _headers(body_bytes, 1000, nonce="b3" * 16), now=1000)
+    assert (status, out) == (503, {"error": "job not completed"}) and rt.calls == 0
+    digest = json.loads(body_bytes)["job_digest"]
+    assert svc.store.get(digest).state == "ACCEPTED"
+    del svc.store.mark_attempt                            # positive control: the slot was released, the job now runs
+    status, receipt = svc.submit("POST", PATH, body_bytes, _headers(body_bytes, 1001, nonce="b4" * 16), now=1001)
+    assert status == 200 and receipt["status"] == "OK" and rt.calls == 1
+
+
+# --- review fixes: handler attribute lookup -----------------------------------
+
+def test_handler_resolves_only_the_current_requests_method():
+    handler = object.__new__(service_mod._Handler)
+    handler.command = "TRACE"
+    assert hasattr(handler, "do_TRACE") and handler.do_TRACE == handler._not_found
+    assert not hasattr(handler, "do_POTS") and not hasattr(handler, "do_OPTIONS")
+    assert not hasattr(handler, "something_else")
+    bare = object.__new__(service_mod._Handler)          # before parse_request sets command
+    assert not hasattr(bare, "do_TRACE") and not hasattr(bare, "do_")
+
+
+# --- review fixes: data-dir lock errors ---------------------------------------
+
+def test_only_lock_contention_maps_to_data_dir_locked(tmp_path, monkeypatch):
+    def raising(err):
+        def lock(fd):
+            raise OSError(err, os.strerror(err))
+        return staticmethod(lock)
+
+    monkeypatch.setattr(service_mod._DataDirLock, "_lock", raising(errno.EINVAL))
+    with pytest.raises(OSError) as info:
+        QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    assert not isinstance(info.value, DataDirLocked) and info.value.errno == errno.EINVAL
+    monkeypatch.setattr(service_mod._DataDirLock, "_lock", raising(errno.EACCES))       # positive control
+    with pytest.raises(DataDirLocked):
+        QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    monkeypatch.undo()
+    QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime()).close()    # nothing leaked
+
+
+# --- review fixes: startup errors and env parsing in main() -------------------
+
+def _env_config(tmp_path, monkeypatch):
+    (tmp_path / "r.key").write_bytes(RECEIPT_KEY)
+    (tmp_path / "q.key").write_bytes(REQUEST_KEY)
+    for var, value in {"NANO_QSEARCH_DATA_DIR": str(tmp_path / "data"), "NANO_QSEARCH_KEY_PATH": str(tmp_path / "r.key"),
+                       "NANO_QSEARCH_REQUEST_KEY_PATH": str(tmp_path / "q.key")}.items():
+        monkeypatch.setenv(var, value)
+    for var in ("NANO_QSEARCH_BIND", "NANO_QSEARCH_BACKEND", "NANO_QSEARCH_MAX_SHOTS", "NANO_QSEARCH_MAX_CHI",
+                "NANO_QSEARCH_MAX_VARIABLES", "NANO_QSEARCH_MAX_BODY_BYTES", "NANO_QSEARCH_MAX_CONCURRENT",
+                "NANO_QSEARCH_REQUEST_TIMEOUT_S"):
+        monkeypatch.delenv(var, raising=False)
+
+
+def test_main_exits_2_with_one_line_when_the_port_is_in_use(tmp_path, capsys, monkeypatch):
+    _env_config(tmp_path, monkeypatch)
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        blocker.bind(("127.0.0.1", 0))
+        blocker.listen()
+        port = blocker.getsockname()[1]
+        rc = service_mod.main(["--bind", f"127.0.0.1:{port}"])
+    finally:
+        blocker.close()
+    err = capsys.readouterr().err
+    assert rc == 2 and re.fullmatch(r"nano-qsearch-serve: startup failed: [A-Za-z]*Error\n", err), err
+    # the data dir lock was released on the way out
+    QSearchService(_config(tmp_path / "data"), runtime_factory=lambda kind: FakeRuntime()).close()
+
+
+def test_a_second_server_cannot_bind_a_port_a_service_is_listening_on(tmp_path):
+    svc = QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    other = QSearchService(_config(tmp_path / "other"), runtime_factory=lambda kind: FakeRuntime())
+    first = service_mod.make_server(svc)
+    try:
+        assert first.request_queue_size == 64
+        port = first.server_address[1]
+        with pytest.raises(OSError):
+            service_mod.make_server(_Rebound(other, port))
+    finally:
+        first.server_close()
+        svc.close()
+        other.close()
+
+
+class _Rebound:
+    """A service stand-in whose config binds a fixed port (``make_server`` reads only ``config``)."""
+
+    def __init__(self, svc, port):
+        self.config = dataclasses.replace(svc.config, bind=f"127.0.0.1:{port}")
+
+
+@pytest.mark.parametrize("var, value, expected", [
+    ("NANO_QSEARCH_MAX_SHOTS", "lots", "NANO_QSEARCH_MAX_SHOTS must be an integer"),
+    ("NANO_QSEARCH_REQUEST_TIMEOUT_S", "soon", "NANO_QSEARCH_REQUEST_TIMEOUT_S must be a number"),
+])
+def test_unparsable_env_numbers_name_the_variable(tmp_path, capsys, monkeypatch, var, value, expected):
+    _env_config(tmp_path, monkeypatch)
+    assert ServiceConfig.from_env().max_shots == 100_000                     # positive control: all valid
+    monkeypatch.setenv(var, value)
+    with pytest.raises(ValueError) as info:
+        ServiceConfig.from_env()
+    assert str(info.value) == expected and value not in str(info.value)
+    assert service_mod.main([]) == 2
+    assert capsys.readouterr().err == f"nano-qsearch-serve: {expected}\n"
+
+
+# --- review fixes: cleanup on startup failure, HEAD has no body ---------------
+
+def test_a_store_failure_in_init_releases_the_data_dir_lock(tmp_path, monkeypatch):
+    class BrokenStore:
+        def __init__(self, path):
+            raise sqlite3.OperationalError("unable to open database file")
+
+    monkeypatch.setattr(service_mod, "JobStore", BrokenStore)
+    with pytest.raises(sqlite3.OperationalError):
+        QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    monkeypatch.undo()
+    QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime()).close()
+
+
+def test_a_recovery_failure_in_prepare_frees_the_lock_and_closes_the_port(tmp_path, monkeypatch):
+    servers = []
+    real_make_server = service_mod.make_server
+
+    def recording_make_server(svc):
+        servers.append(real_make_server(svc))
+        return servers[-1]
+
+    def broken_recover(self):
+        with socket.create_connection(("127.0.0.1", servers[0].server_port), timeout=5):
+            pass                                          # positive control: the port was listening
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(service_mod, "make_server", recording_make_server)
+    monkeypatch.setattr(QSearchService, "recover", broken_recover)
+    with pytest.raises(sqlite3.OperationalError):
+        prepare(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    monkeypatch.undo()
+    port = servers[0].server_port
+    with pytest.raises(OSError):
+        socket.create_connection(("127.0.0.1", port), timeout=5).close()
+    QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime()).close()
+
+
+def test_head_response_ends_at_the_blank_line(tmp_path):
+    svc = QSearchService(_config(tmp_path), runtime_factory=lambda kind: FakeRuntime())
+    server, thread = serve_in_thread(svc)
+    try:
+        sock = socket.create_connection(("127.0.0.1", server.server_port), timeout=10)
+        try:
+            sock.sendall(b"HEAD " + PATH.encode("ascii") + b" HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+            data = b""
+            while chunk := sock.recv(4096):
+                data += chunk
+        finally:
+            sock.close()
+        assert data.startswith(b"HTTP/1.0 404 ") and data.endswith(b"\r\n\r\n"), data
+        assert data.count(b"\r\n\r\n") == 1 and b"Content-Length: 0\r\n" in data
     finally:
         server.shutdown()
         server.server_close()

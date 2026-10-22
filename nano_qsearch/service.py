@@ -12,7 +12,10 @@ dimension, seed range) gets a sealed REFUSED receipt instead of a run; any
 exception on the run path becomes a sealed NOT_RUN receipt.
 
 The runtime kind is chosen once, when the job is accepted, and stored on the
-row. Every run is preceded by ``store.mark_attempt``. On startup ``recover()``
+row. A run records its attempt (``store.mark_attempt``) only once it holds a
+concurrency slot, immediately before the runtime is called, so a job still
+queued for a slot when the process dies has not used an attempt; a refusal
+records none. On startup ``recover()``
 finishes every job that was accepted but never completed: it re-runs it once
 with the same body (same seed, same digest, same runtime kind) unless that
 would be the third attempt or the job targets IBM hardware, which is never
@@ -24,9 +27,11 @@ exclusive OS lock on ``<data_dir>/qsearch.lock`` until ``close()``.
 from __future__ import annotations
 
 import argparse
+import errno
 import json
 import math
 import os
+import socket
 import sqlite3
 import sys
 import threading
@@ -59,6 +64,11 @@ LOCK_FILE = "qsearch.lock"
 NOT_COMPLETED = {"error": "job not completed"}
 UNAUTHORIZED = {"error": "unauthorized"}
 NOT_FOUND = {"error": "not found"}
+LISTEN_BACKLOG = 64           # connections queued in the kernel while recovery runs or every handler is busy
+_WIN_EDEADLOCK = 36           # Windows CRT EDEADLOCK; msvcrt.locking reports contention as this or EACCES
+# Only these errnos mean "another process holds the lock"; any other OSError is a real failure and re-raises.
+_LOCK_CONTENDED = (frozenset({errno.EACCES, _WIN_EDEADLOCK}) if os.name == "nt"
+                   else frozenset({errno.EACCES, errno.EAGAIN, errno.EWOULDBLOCK}))
 
 
 class DataDirLocked(RuntimeError):
@@ -76,10 +86,12 @@ class _DataDirLock:
         self._fd: int | None = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
         try:
             self._lock(self._fd)
-        except OSError:
+        except OSError as exc:
             os.close(self._fd)
             self._fd = None
-            raise DataDirLocked() from None
+            if exc.errno in _LOCK_CONTENDED:
+                raise DataDirLocked() from None
+            raise
 
     @staticmethod
     def _lock(fd: int) -> None:
@@ -116,6 +128,18 @@ def _read_key(path: str, name: str) -> bytes:
     if len(data) < MIN_KEY_BYTES:
         raise ValueError(f"{name} must hold at least {MIN_KEY_BYTES} bytes")
     return data
+
+
+def _env_number(var: str, default: int | float, parse: Callable[[str], int | float]) -> int | float:
+    """``parse`` the environment variable ``var``, or ``default`` when unset; a bad value names ``var``, not its text."""
+    raw = os.environ.get(var)
+    if raw is None:
+        return default
+    try:
+        return parse(raw)
+    except ValueError:
+        kind = "an integer" if parse is int else "a number"
+        raise ValueError(f"{var} must be {kind}") from None
 
 
 @dataclass(frozen=True)
@@ -166,7 +190,7 @@ class ServiceConfig:
             return value if value else env.get(var, default)
 
         def cap(var: str, default: int) -> int:
-            return int(env.get(var, default))
+            return _env_number(var, default, int)
 
         data_dir = pick("data_dir", "NANO_QSEARCH_DATA_DIR")
         key_path = pick("key_path", "NANO_QSEARCH_KEY_PATH")
@@ -181,7 +205,7 @@ class ServiceConfig:
                    max_shots=cap("NANO_QSEARCH_MAX_SHOTS", DEFAULT_MAX_SHOTS),
                    max_chi=cap("NANO_QSEARCH_MAX_CHI", DEFAULT_MAX_CHI),
                    max_concurrent=cap("NANO_QSEARCH_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT),
-                   request_timeout_s=float(env.get("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S)),
+                   request_timeout_s=_env_number("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S, float),
                    verbose=bool(getattr(args, "verbose", False)))
 
 
@@ -234,19 +258,28 @@ class QSearchService:
             return f"limits: compile.seed outside 0..{SEED_MAX}"
         return None
 
-    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any]:
-        """Run (or refuse) one job on runtime ``kind`` and return the SEALED receipt; never raises."""
+    def _sealed(self, job: QSearchJob, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
+        """Seal the receipt ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only."""
         try:
-            reason = self._cap_violation(job)
-            if reason is not None:
-                unsigned = refused_receipt(job, reason)
-            else:
-                with self._slots:
-                    unsigned = self._runtime(kind).run(job)
-            return seal_receipt(unsigned, self.config.receipt_key)
+            return seal_receipt(build(), self.config.receipt_key)
         except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
             _log(f"job {job.job_digest} not run: {type(exc).__name__}")
             return seal_receipt(not_run_receipt(job, f"service: {type(exc).__name__}"), self.config.receipt_key)
+
+    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any]:
+        """Refuse or run one job on runtime ``kind`` and return the SEALED receipt.
+
+        A refusal needs no slot and records no attempt. A run waits for a concurrency slot
+        and only then records its attempt, so a job still queued when the process dies has
+        not used one. Only a failure to record the attempt escapes (the caller answers 503
+        and the row stays ACCEPTED); every other failure becomes a sealed NOT_RUN.
+        """
+        reason = self._cap_violation(job)
+        if reason is not None:
+            return self._sealed(job, lambda: refused_receipt(job, reason))
+        with self._slots:
+            self.store.mark_attempt(job.job_digest)
+            return self._sealed(job, lambda: self._runtime(kind).run(job))
 
     def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any]:
         """Decide, from the stored attempt count, whether this job may run; return the sealed receipt.
@@ -261,7 +294,6 @@ class QSearchService:
         elif resuming and kind == "ibm":
             unsigned = not_run_receipt(job, "recovery: hardware jobs are never resubmitted")
         else:
-            self.store.mark_attempt(job.job_digest)
             return self._execute(job, kind)
         return seal_receipt(unsigned, self.config.receipt_key)
 
@@ -408,7 +440,10 @@ class _Handler(BaseHTTPRequestHandler):
 
     def __getattr__(self, name: str) -> Any:
         # Any other method (OPTIONS, TRACE, ...) is a 404 too, rather than http.server's 501 HTML page.
-        if name.startswith("do_"):
+        # Only the current request's own ``do_<METHOD>`` resolves: http.server sets ``command`` in
+        # ``parse_request`` before its ``hasattr`` check, and every other missing attribute stays missing.
+        command = self.__dict__.get("command") or ""
+        if command and name == "do_" + command:
             return self._not_found
         raise AttributeError(name)
 
@@ -417,12 +452,23 @@ class _Handler(BaseHTTPRequestHandler):
             super().log_message(fmt, *args)
 
 
+class _Server(ThreadingHTTPServer):
+    daemon_threads = True
+    request_queue_size = LISTEN_BACKLOG     # the listen() backlog
+    # On Windows SO_REUSEADDR lets a second process bind a port that is already listening, so
+    # two services could silently share one; claim the port exclusively there instead.
+    allow_reuse_address = os.name != "nt"
+
+    def server_bind(self) -> None:
+        if os.name == "nt":
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 def make_server(service: QSearchService) -> ThreadingHTTPServer:
     """Bind (and listen on) the configured address; connections queue until ``serve_forever``."""
     handler = type("QSearchHandler", (_Handler,), {"service": service, "timeout": service.config.request_timeout_s})
-    server = ThreadingHTTPServer(service.config.host_port, handler)
-    server.daemon_threads = True
-    return server
+    return _Server(service.config.host_port, handler)
 
 
 def serve_in_thread(service: QSearchService) -> tuple[ThreadingHTTPServer, threading.Thread]:
@@ -473,7 +519,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         service, server, recovered = prepare(config)
     except DataDirLocked as exc:
-        print(f"nano-qsearch-serve: {exc}", file=sys.stderr)
+        print(f"nano-qsearch-serve: {exc}", file=sys.stderr)      # a fixed sentence, never OS text
+        return 2
+    except (OSError, sqlite3.Error) as exc:
+        # The class only: OS and SQLite messages can carry paths. A port already in use lands here.
+        print(f"nano-qsearch-serve: startup failed: {type(exc).__name__}", file=sys.stderr)
         return 2
     print(startup_banner(config, server.server_address[:2], len(recovered)), file=sys.stderr, flush=True)
     try:

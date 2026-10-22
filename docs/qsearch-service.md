@@ -87,7 +87,11 @@ Startup runs in this order:
 2. Take an exclusive OS lock on `<data_dir>/qsearch.lock` (`msvcrt.locking`
    on Windows, `flock` elsewhere). The lock is held until the service exits.
 3. Bind the port. From here on, connections are accepted into the listen
-   backlog but not answered yet.
+   backlog but not answered yet. The backlog is the server's
+   `request_queue_size`, which the service raises from the standard library's
+   5 to 64; further connections beyond that may be refused or reset by the OS.
+   On Windows the port is claimed with `SO_EXCLUSIVEADDRUSE`, so a second
+   process cannot bind a port the service is listening on.
 4. Recover pending jobs (see [Durability and recovery](#durability-and-recovery)).
 5. Print the startup line and start answering requests.
 
@@ -96,7 +100,16 @@ Only one service may use a data directory at a time. A second
 `nano-qsearch-serve: data directory is already in use by another nano-qsearch-serve`
 and exits with code 2, before it binds the port. The lock file is empty and
 stays on disk. It does not have to be deleted after a crash, because the OS
-releases the lock when the process dies.
+releases the lock when the process dies. Only lock contention is reported
+this way; any other error taking the lock is a startup failure (below).
+
+Any other startup failure, such as a port that is already in use, an
+unreadable data directory or a SQLite error opening the store, prints one line,
+`nano-qsearch-serve: startup failed: <ExceptionClass>`, and exits with code 2.
+The line names only the exception class, because OS and SQLite messages can
+carry paths. A configuration error (a missing required variable, an unreadable
+key file, or a cap or timeout that is not a number) also exits with code 2, and
+its line names the variable at fault.
 
 Recovery happens after binding, so callers do not get "connection refused"
 while the service starts. It also **blocks serving until every pending job
@@ -122,7 +135,7 @@ take precedence over the environment.
 | `NANO_QSEARCH_MAX_CHI` | `256` | Service cap on `backend.chi_max` (MPS bond dimension). |
 | `NANO_QSEARCH_MAX_BODY_BYTES` | `1048576` | Largest request body accepted. |
 | `NANO_QSEARCH_MAX_CONCURRENT` | `2` | Most runtime calls (engine runs) in progress at once. Further jobs wait for a free slot. Identical jobs share one run whatever this is set to. |
-| `NANO_QSEARCH_REQUEST_TIMEOUT_S` | `30` | Socket timeout, in seconds, for reading a request and writing its response. A client that stalls mid-request is disconnected after this long. It does not limit how long a job runs. |
+| `NANO_QSEARCH_REQUEST_TIMEOUT_S` | `30` | Socket idle timeout, in seconds. It applies to each read and each write on the connection separately, not to the request as a whole: a client that sends nothing for this long mid-request is disconnected, but one that keeps trickling bytes is not. It does not limit how long a job runs. |
 | `NANO_QSEARCH_ATLAS_PATH` | unset | `aether-atlas` directory, used by the engine child (and by the tests). |
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate; see [IBM](#ibm-hardware). |
@@ -243,9 +256,14 @@ written before this column existed have no recorded kind and use the current
 backend. The column is added to an existing `qsearch.sqlite3` automatically on
 startup.
 
-Before each run the service increments the row's `attempts` counter. On
-startup, `recover()` handles every row still marked ACCEPTED, meaning the
-process died between accepting a job and completing it:
+The service increments the row's `attempts` counter when a run actually
+starts: after the job has acquired a concurrency slot
+(`NANO_QSEARCH_MAX_CONCURRENT`), immediately before the runtime is called. A
+job that was still waiting for a slot when the process died has not used an
+attempt, and a REFUSED job never records one. If recording the attempt fails,
+nothing runs and the request gets a 503. On startup, `recover()` handles every
+row still marked ACCEPTED, meaning the process died between accepting a job
+and completing it:
 
 1. If `attempts >= 2`, both the original run and one recovery re-run have
    already died. The job completes as NOT_RUN with
@@ -255,8 +273,9 @@ process died between accepting a job and completing it:
    run. A second paid hardware submission is never made.
 3. Otherwise the job **re-runs once** from its stored body: the same seed, the
    same `job_digest` and the same runtime kind, so the result matches what the
-   first run would have produced. Then it is sealed and completed. A row that
-   crashed before its first attempt was counted (`attempts = 0`) also runs once.
+   first run would have produced. Then it is sealed and completed. A row whose
+   run never started (`attempts = 0`, for example one still queued for a slot)
+   also runs once, and that run counts as its first attempt.
 
 Recovery is idempotent: a second `recover()`, or another restart, finds
 nothing pending. The same rules apply when a live submission finds an ACCEPTED
@@ -269,7 +288,8 @@ Every Aer job runs in a fresh child interpreter (`NANO_QSEARCH_PYTHON`, or
 the service's own interpreter by default) with `OMP_NUM_THREADS=1`. A crash,
 meaning a nonzero exit, no output file, or output that is not a JSON object,
 is retried up to 4 times. All runs of one job share a single wall-clock
-budget (`limits.max_wall_s`, at most 3600 s, 600 s when unset). Each run is
+budget (`limits.max_wall_s`, at most 3600 s; the key is required, and `0`
+means the 600 s default). Each run is
 given only what is left of it, and no retry starts with less than 1 s left:
 once it is spent, the job is NOT_RUN with `engine: TimeoutExpired`, however
 many retries remain. The engine reports a deterministic error, including a failed import
@@ -331,11 +351,13 @@ so if a proxy rewrites the path, sign the rewritten path instead.
 ### Timeouts
 
 `NanoRuntimeQSearchBackend` defaults to `timeout_s=130`. That is shorter than
-the service's default wall-clock budget per job (`limits.max_wall_s`, 600 s
-when unset), so a long job can outlast Predator's call. Construct the backend
-with `timeout_s` at least the job's `max_wall_s`. Predator accepts values up
-to 3600. Add some margin if jobs can wait for a slot
-(`NANO_QSEARCH_MAX_CONCURRENT`) or for recovery at startup.
+the service's default wall-clock budget per job (600 s when
+`limits.max_wall_s` is `0`), so a long job can outlast Predator's call. Predator
+operators set the client timeout with `PREDATOR_QSEARCH_TIMEOUT_S` (default
+130, at most 3600), or pass `timeout_s` when constructing the backend directly.
+Set it to at least the job's `max_wall_s` (600 when that is `0`). Add some
+margin if jobs can wait for a slot (`NANO_QSEARCH_MAX_CONCURRENT`) or for
+recovery at startup.
 
 A timed-out call does not cancel the job. The service finishes the run and
 stores the receipt. If Predator resubmits the same job after that, it gets the
