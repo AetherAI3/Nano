@@ -90,6 +90,46 @@ def test_non_finite_entries_rejected_before_digest(body):
     assert info.value.code == "QUBO"
 
 
+@pytest.mark.parametrize("mutate", [
+    lambda b: b["qubo"]["q"][0].__setitem__(0, 10**400),
+    lambda b: b["qubo"].__setitem__("offset", 10**400),
+])
+def test_overflowing_ints_rejected_as_qubo(body, mutate):
+    b = copy.deepcopy(body)
+    mutate(b)                     # not resigned: validation must refuse before the digest is computed
+    with pytest.raises(JobValidationError) as info:
+        parse_job(b)
+    assert info.value.code == "QUBO"
+
+
+def test_negative_seeds_parse(body):
+    b = copy.deepcopy(body)
+    b["compile"]["seed"] = -3
+    b["backend"]["seed"] = -(2**40)
+    job = parse_job(_resigned(b))
+    assert job.compile_seed == -3 and job.backend_seed == -(2**40)
+
+
+@pytest.mark.parametrize("field", ["compile", "backend"])
+def test_bool_seed_rejected(body, field):
+    b = copy.deepcopy(body)
+    b[field]["seed"] = True
+    with pytest.raises(JobValidationError) as info:
+        parse_job(_resigned(b))
+    assert info.value.code == field.upper()
+
+
+@pytest.mark.parametrize("mutate, code", [
+    (lambda b: b["backend"].__setitem__("shots", True), "BACKEND"),
+    (lambda b: b["compile"].__setitem__("betas", [0.1, 0.2]), "COMPILE"),   # p=1 but two angles
+    (lambda b: b.__setitem__("variables", ["c0", "c1", 2, "c3"]), "VARIABLES"),
+])
+def test_more_rejections(body, mutate, code):
+    with pytest.raises(JobValidationError) as info:
+        parse_job(_bad(body, mutate))
+    assert info.value.code == code
+
+
 def test_non_mapping_rejected():
     with pytest.raises(JobValidationError):
         parse_job(["not", "a", "job"])
