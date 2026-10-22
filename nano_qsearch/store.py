@@ -6,6 +6,9 @@ A job row is keyed by ``job_digest`` and moves ACCEPTED → DONE exactly once.
 accepted before a crash; ``complete`` refuses to overwrite a DONE row so a
 second divergent result can never replace the first. Nonces live in the same
 file so replay protection survives a restart. One connection, one lock.
+Each row also records the runtime ``kind`` chosen at accept time, so recovery
+re-runs on the same backend; files from before that column are migrated in
+place (``kind`` is NULL on their old rows).
 """
 from __future__ import annotations
 
@@ -26,7 +29,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   receipt_json TEXT,
   accepted_at REAL NOT NULL,
   completed_at REAL,
-  attempts INTEGER NOT NULL DEFAULT 0
+  attempts INTEGER NOT NULL DEFAULT 0,
+  kind TEXT
 );
 CREATE TABLE IF NOT EXISTS nonces (
   nonce TEXT PRIMARY KEY,
@@ -44,10 +48,11 @@ class JobRecord:
     accepted_at: float
     completed_at: float | None
     attempts: int
+    kind: str | None = None     # runtime kind chosen at accept time; None on rows written before the column existed
 
 
 class JobStore:
-    _COLS = "job_digest, state, job_json, receipt_json, accepted_at, completed_at, attempts"
+    _COLS = "job_digest, state, job_json, receipt_json, accepted_at, completed_at, attempts, kind"
 
     def __init__(self, path: Path | str) -> None:
         self._path = Path(path)
@@ -58,6 +63,13 @@ class JobStore:
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA synchronous=FULL")
         self._db.executescript(_SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Bring a file written by an older version up to the current schema (add ``jobs.kind``)."""
+        columns = {row[1] for row in self._db.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "kind" not in columns:
+            self._db.execute("ALTER TABLE jobs ADD COLUMN kind TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -71,10 +83,11 @@ class JobStore:
         with self._lock:
             return self._row(self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE job_digest=?", (job_digest,)).fetchone())
 
-    def begin(self, job_digest: str, job_json: str) -> JobRecord:
+    def begin(self, job_digest: str, job_json: str, kind: str | None = None) -> JobRecord:
+        """Insert an ACCEPTED row (first call wins: an existing row keeps its body and ``kind``) and return it."""
         with self._lock:
-            self._db.execute("INSERT OR IGNORE INTO jobs (job_digest, state, job_json, accepted_at) VALUES (?, 'ACCEPTED', ?, ?)",
-                             (job_digest, job_json, time.time()))
+            self._db.execute("INSERT OR IGNORE INTO jobs (job_digest, state, job_json, accepted_at, kind) "
+                             "VALUES (?, 'ACCEPTED', ?, ?, ?)", (job_digest, job_json, time.time(), kind))
             return self._row(self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE job_digest=?", (job_digest,)).fetchone())
 
     def mark_attempt(self, job_digest: str) -> int:

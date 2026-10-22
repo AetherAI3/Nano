@@ -5,22 +5,29 @@ any MAC work, so it never consumes a nonce), authenticate (``auth``; a failure
 is 401 with no receipt and nothing stored), parse the job (``job``; a failure
 is 400 with no receipt), look the ``job_digest`` up in the durable store (a
 DONE job returns its stored receipt without recomputing), run the selected
-runtime at most once per digest at a time (single-flight across threads), seal
-the receipt (``receipt``) and store it. A job over a service cap (variables,
-shots, bond dimension, seed range) gets a sealed REFUSED receipt instead of a
-run; any exception on the run path becomes a sealed NOT_RUN receipt.
+runtime at most once per digest at a time (single-flight across threads, and
+at most ``max_concurrent`` runtime calls at once), seal the receipt
+(``receipt``) and store it. A job over a service cap (variables, shots, bond
+dimension, seed range) gets a sealed REFUSED receipt instead of a run; any
+exception on the run path becomes a sealed NOT_RUN receipt.
 
-Every run is preceded by ``store.mark_attempt``. On startup ``recover()``
+The runtime kind is chosen once, when the job is accepted, and stored on the
+row. Every run is preceded by ``store.mark_attempt``. On startup ``recover()``
 finishes every job that was accepted but never completed: it re-runs it once
-with the same body (same seed, same digest) unless that would be the third
-attempt or the job targets IBM hardware, which is never resubmitted; those
-complete as NOT_RUN without running.
+with the same body (same seed, same digest, same runtime kind) unless that
+would be the third attempt or the job targets IBM hardware, which is never
+resubmitted; those complete as NOT_RUN without running.
+
+One service owns a data directory at a time: ``QSearchService`` holds an
+exclusive OS lock on ``<data_dir>/qsearch.lock`` until ``close()``.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
+import sqlite3
 import sys
 import threading
 import time
@@ -43,10 +50,61 @@ DEFAULT_MAX_VARIABLES = 40
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 DEFAULT_MAX_SHOTS = 100_000
 DEFAULT_MAX_CHI = 256
+DEFAULT_REQUEST_TIMEOUT_S = 30
+DEFAULT_MAX_CONCURRENT = 2
 SEED_MAX = 2**32 - 1          # Aer and the transpiler take uint32 seeds; Predator allows any integer
 MAX_ATTEMPTS = 2              # the original attempt plus one recovery re-run
 STORE_FILE = "qsearch.sqlite3"
+LOCK_FILE = "qsearch.lock"
 NOT_COMPLETED = {"error": "job not completed"}
+UNAUTHORIZED = {"error": "unauthorized"}
+NOT_FOUND = {"error": "not found"}
+
+
+class DataDirLocked(RuntimeError):
+    """Another service already holds this data directory."""
+
+    def __init__(self) -> None:
+        super().__init__("data directory is already in use by another nano-qsearch-serve")
+
+
+class _DataDirLock:
+    """An exclusive, non-blocking OS lock on one byte of ``path``, held until ``release``."""
+
+    def __init__(self, path: Path) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._fd: int | None = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            self._lock(self._fd)
+        except OSError:
+            os.close(self._fd)
+            self._fd = None
+            raise DataDirLocked() from None
+
+    @staticmethod
+    def _lock(fd: int) -> None:
+        if os.name == "nt":
+            import msvcrt
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def release(self) -> None:
+        if self._fd is None:
+            return
+        fd, self._fd = self._fd, None
+        try:
+            if os.name == "nt":
+                import msvcrt
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def _reject_constant(name: str) -> None:
@@ -71,6 +129,8 @@ class ServiceConfig:
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES
     max_shots: int = DEFAULT_MAX_SHOTS
     max_chi: int = DEFAULT_MAX_CHI
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT
+    request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S
     verbose: bool = False
 
     def __post_init__(self) -> None:
@@ -81,10 +141,13 @@ class ServiceConfig:
                 raise ValueError(f"{name} must be at least {MIN_KEY_BYTES} bytes")
         if bytes(self.receipt_key) == bytes(self.request_key):
             raise ValueError("receipt key and request key must differ")
-        for name in ("max_variables", "max_body_bytes", "max_shots", "max_chi"):
+        for name in ("max_variables", "max_body_bytes", "max_shots", "max_chi", "max_concurrent"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
+        timeout = self.request_timeout_s
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not (math.isfinite(timeout) and timeout > 0):
+            raise ValueError("request_timeout_s must be a positive number of seconds")
         host, _, port = self.bind.rpartition(":")
         if not host or not port.isdigit():
             raise ValueError("bind must be host:port")
@@ -117,6 +180,8 @@ class ServiceConfig:
                    max_body_bytes=cap("NANO_QSEARCH_MAX_BODY_BYTES", DEFAULT_MAX_BODY_BYTES),
                    max_shots=cap("NANO_QSEARCH_MAX_SHOTS", DEFAULT_MAX_SHOTS),
                    max_chi=cap("NANO_QSEARCH_MAX_CHI", DEFAULT_MAX_CHI),
+                   max_concurrent=cap("NANO_QSEARCH_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT),
+                   request_timeout_s=float(env.get("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S)),
                    verbose=bool(getattr(args, "verbose", False)))
 
 
@@ -130,14 +195,23 @@ def _log(message: str) -> None:
 class QSearchService:
     def __init__(self, config: ServiceConfig, *, runtime_factory: RuntimeFactory = build_runtime) -> None:
         self.config = config
-        self.store = JobStore(config.data_dir / STORE_FILE)
+        self._dir_lock = _DataDirLock(config.data_dir / LOCK_FILE)      # raises DataDirLocked
+        try:
+            self.store = JobStore(config.data_dir / STORE_FILE)
+        except BaseException:
+            self._dir_lock.release()
+            raise
         self._runtime_factory = runtime_factory
         self._runtimes: dict[str, Any] = {}
         self._inflight: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
+        self._slots = threading.BoundedSemaphore(config.max_concurrent)
 
     def close(self) -> None:
-        self.store.close()
+        try:
+            self.store.close()
+        finally:
+            self._dir_lock.release()
 
     def _runtime(self, kind: str):
         with self._lock:
@@ -160,29 +234,35 @@ class QSearchService:
             return f"limits: compile.seed outside 0..{SEED_MAX}"
         return None
 
-    def _execute(self, job: QSearchJob) -> dict[str, Any]:
-        """Run (or refuse) one job and return the SEALED receipt; never raises."""
+    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any]:
+        """Run (or refuse) one job on runtime ``kind`` and return the SEALED receipt; never raises."""
         try:
             reason = self._cap_violation(job)
             if reason is not None:
                 unsigned = refused_receipt(job, reason)
             else:
-                unsigned = self._runtime(select_kind(self.config.backend, job)).run(job)
+                with self._slots:
+                    unsigned = self._runtime(kind).run(job)
             return seal_receipt(unsigned, self.config.receipt_key)
         except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
             _log(f"job {job.job_digest} not run: {type(exc).__name__}")
             return seal_receipt(not_run_receipt(job, f"service: {type(exc).__name__}"), self.config.receipt_key)
 
     def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any]:
-        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt."""
+        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt.
+
+        The runtime kind is the one recorded when the job was accepted; rows from before
+        that column existed fall back to the current service backend.
+        """
+        kind = record.kind or select_kind(self.config.backend, job)
         resuming = recovering or record.attempts > 0
         if record.attempts >= MAX_ATTEMPTS:
             unsigned = not_run_receipt(job, "recovery: attempt limit reached")
-        elif resuming and select_kind(self.config.backend, job) == "ibm":
+        elif resuming and kind == "ibm":
             unsigned = not_run_receipt(job, "recovery: hardware jobs are never resubmitted")
         else:
             self.store.mark_attempt(job.job_digest)
-            return self._execute(job)
+            return self._execute(job, kind)
         return seal_receipt(unsigned, self.config.receipt_key)
 
     def _stored_receipt(self, job_digest: str) -> tuple[int, dict[str, Any]] | None:
@@ -190,6 +270,18 @@ class QSearchService:
         if record is None or record.state != "DONE":
             return None
         return 200, json.loads(record.receipt_json)
+
+    def _complete(self, job: QSearchJob, sealed: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Store ``sealed``; if the row is already DONE (``ValueError``), the stored receipt wins."""
+        try:
+            self.store.complete(job.job_digest, json.dumps(sealed, sort_keys=True, allow_nan=False))
+        except ValueError:
+            stored = self._stored_receipt(job.job_digest)
+            if stored is None:
+                raise
+            _log(f"job {job.job_digest} was already completed; returning the stored receipt")
+            return stored
+        return 200, sealed
 
     def _run_once(self, job: QSearchJob, *, recovering: bool = False) -> tuple[int, dict[str, Any]]:
         """Single-flight by digest: compute once, store, and share the stored receipt."""
@@ -206,10 +298,10 @@ class QSearchService:
             stored = self._stored_receipt(job.job_digest)
             return stored if stored is not None else (503, dict(NOT_COMPLETED))
         try:
-            record = self.store.begin(job.job_digest, canonical_json(job.payload))
+            record = self.store.begin(job.job_digest, canonical_json(job.payload),
+                                      kind=select_kind(self.config.backend, job))
             sealed = self._attempt(job, record, recovering=recovering)
-            self.store.complete(job.job_digest, json.dumps(sealed, sort_keys=True, allow_nan=False))
-            return 200, sealed
+            return self._complete(job, sealed)
         except Exception as exc:  # noqa: BLE001 - the store failed; the row stays ACCEPTED for a later attempt
             _log(f"job {job.job_digest} not completed: {type(exc).__name__}")
             return 503, dict(NOT_COMPLETED)
@@ -218,16 +310,29 @@ class QSearchService:
                 self._inflight.pop(job.job_digest, None)
             waiter.set()
 
+    def _authenticate(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None],
+                      now: int) -> tuple[int, dict[str, Any]] | None:
+        """None when the request is authentic; otherwise the (status, body) to answer with."""
+        try:
+            verify_request(self.config.request_key, headers.get(AUTH_HEADER), method, path, body, now=now, nonce_store=self.store)
+            self.store.prune_nonces(before_ts=now - 2 * WINDOW_S)
+        except AuthError as exc:
+            if self.config.verbose:
+                _log(f"unauthorized request: {exc.code}")
+            return 401, dict(UNAUTHORIZED)
+        except (sqlite3.Error, OSError) as exc:
+            _log(f"nonce store failed: {type(exc).__name__}")
+            return 503, dict(NOT_COMPLETED)
+        return None
+
     def submit(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
                now: int | None = None) -> tuple[int, dict[str, Any]]:
         if len(body) > self.config.max_body_bytes:
             return 413, {"error": "body too large"}
         now = int(time.time()) if now is None else now
-        try:
-            verify_request(self.config.request_key, headers.get(AUTH_HEADER), method, path, body, now=now, nonce_store=self.store)
-        except AuthError as exc:
-            return 401, {"error": "unauthorized", "code": exc.code}
-        self.store.prune_nonces(before_ts=now - 2 * WINDOW_S)
+        refusal = self._authenticate(method, path, body, headers, now)
+        if refusal is not None:
+            return refusal
         try:
             job = parse_job(json.loads(body.decode("utf-8"), parse_constant=_reject_constant))
         except JobValidationError as exc:
@@ -253,6 +358,7 @@ class QSearchService:
 
 class _Handler(BaseHTTPRequestHandler):
     service: QSearchService  # set per server by make_server
+    timeout: float = DEFAULT_REQUEST_TIMEOUT_S  # socket timeout; make_server sets it from the config
 
     def _send(self, status: int, payload: dict[str, Any]) -> None:
         data = json.dumps(payload, sort_keys=True, allow_nan=False).encode("utf-8")
@@ -268,13 +374,17 @@ class _Handler(BaseHTTPRequestHandler):
         except ValueError:
             return -1
 
-    def do_POST(self) -> None:  # noqa: N802 - http.server API
+    def _not_found(self) -> None:
         length = self._content_length()
+        if 0 < length <= self.service.config.max_body_bytes:
+            self.rfile.read(length)      # drain, so closing the socket does not reset the client mid-response
+        self._send(404, dict(NOT_FOUND))
+
+    def do_POST(self) -> None:  # noqa: N802 - http.server API
         if self.path != SUBMIT_PATH:
-            if 0 < length <= self.service.config.max_body_bytes:
-                self.rfile.read(length)      # drain, so closing the socket does not reset the client mid-response
-            self._send(404, {"error": "not found"})
+            self._not_found()
             return
+        length = self._content_length()
         if length < 0:
             self._send(400, {"error": "bad content length"})
             return
@@ -283,11 +393,24 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(413, {"error": "body too large"})
             return
         body = self.rfile.read(length)
-        status, payload = self.service.submit("POST", self.path, body, {AUTH_HEADER: self.headers.get(AUTH_HEADER)})
+        status, payload = self.service.submit("POST", SUBMIT_PATH, body, {AUTH_HEADER: self.headers.get(AUTH_HEADER)})
         self._send(status, payload)
 
     def do_GET(self) -> None:  # noqa: N802
-        self._send(404, {"error": "not found"})
+        self._not_found()
+
+    do_PUT = do_DELETE = do_PATCH = do_GET
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        self.send_response(404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def __getattr__(self, name: str) -> Any:
+        # Any other method (OPTIONS, TRACE, ...) is a 404 too, rather than http.server's 501 HTML page.
+        if name.startswith("do_"):
+            return self._not_found
+        raise AttributeError(name)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         if self.service.config.verbose:
@@ -295,7 +418,8 @@ class _Handler(BaseHTTPRequestHandler):
 
 
 def make_server(service: QSearchService) -> ThreadingHTTPServer:
-    handler = type("QSearchHandler", (_Handler,), {"service": service})
+    """Bind (and listen on) the configured address; connections queue until ``serve_forever``."""
+    handler = type("QSearchHandler", (_Handler,), {"service": service, "timeout": service.config.request_timeout_s})
     server = ThreadingHTTPServer(service.config.host_port, handler)
     server.daemon_threads = True
     return server
@@ -306,6 +430,25 @@ def serve_in_thread(service: QSearchService) -> tuple[ThreadingHTTPServer, threa
     thread = threading.Thread(target=server.serve_forever, name="nano-qsearch-http", daemon=True)
     thread.start()
     return server, thread
+
+
+def prepare(config: ServiceConfig, *, runtime_factory: RuntimeFactory = build_runtime
+            ) -> tuple[QSearchService, ThreadingHTTPServer, list[str]]:
+    """Lock the data dir, bind the port, then recover pending jobs (requests wait in the backlog meanwhile).
+
+    Raises ``DataDirLocked`` before binding when another service owns the data dir.
+    """
+    service = QSearchService(config, runtime_factory=runtime_factory)
+    server = None
+    try:
+        server = make_server(service)
+        recovered = service.recover()
+    except BaseException:
+        if server is not None:
+            server.server_close()
+        service.close()
+        raise
+    return service, server, recovered
 
 
 def startup_banner(config: ServiceConfig, address: tuple[str, int], recovered: int) -> str:
@@ -327,9 +470,11 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, ValueError) as exc:
         print(f"nano-qsearch-serve: {exc}", file=sys.stderr)
         return 2
-    service = QSearchService(config)
-    recovered = service.recover()
-    server = make_server(service)
+    try:
+        service, server, recovered = prepare(config)
+    except DataDirLocked as exc:
+        print(f"nano-qsearch-serve: {exc}", file=sys.stderr)
+        return 2
     print(startup_banner(config, server.server_address[:2], len(recovered)), file=sys.stderr, flush=True)
     try:
         server.serve_forever()
@@ -341,5 +486,5 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["DEFAULT_BIND", "MAX_ATTEMPTS", "QSearchService", "SEED_MAX", "SUBMIT_PATH", "ServiceConfig", "main",
-           "make_server", "serve_in_thread", "startup_banner"]
+__all__ = ["DEFAULT_BIND", "DataDirLocked", "MAX_ATTEMPTS", "QSearchService", "SEED_MAX", "SUBMIT_PATH", "ServiceConfig",
+           "main", "make_server", "prepare", "serve_in_thread", "startup_banner"]

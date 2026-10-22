@@ -131,7 +131,7 @@ def _audit_result(job: QSearchJob, result: Mapping[str, Any]) -> None:
         raise ReceiptAuditError("engine truncated is not true, false or null")
     if result["kind"] == "statevector" and truncated is not None:
         raise ReceiptAuditError("engine truncated must be null for statevector")
-    best =result.get("best_sample_energy")
+    best = result.get("best_sample_energy")
     if not _finite_number(best):
         raise ReceiptAuditError("engine best_sample_energy is not a finite number")
     samples = result.get("samples")

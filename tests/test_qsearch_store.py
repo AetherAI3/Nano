@@ -139,3 +139,37 @@ def test_mark_attempt_is_durable_across_reopen(tmp_path):
     s2 = JobStore(path)
     assert s2.get(D1).attempts == 1 and s2.mark_attempt(D1) == 2
     s2.close()
+
+
+def test_begin_records_kind_and_first_call_wins(store):
+    assert store.begin(D1, "{}", kind="statevector").kind == "statevector"
+    assert store.begin(D1, "{}", kind="mps").kind == "statevector"      # INSERT OR IGNORE keeps the original
+    assert store.begin(D2, "{}").kind is None
+    assert store.pending()[0].kind == "statevector"
+
+
+def test_old_schema_is_migrated_with_a_kind_column(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite3"
+    db = sqlite3.connect(str(path))
+    db.executescript("""
+        CREATE TABLE jobs (job_digest TEXT PRIMARY KEY, state TEXT NOT NULL CHECK (state IN ('ACCEPTED', 'DONE')),
+                           job_json TEXT NOT NULL, receipt_json TEXT, accepted_at REAL NOT NULL, completed_at REAL,
+                           attempts INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE nonces (nonce TEXT PRIMARY KEY, ts INTEGER NOT NULL);
+        INSERT INTO jobs (job_digest, state, job_json, accepted_at, attempts) VALUES ('%s', 'ACCEPTED', '{}', 1.0, 1);
+    """ % D1)
+    db.commit()
+    db.close()
+    s = JobStore(path)
+    try:
+        old = s.get(D1)
+        assert old.kind is None and old.attempts == 1 and old.state == "ACCEPTED"
+        assert s.begin(D2, "{}", kind="mps").kind == "mps"
+    finally:
+        s.close()
+    s = JobStore(path)      # reopening a migrated file is a no-op
+    try:
+        assert s.get(D2).kind == "mps"
+    finally:
+        s.close()
