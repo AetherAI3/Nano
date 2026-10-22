@@ -292,7 +292,7 @@ class QSearchService:
         if record.attempts >= MAX_ATTEMPTS:
             unsigned = not_run_receipt(job, "recovery: attempt limit reached")
         elif resuming and kind == "ibm":
-            unsigned = not_run_receipt(job, "recovery: hardware jobs are never resubmitted")
+            unsigned = not_run_receipt(job, "recovery: hardware jobs are never run from recovery")
         else:
             return self._execute(job, kind)
         return seal_receipt(unsigned, self.config.receipt_key)

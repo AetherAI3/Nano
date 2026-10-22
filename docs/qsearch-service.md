@@ -269,7 +269,7 @@ and completing it:
    already died. The job completes as NOT_RUN with
    `recovery: attempt limit reached` and does not run.
 2. Otherwise, if the job's recorded kind is `ibm`, it completes as
-   NOT_RUN with `recovery: hardware jobs are never resubmitted` and does not
+   NOT_RUN with `recovery: hardware jobs are never run from recovery` and does not
    run. A second paid hardware submission is never made.
 3. Otherwise the job **re-runs once** from its stored body: the same seed, the
    same `job_digest` and the same runtime kind, so the result matches what the

@@ -449,7 +449,7 @@ def test_ibm_jobs_are_never_resubmitted_on_recovery(tmp_path, body_bytes, attemp
     try:
         assert svc.recover() == [digest] and rt.calls == 0
         receipt = json.loads(svc.store.get(digest).receipt_json)
-        assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "recovery: hardware jobs are never resubmitted"
+        assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "recovery: hardware jobs are never run from recovery"
         verify_seal(receipt, RECEIPT_KEY)
     finally:
         svc.close()
@@ -833,7 +833,7 @@ def test_ibm_live_resubmission_after_owner_store_failure_is_never_resubmitted(tm
         assert first == (503, {"error": "job not completed"}) and rt.calls == 1
         status, receipt = svc.submit("POST", PATH, body_bytes, _headers(body_bytes, 1001, nonce="d2" * 16), now=1001)
         assert status == 200 and receipt["status"] == "NOT_RUN"
-        assert receipt["reason"] == "recovery: hardware jobs are never resubmitted" and rt.calls == 1
+        assert receipt["reason"] == "recovery: hardware jobs are never run from recovery" and rt.calls == 1
         verify_seal(receipt, RECEIPT_KEY)
     finally:
         svc.close()
@@ -912,8 +912,8 @@ def _wait_for(predicate, timeout=10.0):
 def test_a_job_queued_for_a_slot_has_not_used_an_attempt_and_recovery_runs_it_in_full(tmp_path, fixtures_dir, body_bytes):
     # B is a non-IBM job: what matters is that a crash while B waits for a slot leaves it at attempts == 0,
     # so recovery spends B's original attempt rather than its single re-run (B ends at 1, not 2). An IBM
-    # row only ever reaches "hardware jobs are never resubmitted" now with attempts >= 1 when its run really
-    # started; a still-queued IBM row (attempts == 0) keeps the existing conservative rule on recovery.
+    # row is never run from recovery (attempts 0 or 1) under the conservative hardware rule; the reason string
+    # says exactly that, so it is true whether or not the hardware run had started.
     body_b = _job_bytes(fixtures_dir, lambda b: b["backend"].__setitem__("seed", 8))
     digest_a, digest_b = json.loads(body_bytes)["job_digest"], json.loads(body_b)["job_digest"]
     live = tmp_path / "live"

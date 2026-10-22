@@ -3024,10 +3024,43 @@ def test_predator_backend_accepts_sealed_receipt(fixtures_dir, tmp_path):
 - Placeholders: none.
 - Type consistency: `QSearchJob` field names (`compile_seed`, `backend_seed`, `backend_kind`, `max_qpu_s`) are used identically in Tasks 2, 6, 7, 8, 9, 10; ENGINE_RESULT keys in Tasks 3, 7, 8, 10 match; `Runtime.run` returns the unsigned body everywhere and the service seals.
 
+## Deviations from this plan as executed
+
+- **Package location.** The service lives in the top-level package `nano_qsearch/`, not `nano/loop/`. `tests/test_determinism_guards.py` forbids clock, environment, subprocess, network and third-party imports anywhere under `nano/`, and the service needs all of them. Module names dropped the `qsearch_` prefix (`nano_qsearch/job.py`, `receipt.py`, `auth.py`, `store.py`, `compile.py`, `_engine.py`, `runtime_mps.py`, `runtime_ibm.py`, `service.py`). Code blocks above still show the original paths.
+- **pair02 nuclei.** `find_nuclei` on the dense K6 pair02 objective packs four edge-disjoint triangles, `[(0,1,2),(0,3,4),(1,3,5),(2,4,5)]`, not the hand-picked vertex-disjoint pair from the Fez campaign.
+- **Compiled-plan digest.** QPY stores a process-wide circuit name and the transpile layout, both nondeterministic across processes; the digest hashes a layout-free copy under a fixed name and records `initial_layout` and `measurement_map` in its inspection block.
+- **Bond dimension.** `chi_reached` is the peak bond dimension parsed from Aer's `MPS_log_data` (`chi_source: peak_log`); the final-state bonds under-report (pair02: final 6, peak 8). If the log cannot be trusted the receipt says `chi_source: final` and marks the run truncated; programs with no two-qubit gate report `no_2q`.
+- **Hardening beyond the plan** (from two-stage review): engine output is audited before a receipt is built (`ReceiptAuditError` → NOT_RUN); service caps on shots, chi and seeds return sealed REFUSED receipts; per-job wall budget across retries; least-privilege child environment; socket idle timeout; exclusive data-dir lock; bind before recovery; at most two attempts per job, an attempt counted only once a concurrency slot is held; recovery uses the runtime kind recorded at accept time and never runs hardware; generic 401 body.
+
 ## Evidence
 
-_(filled in Task 13)_
+All runs on 2026-10-21/22, Windows 10, system Python 3.12.10 (`C:\Users\lilbe\AppData\Local\Programs\Python\Python312\python.exe`), qiskit 2.3.1, qiskit-aer 0.17.2, numpy 1.26.4, SQLite 3.49.1, ATLAS at `feat/qcompiler-find-nuclei`, Predator-M read-only at `origin/main` 17ee3368 (wire-contract files unchanged since 0b949cab).
+
+**Test suites** (from the worktree root, `NANO_QSEARCH_ATLAS_PATH`, `NANO_QSEARCH_PREDATOR_PATH`, `OMP_NUM_THREADS=1` set):
+
+```
+python -m pytest -q -W ignore::DeprecationWarning --ignore=tests/test_provenance.py
+```
+
+`tests/test_provenance.py` has 7 pre-existing failures on this host: the installed `aether_protocol_c` rejects float fields (`CommitmentError: ... float values are not canonically reproducible`). The file and `nano/bridge` are untouched by this branch. A plain venv with only `pytest` and `pip install -e .` (no qiskit, no ATLAS) collects everything and skips the engine tests.
+
+**Live service** (`python -m nano_qsearch --data-dir ... --key-path ... --request-key-path ... --bind 127.0.0.1:8798`, two fresh 32-byte key files; client builds the job with Predator's own `QSearchJobV1`, signs the request and verifies the reply with Predator's `QSearchReceiptV1.from_payload`):
+
+| Step | Result |
+|---|---|
+| Signed POST of the pair02 job (backend auto) | HTTP 200, `from_payload` accepted, status OK, backend statevector, variant joint5 (4 nuclei), native 2Q 87 / depth 66, agree true, best −18.032663316582912 vs floor −18.032663316582916, tvd_ideal 0.0288, 4.6 s |
+| Identical resubmit | same `receipt_digest` `sha256:ae1173…5a61` in 0.11 s; store row DONE, attempts 1 |
+| Unsigned POST | 401 `{"error": "unauthorized"}` |
+| MPS server, job submitted, server and engine child killed with `taskkill /T /F` 2.5 s in | row ACCEPTED, attempts 1, kind mps, no receipt; client connection reset |
+| Restart on the same data dir with default backend statevector | banner `recovered=1` after 6 s; row DONE, attempts 2, kind mps (recorded kind used), chi_reached 8 of 64, chi_source peak_log |
+| Resubmit after recovery | HTTP 200, `from_payload` accepted, backend mps, agree true, tvd_ideal 0.0339, 0.56 s; attempts still 2 (no recompute) |
+| Second instance on the same data dir | exit 2, `data directory is already in use by another nano-qsearch-serve` |
 
 ## Hand-off notes
 
-_(filled in Task 13: request-auth header on the Predator side; `compiled_plan_digest` definition; IBM delegate qualification; measured pair02 numbers; anything BLOCKED)_
+- **Request for the orchestrator (Predator side; wire contract unchanged).** Predator's `NanoRuntimeQSearchBackend` default opener (`predator/drive/qsearch_backend.py::_urllib_opener`) sends no `X-Aether-Qsearch-Auth` header, so against this service it always yields `NOT_RUN transport: HTTPError` (401). Predator needs an opener that signs requests with a request key distinct from `PREDATOR_QSEARCH_KEY_PATH`, plus a config variable for that key path. The header format and a 10-line stdlib signer are in `docs/qsearch-service.md` ("Predator side"); the integration test proves Predator's `from_payload` accepts the sealed receipts once requests are signed. This is L2/L4 territory; nothing in Predator was changed here.
+- **Timeouts.** Predator's client timeout (`PREDATOR_QSEARCH_TIMEOUT_S`, default 130 s) is below the service's default job budget (600 s when `limits.max_wall_s` is 0). A timed-out Predator call followed by a resubmit returns the stored receipt; recommend `PREDATOR_QSEARCH_TIMEOUT_S ≥ max_wall_s`.
+- **`compiled_plan_digest`.** It is a Nano manifest digest (`nano.qsearch.compiled-plan.v1`: target, coupling map, basis, opt level, seed, variant, nuclei, layout-free QPY sha256, inspection), not an ATLAS `CompiledPlanV1` digest, which needs an IBM Target and `SamplerOptions`. Spec B3 calls it "the ATLAS CompiledPlanV1 digest"; a hardware lane (L4) that produces a real `CompiledPlanV1` should fill it from there.
+- **IBM.** `IbmRuntime` refuses unless `AETHER_AQRC_HW_GO=1`, `AETHER_AQRC_AUTHORITY_PATH` names an existing file, `limits.max_qpu_s > 0` and the target is Fez. Even with every gate open, the ATLAS `campaign_runtime` delegate refuses: `prepare_child` admits only four-PUB two-pole compiler-validation children, and no q-search stage purpose exists there. Qualifying one is L4's work. No IBM or paid call was made.
+- **Classical simulation only.** Every OK receipt here is statevector or MPS simulation on Qiskit Aer, labelled by `backend.kind`.
+- **Not blocked.** No new credential was needed.
