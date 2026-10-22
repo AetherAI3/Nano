@@ -15,6 +15,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+# Detected once: ``UPDATE ... RETURNING`` arrived in SQLite 3.35.0.
+_HAS_RETURNING = sqlite3.sqlite_version_info >= (3, 35, 0)
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs (
   job_digest TEXT PRIMARY KEY,
@@ -75,17 +78,35 @@ class JobStore:
             return self._row(self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE job_digest=?", (job_digest,)).fetchone())
 
     def mark_attempt(self, job_digest: str) -> int:
-        """Increment and return the attempt count in one statement; ``KeyError`` when the digest is unknown.
+        """Increment and return the attempt count atomically; ``KeyError`` when the digest is unknown.
 
-        ``RETURNING`` needs SQLite >= 3.35 (2021); the CPython builds this targets bundle newer.
+        ``UPDATE ... RETURNING`` needs SQLite >= 3.35 (2021); older libraries
+        (Ubuntu 20.04 ships 3.31) do the UPDATE and a SELECT inside one
+        ``BEGIN IMMEDIATE`` transaction instead.
         """
         with self._lock:
-            # fetchall drains the cursor so the statement finishes and its autocommit lands now
-            rows = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=? RETURNING attempts",
-                                    (job_digest,)).fetchall()
+            if _HAS_RETURNING:
+                # fetchall drains the cursor so the statement finishes and its autocommit lands now
+                rows = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=? RETURNING attempts",
+                                        (job_digest,)).fetchall()
+            else:
+                rows = self._update_then_select_attempts(job_digest)
             if not rows:
                 raise KeyError(job_digest)
             return int(rows[0][0])
+
+    def _update_then_select_attempts(self, job_digest: str) -> list[tuple]:
+        """The pre-3.35 path: one explicit write transaction (the connection is autocommit). Caller holds the lock."""
+        self._db.execute("BEGIN IMMEDIATE")
+        try:
+            cur = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=?", (job_digest,))
+            rows = (self._db.execute("SELECT attempts FROM jobs WHERE job_digest=?", (job_digest,)).fetchall()
+                    if cur.rowcount == 1 else [])
+            self._db.execute("COMMIT")
+        except BaseException:
+            self._db.execute("ROLLBACK")
+            raise
+        return rows
 
     def complete(self, job_digest: str, receipt_json: str) -> None:
         """ACCEPTED → DONE in one statement; ``KeyError`` if unknown, ``ValueError`` if already DONE."""

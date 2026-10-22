@@ -4,6 +4,7 @@ import threading
 
 import pytest
 
+from nano_qsearch import store as store_mod
 from nano_qsearch.store import JobRecord, JobStore
 
 D1 = "sha256:" + "1" * 64
@@ -68,15 +69,44 @@ def test_thread_safe(store):
     assert len(store.pending()) == 0 and store.get("sha256:" + format(3, "064x")).state == "DONE"
 
 
-def test_mark_attempt_increments(store):
-    store.begin(D1, "{}")
-    assert store.mark_attempt(D1) == 1
-    assert store.mark_attempt(D1) == 2
+@pytest.fixture(params=["returning", "pre_3_35"])
+def any_store(request, tmp_path, monkeypatch):
+    """A fresh store on each ``mark_attempt`` branch: ``UPDATE ... RETURNING`` and the pre-3.35 fallback."""
+    monkeypatch.setattr(store_mod, "_HAS_RETURNING", request.param == "returning")
+    s = JobStore(tmp_path / "qsearch.sqlite3")
+    yield s
+    s.close()
 
 
-def test_mark_attempt_unknown_digest_raises(store):
+def test_mark_attempt_increments(any_store):
+    any_store.begin(D1, "{}")
+    assert any_store.mark_attempt(D1) == 1
+    assert any_store.mark_attempt(D1) == 2
+    assert any_store.get(D1).attempts == 2
+
+
+def test_mark_attempt_unknown_digest_raises(any_store):
     with pytest.raises(KeyError):
-        store.mark_attempt(D1)
+        any_store.mark_attempt(D1)
+    any_store.begin(D2, "{}")                       # the failed call left no transaction open
+    assert any_store.mark_attempt(D2) == 1
+
+
+def test_mark_attempt_fallback_is_thread_safe(tmp_path, monkeypatch):
+    monkeypatch.setattr(store_mod, "_HAS_RETURNING", False)
+    s = JobStore(tmp_path / "qsearch.sqlite3")
+    s.begin(D1, "{}")
+    seen = []
+    threads = [threading.Thread(target=lambda: seen.append(s.mark_attempt(D1))) for _ in range(8)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+    assert sorted(seen) == list(range(1, 9)) and s.get(D1).attempts == 8
+    s.close()
+
+
+def test_returning_flag_matches_the_linked_sqlite():
+    import sqlite3
+    assert store_mod._HAS_RETURNING is (sqlite3.sqlite_version_info >= (3, 35, 0))
 
 
 def test_rejected_second_complete_leaves_receipt_unchanged(store):
