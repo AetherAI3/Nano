@@ -112,7 +112,8 @@ def test_result_missing_fields_is_not_run(job, tmp_path):
 del res["compiled_plan_digest"]
 pathlib.Path(a.out).write_text(json.dumps(res))
 ''')
-    assert StatevectorRuntime(engine_path=engine).run(job)["reason"] == "audit: KeyError"
+    # ok_receipt wraps a missing copied field as ReceiptAuditError("engine result is missing or malformed fields")
+    assert StatevectorRuntime(engine_path=engine).run(job)["reason"] == "audit: ReceiptAuditError"
 
 
 def test_engine_error_is_not_retried(job, tmp_path, monkeypatch):

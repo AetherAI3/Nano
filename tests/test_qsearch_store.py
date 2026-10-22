@@ -98,3 +98,14 @@ def test_nonces_survive_reopen(tmp_path):
     assert s2.remember("ab" * 16, 101) is False       # still remembered: replay refused after restart
     assert s2.remember("cd" * 16, 101) is True
     s2.close()
+
+
+def test_mark_attempt_is_durable_across_reopen(tmp_path):
+    path = tmp_path / "db.sqlite3"
+    s = JobStore(path)
+    s.begin(D1, "{}")
+    assert s.mark_attempt(D1) == 1
+    s.close()
+    s2 = JobStore(path)
+    assert s2.get(D1).attempts == 1 and s2.mark_attempt(D1) == 2
+    s2.close()

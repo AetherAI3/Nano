@@ -51,8 +51,8 @@ class JobStore:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._db = sqlite3.connect(str(self._path), check_same_thread=False, isolation_level=None)
+        self._db.execute("PRAGMA busy_timeout=5000")      # first, so switching to WAL can wait out a peer's lock
         self._db.execute("PRAGMA journal_mode=WAL")
-        self._db.execute("PRAGMA busy_timeout=5000")
         self._db.execute("PRAGMA synchronous=FULL")
         self._db.executescript(_SCHEMA)
 
@@ -75,12 +75,17 @@ class JobStore:
             return self._row(self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE job_digest=?", (job_digest,)).fetchone())
 
     def mark_attempt(self, job_digest: str) -> int:
-        """Increment and return the attempt count; ``KeyError`` when the digest is unknown."""
+        """Increment and return the attempt count in one statement; ``KeyError`` when the digest is unknown.
+
+        ``RETURNING`` needs SQLite >= 3.35 (2021); the CPython builds this targets bundle newer.
+        """
         with self._lock:
-            cur = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=?", (job_digest,))
-            if cur.rowcount == 0:
+            # fetchall drains the cursor so the statement finishes and its autocommit lands now
+            rows = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=? RETURNING attempts",
+                                    (job_digest,)).fetchall()
+            if not rows:
                 raise KeyError(job_digest)
-            return int(self._db.execute("SELECT attempts FROM jobs WHERE job_digest=?", (job_digest,)).fetchone()[0])
+            return int(rows[0][0])
 
     def complete(self, job_digest: str, receipt_json: str) -> None:
         """ACCEPTED → DONE in one statement; ``KeyError`` if unknown, ``ValueError`` if already DONE."""

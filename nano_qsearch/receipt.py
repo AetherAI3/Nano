@@ -28,6 +28,7 @@ _HEX = frozenset("0123456789abcdef")
 _BITS = frozenset("01")
 _ENGINE_KINDS = ("statevector", "mps")
 SERVICE_NAME = "nano-qsearch"
+_MALFORMED = "engine result is missing or malformed fields"
 
 
 class SealError(ValueError):
@@ -53,6 +54,8 @@ def seal_receipt(unsigned: Mapping[str, Any], key: bytes) -> dict[str, Any]:
 
 def verify_seal(payload: Mapping[str, Any], key: bytes) -> None:
     key = _check_key(key)
+    if not isinstance(payload, Mapping):
+        raise SealError("receipt is not a JSON object")
     seal = payload.get("seal")
     if not isinstance(seal, str) or not seal.startswith(SEAL_PREFIX):
         raise SealError("receipt carries no hmac-sha256 seal")
@@ -62,7 +65,7 @@ def verify_seal(payload: Mapping[str, Any], key: bytes) -> None:
     body = {k: v for k, v in payload.items() if k != "seal"}
     try:
         text = canonical_json(body)
-    except CanonicalizationError:
+    except (CanonicalizationError, RecursionError):
         raise SealError("receipt body is not canonical JSON") from None
     expected = hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(suffix, expected):
@@ -73,15 +76,21 @@ def _base(job: QSearchJob, status: str) -> dict[str, Any]:
     return {"schema": RECEIPT_SCHEMA, "job_digest": job.job_digest, "status": status}
 
 
+def _reason(reason: str) -> str:
+    if not isinstance(reason, str):
+        raise TypeError("reason must be a str")
+    return reason[:MAX_REASON_CHARS]
+
+
 def not_run_receipt(job: QSearchJob, reason: str) -> dict[str, Any]:
     """NOT_RUN body. Callers pass ``"<stage>: <ExceptionClassName>"``, never ``str(exc)``; capped at 200 chars."""
-    return {**_base(job, "NOT_RUN"), "backend": {"kind": "none"}, "reason": reason[:MAX_REASON_CHARS]}
+    return {**_base(job, "NOT_RUN"), "backend": {"kind": "none"}, "reason": _reason(reason)}
 
 
 def refused_receipt(job: QSearchJob, reason: str) -> dict[str, Any]:
     """REFUSED body. Callers pass ``"<stage>: <ExceptionClassName>"`` or a fixed policy
     sentence, never ``str(exc)``; capped at 200 chars."""
-    return {**_base(job, "REFUSED"), "backend": {"kind": "none"}, "reason": reason[:MAX_REASON_CHARS]}
+    return {**_base(job, "REFUSED"), "backend": {"kind": "none"}, "reason": _reason(reason)}
 
 
 def energy_gap(best: float, floor: float) -> float:
@@ -117,7 +126,12 @@ def _audit_result(job: QSearchJob, result: Mapping[str, Any]) -> None:
     """Refuse an engine result whose kind, samples or best energy cannot be re-derived from ``job``."""
     if result.get("kind") not in _ENGINE_KINDS:
         raise ReceiptAuditError("engine kind is not statevector or mps")
-    best = result.get("best_sample_energy")
+    truncated = result.get("truncated")
+    if not (truncated is True or truncated is False or truncated is None):
+        raise ReceiptAuditError("engine truncated is not true, false or null")
+    if result["kind"] == "statevector" and truncated is not None:
+        raise ReceiptAuditError("engine truncated must be null for statevector")
+    best =result.get("best_sample_energy")
     if not _finite_number(best):
         raise ReceiptAuditError("engine best_sample_energy is not a finite number")
     samples = result.get("samples")
@@ -135,9 +149,20 @@ def ok_receipt(job: QSearchJob, result: Mapping[str, Any]) -> dict[str, Any]:
 
     The result is audited first (``ReceiptAuditError`` on any violation): every
     sample's energy is recomputed from the job, the best energy must be their
-    minimum and may not undercut the job's classical floor.
+    minimum and may not undercut the job's classical floor. A result that is not
+    a mapping, or that lacks or mistypes a field copied into the receipt, is
+    refused the same way.
     """
+    if not isinstance(result, Mapping):
+        raise ReceiptAuditError(_MALFORMED)
     _audit_result(job, result)
+    try:
+        return _ok_body(job, result)
+    except (KeyError, TypeError, AttributeError):
+        raise ReceiptAuditError(_MALFORMED) from None
+
+
+def _ok_body(job: QSearchJob, result: Mapping[str, Any]) -> dict[str, Any]:
     floor = job.classical_min_energy
     best = float(result["best_sample_energy"])
     agree = abs(best - floor) <= ENERGY_TOLERANCE
