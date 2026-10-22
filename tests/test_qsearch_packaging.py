@@ -42,3 +42,15 @@ def test_docs_mention_every_env_var():
                 "NANO_QSEARCH_MAX_CHI", "NANO_QSEARCH_MAX_CONCURRENT", "NANO_QSEARCH_REQUEST_TIMEOUT_S",
                 "X-Aether-Qsearch-Auth", "AETHER_AQRC_HW_GO", "AETHER_AQRC_AUTHORITY_PATH"):
         assert var in text, var
+
+
+@pytest.mark.parametrize("module", ["nano_qsearch", "nano_qsearch.service"])
+def test_module_entry_points_run_main(module, tmp_path):
+    # Without config the service must refuse with exit 2 and one stderr line, which
+    # proves `python -m <module>` reaches main() rather than importing and exiting 0.
+    import subprocess
+    env = {k: v for k, v in __import__("os").environ.items() if not k.startswith("NANO_QSEARCH_")}
+    done = subprocess.run([sys.executable, "-m", module], cwd=ROOT, env=env, capture_output=True, text=True,
+                          timeout=120)
+    assert done.returncode == 2, done.stderr
+    assert "required" in done.stderr and len(done.stderr.strip().splitlines()) == 1

@@ -538,3 +538,7 @@ def main(argv: list[str] | None = None) -> int:
 
 __all__ = ["DEFAULT_BIND", "DataDirLocked", "MAX_ATTEMPTS", "QSearchService", "SEED_MAX", "SUBMIT_PATH", "ServiceConfig",
            "main", "make_server", "prepare", "serve_in_thread", "startup_banner"]
+
+
+if __name__ == "__main__":
+    sys.exit(main())
