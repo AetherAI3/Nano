@@ -79,6 +79,32 @@ The default bind is `127.0.0.1:8798`. On startup the service prints one line to
 stderr, `nano-qsearch-serve: backend=<kind> bind=<host>:<port> recovered=<n>`.
 That line never mentions keys.
 
+### Startup order and a single instance per data directory
+
+Startup runs in this order:
+
+1. Read the configuration.
+2. Take an exclusive OS lock on `<data_dir>/qsearch.lock` (`msvcrt.locking`
+   on Windows, `flock` elsewhere). The lock is held until the service exits.
+3. Bind the port. From here on, connections are accepted into the listen
+   backlog but not answered yet.
+4. Recover pending jobs (see [Durability and recovery](#durability-and-recovery)).
+5. Print the startup line and start answering requests.
+
+Only one service may use a data directory at a time. A second
+`nano-qsearch-serve` pointed at the same directory fails at step 2: it prints
+`nano-qsearch-serve: data directory is already in use by another nano-qsearch-serve`
+and exits with code 2, before it binds the port. The lock file is empty and
+stays on disk. It does not have to be deleted after a crash, because the OS
+releases the lock when the process dies.
+
+Recovery happens after binding, so callers do not get "connection refused"
+while the service starts. It also **blocks serving until every pending job
+has finished**. Each re-run can take up to its wall-clock budget, so a caller
+whose connection is waiting in the backlog may time out first. A caller that
+times out can resubmit the same job: once recovery has completed it, the
+service returns the stored receipt.
+
 ### Configuration
 
 Command-line flags (`--bind --backend --data-dir --key-path --request-key-path --verbose`)
@@ -88,13 +114,15 @@ take precedence over the environment.
 | --- | --- | --- |
 | `NANO_QSEARCH_BIND` | `127.0.0.1:8798` | `host:port` to listen on. |
 | `NANO_QSEARCH_BACKEND` | `auto` | `auto`, `mps`, `statevector` or `ibm`. With `auto`, the job's own `backend.kind` decides; if that is also `auto`, jobs with up to 20 variables use statevector and larger ones use MPS. Any other value overrides the job. |
-| `NANO_QSEARCH_DATA_DIR` | required | Directory for `qsearch.sqlite3`, which holds jobs, receipts and nonces. |
+| `NANO_QSEARCH_DATA_DIR` | required | Directory for `qsearch.sqlite3`, which holds jobs, receipts and nonces, and for the `qsearch.lock` single-instance lock. |
 | `NANO_QSEARCH_KEY_PATH` | required | Receipt-seal key file. |
 | `NANO_QSEARCH_REQUEST_KEY_PATH` | required | Request-auth key file. |
 | `NANO_QSEARCH_MAX_VARIABLES` | `40` | Service cap on the number of variables (QUBO size). |
 | `NANO_QSEARCH_MAX_SHOTS` | `100000` | Service cap on `backend.shots`. |
 | `NANO_QSEARCH_MAX_CHI` | `256` | Service cap on `backend.chi_max` (MPS bond dimension). |
 | `NANO_QSEARCH_MAX_BODY_BYTES` | `1048576` | Largest request body accepted. |
+| `NANO_QSEARCH_MAX_CONCURRENT` | `2` | Most runtime calls (engine runs) in progress at once. Further jobs wait for a free slot. Identical jobs share one run whatever this is set to. |
+| `NANO_QSEARCH_REQUEST_TIMEOUT_S` | `30` | Socket timeout, in seconds, for reading a request and writing its response. A client that stalls mid-request is disconnected after this long. It does not limit how long a job runs. |
 | `NANO_QSEARCH_ATLAS_PATH` | unset | `aether-atlas` directory, used by the engine child (and by the tests). |
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate; see [IBM](#ibm-hardware). |
@@ -151,11 +179,12 @@ consumes no nonce.
 | Status | Body | When |
 | --- | --- | --- |
 | 200 | sealed receipt | The job was valid. The receipt `status` is one of `OK`, `TRUNCATED`, `NOT_RUN` or `REFUSED`. |
-| 400 | `{"error": "invalid job", "code": ...}` | The body is not JSON, or not a valid job (bad schema, digest or limits). No receipt is issued. |
-| 401 | `{"error": "unauthorized", "code": ...}` | `code` is one of `MALFORMED`, `STALE`, `MAC` or `REPLAY`. No receipt is issued and nothing is stored. |
-| 404 | `{"error": "not found"}` | Any other path or method. |
+| 400 | `{"error": "invalid job", "code": ...}` | The body is not JSON (including `NaN`/`Infinity` and invalid UTF-8), or not a valid job (bad schema, digest or limits). No receipt is issued. |
+| 400 | `{"error": "bad content length"}` | `Content-Length` is negative or not a number. |
+| 401 | `{"error": "unauthorized"}` | Authentication failed, for any reason. The body is the same for a missing, malformed, stale, forged or replayed header, so an unauthenticated caller cannot use it to probe the clock window. With `--verbose`, the service writes the reason (`MALFORMED`, `STALE`, `MAC` or `REPLAY`) to its own stderr. No receipt is issued and no job is stored. |
+| 404 | `{"error": "not found"}` | Any method other than POST, or any path other than exactly `/qsearch/v1/submit`. A trailing slash or a query string counts as a different path. A HEAD request gets the 404 with no body. |
 | 413 | `{"error": "body too large"}` | The body (or its declared `Content-Length`) is over `NANO_QSEARCH_MAX_BODY_BYTES`. |
-| 503 | `{"error": "job not completed"}` | The store could not record the result. The job stays accepted, and the next identical submission, or the next restart, finishes it. |
+| 503 | `{"error": "job not completed"}` | The job could not be completed: the store failed to record the result, or the nonce store failed during authentication. After a result-store failure the job stays accepted, and the next identical submission, or the next restart, finishes it under the recovery rules below. |
 
 **REFUSED** means policy: the service will not run this job, because of a
 service cap, the statevector cap, or the IBM gates. **NOT_RUN** means the
@@ -195,7 +224,24 @@ Jobs are keyed by `job_digest` in `qsearch.sqlite3` (WAL mode,
 `synchronous=FULL`). A row moves from ACCEPTED to DONE exactly once, and a DONE
 receipt is never replaced. An identical resubmission returns the stored
 receipt without running again. Identical submissions that arrive concurrently
-share one run (single-flight).
+share one run (single-flight). If storing a result finds the row already DONE,
+the service returns the receipt that was stored first.
+
+**Every sealed receipt is permanent for its `job_digest`, including NOT_RUN
+and REFUSED.** Resubmitting the same job returns the same NOT_RUN or REFUSED
+receipt and never retries it, even after the cause has been fixed (for
+example, a wrong `NANO_QSEARCH_ATLAS_PATH`, a missing `quantum` extra, or a
+cap that has since been raised). To run the job again, the operator changes
+the job so that it gets a new digest (for example, a different
+`backend.seed`), or stops the service and deletes that row from the `jobs`
+table in `qsearch.sqlite3`.
+
+When the service accepts a job, it records on the row the runtime kind it
+selected (`statevector`, `mps` or `ibm`). Every later run of that job uses the
+recorded kind, even if `NANO_QSEARCH_BACKEND` has changed since then. Rows
+written before this column existed have no recorded kind and use the current
+backend. The column is added to an existing `qsearch.sqlite3` automatically on
+startup.
 
 Before each run the service increments the row's `attempts` counter. On
 startup, `recover()` handles every row still marked ACCEPTED, meaning the
@@ -204,16 +250,18 @@ process died between accepting a job and completing it:
 1. If `attempts >= 2`, both the original run and one recovery re-run have
    already died. The job completes as NOT_RUN with
    `recovery: attempt limit reached` and does not run.
-2. Otherwise, if the job would go to the `ibm` runtime, it completes as
+2. Otherwise, if the job's recorded kind is `ibm`, it completes as
    NOT_RUN with `recovery: hardware jobs are never resubmitted` and does not
    run. A second paid hardware submission is never made.
-3. Otherwise the job **re-runs once** from its stored body: the same seed and
-   the same `job_digest`, so the result matches what the first run would have
-   produced. Then it is sealed and completed.
+3. Otherwise the job **re-runs once** from its stored body: the same seed, the
+   same `job_digest` and the same runtime kind, so the result matches what the
+   first run would have produced. Then it is sealed and completed. A row that
+   crashed before its first attempt was counted (`attempts = 0`) also runs once.
 
 Recovery is idempotent: a second `recover()`, or another restart, finds
 nothing pending. The same rules apply when a live submission finds an ACCEPTED
-row left behind by a store failure.
+row left behind by a store failure. Recovery runs before the service answers
+any request (see [Startup order](#startup-order-and-a-single-instance-per-data-directory)).
 
 ## Engine isolation
 
@@ -278,6 +326,20 @@ backend = NanoRuntimeQSearchBackend(endpoint, key=receipt_key, opener=signing_op
 `key=` is the **receipt** key (used to verify seals). The opener closes over
 the **request** key. The path that gets signed is the path the service sees,
 so if a proxy rewrites the path, sign the rewritten path instead.
+
+### Timeouts
+
+`NanoRuntimeQSearchBackend` defaults to `timeout_s=130`. That is shorter than
+the service's default wall-clock budget per job (`limits.max_wall_s`, 600 s
+when unset), so a long job can outlast Predator's call. Construct the backend
+with `timeout_s` at least the job's `max_wall_s`. Predator accepts values up
+to 3600. Add some margin if jobs can wait for a slot
+(`NANO_QSEARCH_MAX_CONCURRENT`) or for recovery at startup.
+
+A timed-out call does not cancel the job. The service finishes the run and
+stores the receipt. If Predator resubmits the same job after that, it gets the
+stored receipt immediately. If it resubmits while the run is still going, the
+resubmission waits for that same run and gets its receipt.
 
 ## Testing
 
