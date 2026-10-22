@@ -16,18 +16,20 @@ def test_sign_then_verify():
     verify_request(KEY, header, "POST", "/qsearch/v1/submit", BODY, now=1_000_010, nonce_store=store)
 
 
-@pytest.mark.parametrize("tamper", [
-    lambda h: h.replace("ts=1000000", "ts=1000001"),
-    lambda h: h[:-1] + ("0" if h[-1] != "0" else "1"),
-    lambda h: h.replace("nonce=" + "ab" * 16, "nonce=" + "cd" * 16),
-    lambda h: "v2 " + h[3:],
-    lambda h: h.replace("ts=", "time="),
-    lambda h: "",
+@pytest.mark.parametrize("tamper, code", [
+    (lambda h: h.replace("ts=1000000", "ts=1000001"), "MAC"),
+    (lambda h: h[:-1] + ("0" if h[-1] != "0" else "1"), "MAC"),
+    (lambda h: h.replace("nonce=" + "ab" * 16, "nonce=" + "cd" * 16), "MAC"),
+    (lambda h: "v2 " + h[3:], "MALFORMED"),
+    (lambda h: h.replace("ts=", "time="), "MALFORMED"),
+    (lambda h: "", "MALFORMED"),
+    (lambda h: h.replace("nonce=" + "ab" * 16, "nonce=" + "AB" * 16), "MALFORMED"),   # uppercase nonce
 ])
-def test_tampered_header_rejected(tamper):
+def test_tampered_header_rejected(tamper, code):
     header = sign_request(KEY, "POST", "/qsearch/v1/submit", BODY, ts=1_000_000, nonce="ab" * 16)
-    with pytest.raises(AuthError):
+    with pytest.raises(AuthError) as info:
         verify_request(KEY, tamper(header), "POST", "/qsearch/v1/submit", BODY, now=1_000_000, nonce_store=MemoryNonceStore())
+    assert info.value.code == code
 
 
 def test_body_method_path_and_key_are_bound():

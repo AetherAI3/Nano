@@ -38,6 +38,9 @@ class NonceStore(Protocol):
 
 
 class MemoryNonceStore:
+    """In-process nonce set for tests and development only; it grows without bound and
+    forgets everything on restart. ``nano_qsearch.store.JobStore`` is the durable store."""
+
     def __init__(self) -> None:
         self._seen: dict[str, int] = {}
         self._lock = threading.Lock()

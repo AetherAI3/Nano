@@ -5,7 +5,9 @@ sorted keys, compact separators, UTF-8 (``ensure_ascii=False``), no NaN or
 infinity, no non-string keys. A digest is ``sha256:<64 lowercase hex>`` over
 the UTF-8 bytes of the canonical text. Both sides must agree byte for byte or
 no receipt seal verifies; ``tests/qsearch_fixtures/canonical_golden.json`` is
-the frozen proof that they do.
+the frozen proof that they do. Enum and dataclass values (which Predator's
+encoder unwraps) are deliberately unsupported here: every value Nano
+canonicalises is parsed JSON or a dict Nano built itself, so they fail closed.
 """
 from __future__ import annotations
 

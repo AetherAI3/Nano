@@ -68,7 +68,33 @@ def test_thread_safe(store):
     assert len(store.pending()) == 0 and store.get("sha256:" + format(3, "064x")).state == "DONE"
 
 
-def test_attempts_increment_on_begin_after_accept(store):
+def test_mark_attempt_increments(store):
     store.begin(D1, "{}")
     assert store.mark_attempt(D1) == 1
     assert store.mark_attempt(D1) == 2
+
+
+def test_mark_attempt_unknown_digest_raises(store):
+    with pytest.raises(KeyError):
+        store.mark_attempt(D1)
+
+
+def test_rejected_second_complete_leaves_receipt_unchanged(store):
+    store.begin(D1, "{}")
+    store.complete(D1, '{"first":true}')
+    before = store.get(D1)
+    with pytest.raises(ValueError):
+        store.complete(D1, '{"second":true}')
+    after = store.get(D1)
+    assert after.receipt_json == '{"first":true}' and after == before
+
+
+def test_nonces_survive_reopen(tmp_path):
+    path = tmp_path / "db.sqlite3"
+    s = JobStore(path)
+    assert s.remember("ab" * 16, 100) is True
+    s.close()
+    s2 = JobStore(path)
+    assert s2.remember("ab" * 16, 101) is False       # still remembered: replay refused after restart
+    assert s2.remember("cd" * 16, 101) is True
+    s2.close()

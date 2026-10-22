@@ -52,6 +52,7 @@ class JobStore:
         self._lock = threading.Lock()
         self._db = sqlite3.connect(str(self._path), check_same_thread=False, isolation_level=None)
         self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA busy_timeout=5000")
         self._db.execute("PRAGMA synchronous=FULL")
         self._db.executescript(_SCHEMA)
 
@@ -74,19 +75,25 @@ class JobStore:
             return self._row(self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE job_digest=?", (job_digest,)).fetchone())
 
     def mark_attempt(self, job_digest: str) -> int:
+        """Increment and return the attempt count; ``KeyError`` when the digest is unknown."""
         with self._lock:
-            self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=?", (job_digest,))
+            cur = self._db.execute("UPDATE jobs SET attempts = attempts + 1 WHERE job_digest=?", (job_digest,))
+            if cur.rowcount == 0:
+                raise KeyError(job_digest)
             return int(self._db.execute("SELECT attempts FROM jobs WHERE job_digest=?", (job_digest,)).fetchone()[0])
 
     def complete(self, job_digest: str, receipt_json: str) -> None:
+        """ACCEPTED → DONE in one statement; ``KeyError`` if unknown, ``ValueError`` if already DONE."""
         with self._lock:
+            cur = self._db.execute(
+                "UPDATE jobs SET state='DONE', receipt_json=?, completed_at=? WHERE job_digest=? AND state='ACCEPTED'",
+                (receipt_json, time.time(), job_digest))
+            if cur.rowcount == 1:
+                return
             row = self._db.execute("SELECT state FROM jobs WHERE job_digest=?", (job_digest,)).fetchone()
             if row is None:
                 raise KeyError(job_digest)
-            if row[0] == "DONE":
-                raise ValueError("job already completed; a second result is never stored")
-            self._db.execute("UPDATE jobs SET state='DONE', receipt_json=?, completed_at=? WHERE job_digest=? AND state='ACCEPTED'",
-                             (receipt_json, time.time(), job_digest))
+            raise ValueError("job already completed; a second result is never stored")
 
     def pending(self) -> list[JobRecord]:
         with self._lock:
