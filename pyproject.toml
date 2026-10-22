@@ -30,6 +30,7 @@ dependencies = []
 
 [project.scripts]
 nano = "nano.cli.main:main"
+nano-qsearch-serve = "nano_qsearch.service:main"
 
 [project.urls]
 Homepage = "https://aethersystems.net"
@@ -43,10 +44,18 @@ Changelog = "https://github.com/AetherAI3/Nano/blob/main/CHANGELOG.md"
 # Signed, non-repudiable audit receipts over decision-gate records.
 # See nano/bridge/provenance.py.
 provenance = ["aether-protocol-c"]
+# Q-search service engines (Qiskit Aer statevector / MPS). The service itself is
+# stdlib; only the child-process engine imports these. ATLAS is loaded by path
+# (NANO_QSEARCH_ATLAS_PATH) and is not on PyPI. See docs/qsearch-service.md.
+quantum = ["qiskit==2.3.1", "qiskit-aer==0.17.2", "numpy>=1.26"]
 dev = ["pytest>=7"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "engine: needs qiskit-aer and aether_atlas (system Python, run from PowerShell on Windows)",
+  "integration: needs NANO_QSEARCH_PREDATOR_PATH pointing at a Predator-M checkout",
+]
 
 [build-system]
 requires = ["setuptools>=68"]

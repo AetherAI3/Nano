@@ -222,15 +222,26 @@ def test_http_round_trip_over_localhost(tmp_path, body_bytes):
         svc.close()
 
 
-def test_http_oversized_content_length_is_413(tmp_path, body_bytes):
+def test_http_oversized_content_length_is_413_without_reading_the_body(tmp_path):
+    import http.client
     rt = FakeRuntime()
     svc = QSearchService(_config(tmp_path, max_body_bytes=16), runtime_factory=lambda kind: rt)
     server, thread = serve_in_thread(svc)
     try:
-        url = f"http://127.0.0.1:{server.server_port}{PATH}"
-        with pytest.raises(urllib.error.HTTPError) as info:
-            urllib.request.urlopen(urllib.request.Request(url, data=body_bytes, method="POST"), timeout=10)
-        assert info.value.code == 413 and rt.calls == 0
+        # Headers only: the server must answer from Content-Length alone, never waiting for the body.
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+        conn.putrequest("POST", PATH)
+        conn.putheader("Content-Length", str(10**9))
+        conn.endheaders()
+        resp = conn.getresponse()
+        assert resp.status == 413 and json.loads(resp.read()) == {"error": "body too large"} and rt.calls == 0
+        conn.close()
+        conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=10)
+        conn.putrequest("POST", PATH)
+        conn.putheader("Content-Length", "-5")
+        conn.endheaders()
+        assert conn.getresponse().status == 400
+        conn.close()
     finally:
         server.shutdown()
         thread.join()
@@ -457,3 +468,35 @@ def test_startup_banner_names_backend_bind_and_recovered_but_no_keys(tmp_path):
     line = startup_banner(cfg, ("127.0.0.1", 8798), 3)
     assert line == "nano-qsearch-serve: backend=mps bind=127.0.0.1:8798 recovered=3"
     assert "key" not in line.lower() and RECEIPT_KEY.decode() not in line and REQUEST_KEY.decode() not in line
+
+
+# --- the Predator-side signing opener documented in docs/qsearch-service.md ----
+
+def test_documented_predator_opener_is_accepted_by_the_service(tmp_path, body_bytes):
+    import re
+    from pathlib import Path
+    doc = (Path(__file__).resolve().parents[1] / "docs" / "qsearch-service.md").read_text(encoding="utf-8")
+    section = doc.split("## Predator side", 1)[1]
+    code = re.search(r"```python\n(.*?)```", section, re.DOTALL).group(1)
+    built = {}
+
+    class NanoRuntimeQSearchBackend:      # stand-in: records what the doc passes to Predator's constructor
+        def __init__(self, endpoint, *, key, opener):
+            built.update(endpoint=endpoint, key=key, opener=opener)
+
+    rt = FakeRuntime()
+    svc = QSearchService(_config(tmp_path), runtime_factory=lambda kind: rt)
+    server, thread = serve_in_thread(svc)
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}"
+        exec(code, {"NanoRuntimeQSearchBackend": NanoRuntimeQSearchBackend, "endpoint": endpoint,
+                    "receipt_key": RECEIPT_KEY, "request_key": REQUEST_KEY})
+        assert built["key"] == RECEIPT_KEY
+        raw = built["opener"](endpoint + PATH, body_bytes, 10.0)
+        receipt = json.loads(raw)
+        verify_seal(receipt, RECEIPT_KEY)
+        assert receipt["status"] == "OK" and rt.calls == 1
+    finally:
+        server.shutdown()
+        thread.join()
+        svc.close()

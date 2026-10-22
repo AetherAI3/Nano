@@ -262,18 +262,24 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _content_length(self) -> int:
+        try:
+            return int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return -1
+
     def do_POST(self) -> None:  # noqa: N802 - http.server API
+        length = self._content_length()
         if self.path != SUBMIT_PATH:
+            if 0 < length <= self.service.config.max_body_bytes:
+                self.rfile.read(length)      # drain, so closing the socket does not reset the client mid-response
             self._send(404, {"error": "not found"})
             return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            length = -1
         if length < 0:
             self._send(400, {"error": "bad content length"})
             return
         if length > self.service.config.max_body_bytes:
+            # Never read an oversized body. A client still sending it may see the connection reset.
             self._send(413, {"error": "body too large"})
             return
         body = self.rfile.read(length)
