@@ -5,6 +5,15 @@ All notable changes to `aether-nano` are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- `nano_qsearch`, the q-search service Predator Drive calls
+  (`POST /qsearch/v1/submit`, `nano-qsearch-serve`): signed and replay-protected
+  requests, HMAC-sealed `predator.qsearch.receipt.v1` receipts, a durable job
+  store with restart recovery, statevector and MPS engines on Qiskit Aer behind
+  the new `[quantum]` extra, and an IBM runtime that refuses by default. It
+  lives beside the deterministic `nano` package. See `docs/qsearch-service.md`.
+
 ## [1.1.0] — 2026-09-18
 
 ### Added

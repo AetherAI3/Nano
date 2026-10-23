@@ -13,6 +13,7 @@ For questions about what Nano does today, start with the reference documents bel
 | [Watchdog profile](watchdog_profile.md) | The restricted subset for host-governed controls: signal contracts, missing-input semantics, artifacts, receipts, and replay. |
 | [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
 | [Run receipts](receipts.md) | The versioned run artifact: canonical bytes, executable identity, and what external consumers may depend on. |
+| [Q-search service](qsearch-service.md) | `nano-qsearch-serve`, the host-side `nano_qsearch` package (beside `nano/`, not part of the deterministic engine) that serves sealed q-search receipts to Predator Drive: configuration, auth, caps, recovery. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |
 | [Build notes](../BUILD_ORDER.md) | Historical sequencing and the project's architectural constraints. |
 | [Security policy](../SECURITY.md) | Reporting process and the boundary of Nano's guarantees. |

@@ -1,0 +1,97 @@
+{
+ "schema": "predator.qsearch.job.v1",
+ "compiled_search_digest": "sha256:cae8c99000bf679dd0ddfae749670502249a3d0f4a034d00791e7cef74c4a7a7",
+ "variables": [
+  "v0",
+  "v1",
+  "v2",
+  "v3",
+  "v4",
+  "v5"
+ ],
+ "qubo": {
+  "q": [
+   [
+    -0.5477386934673368,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5
+   ],
+   [
+    -0.5,
+    -0.40452261306532666,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5
+   ],
+   [
+    -0.5,
+    -0.5,
+    -0.3592964824120603,
+    -0.5,
+    -0.5,
+    -0.5
+   ],
+   [
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.3165829145728643,
+    -0.5,
+    -0.5
+   ],
+   [
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -1.0,
+    -0.5
+   ],
+   [
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.5,
+    -0.40452261306532666
+   ]
+  ],
+  "offset": 0.0,
+  "convention": "symmetric_half"
+ },
+ "compile": {
+  "variant": "auto",
+  "p": 2,
+  "gammas": [
+   0.2,
+   0.4
+  ],
+  "betas": [
+   0.4,
+   0.2
+  ],
+  "opt_level": 3,
+  "seed": 11,
+  "target": "heron_heavy_hex",
+  "training": "none"
+ },
+ "backend": {
+  "kind": "auto",
+  "chi_max": 64,
+  "shots": 4096,
+  "seed": 7
+ },
+ "limits": {
+  "max_variables": 40,
+  "max_wall_s": 120,
+  "max_qpu_s": 0
+ },
+ "audit": {
+  "classical_min_energy": -18.032663316582916
+ },
+ "job_digest": "sha256:8b9afdb9f12d058c3544741aee7ab71dfcb1adc3aa3eab6c296a014cac996bc2"
+}
