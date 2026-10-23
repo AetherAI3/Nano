@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
@@ -30,7 +30,7 @@ jobs:
     # with the compiler's default JSON indentation instead of the library's.
     # A contributor should learn this from a command, not from review.
     name: Contribution shape
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -43,7 +43,7 @@ jobs:
         run: python scripts/check_contribution.py --all
 
   package:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
