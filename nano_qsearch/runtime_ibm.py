@@ -16,21 +16,34 @@ the 600 s cap, and stops BLOCKED: the frozen campaign protocol has no
 reservable q-search stage (lane L4 hand-off). Nothing is ever submitted. The child purpose
 (``qsearch`` or ``qcomms``) rides on the runtime, not on the frozen job body:
 ``NANO_QSEARCH_PURPOSE`` or ``IbmRuntime(purpose=...)``, and it is recorded in
-the receipt's ``hardware.purpose``. Every refusal is a REFUSED receipt; an
-exception from a delegate is reported by class name only.
+the receipt's ``hardware.purpose``. A policy verdict (gate, purpose, target,
+audit, BLOCKED) is a REFUSED receipt; a resource or transport failure
+(``RESOURCE_ERRORS``: MemoryError, OSError and its socket/URL subclasses,
+TimeoutError, urllib errors) is NOT_RUN, so the host may retry or ledger it as
+not run rather than as a refusal. Either way the exception is reported by class
+name only.
 """
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import time
+import urllib.error
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 from .job import QSearchJob
-from .receipt import hardware_receipt, refused_receipt
+from .receipt import hardware_receipt, not_run_receipt, refused_receipt
+
+# Transient failures of the machine or the wire, never a verdict about the job:
+# the receipt is NOT_RUN so Predator can retry or ledger it as not run.
+# OSError covers socket, timeout and file errors; urllib and http errors ride on it.
+RESOURCE_ERRORS: tuple[type[BaseException], ...] = (
+    MemoryError, OSError, TimeoutError, urllib.error.URLError, http.client.HTTPException,
+)
 
 GO_ENV = "AETHER_AQRC_HW_GO"
 AUTHORITY_ENV = "AETHER_AQRC_AUTHORITY_PATH"
@@ -135,9 +148,12 @@ class IbmRuntime:
             atlas_receipt = self._submit(job, compiled, purpose=self._purpose, environ=self._environ)
             return hardware_receipt(job, compiled, atlas_receipt, purpose=self._purpose,
                                     wall_s=time.monotonic() - started)
-        except Exception as exc:  # noqa: BLE001 - class name only, never the message
+        except RESOURCE_ERRORS as exc:          # the run did not happen; class name only
+            return not_run_receipt(job, f"ibm: {type(exc).__name__}")
+        except Exception as exc:  # noqa: BLE001 - a verdict (BLOCKED, authority, audit); class name only
             return refused_receipt(job, f"ibm: {type(exc).__name__}")
 
 
 __all__ = ["AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DEFAULT_PURPOSE", "DRY_RUN_TARGETS", "GO_ENV", "IBM_TARGETS",
-           "LEDGER_ENV", "PURPOSES", "PURPOSE_ENV", "IbmRuntime", "atlas_campaign_submit", "default_compile"]
+           "LEDGER_ENV", "PURPOSES", "PURPOSE_ENV", "RESOURCE_ERRORS", "IbmRuntime", "atlas_campaign_submit",
+           "default_compile"]
