@@ -98,8 +98,9 @@ def _serving(tmp_path):
 def _select(receipt, compiled, grant):
     """Run the unbound hardware selector with just the grant it reads from ``self``."""
     selected_exact, _ = compiled.classical_minimum()
-    return CfcUnitConvergenceV1._select_hardware(SimpleNamespace(_hardware_grant=grant), compiled,
-                                                 selected_exact, receipt)
+    policy = QSearchPolicyV1(backend_kind="ibm", target="fake_fez", shots=SHOTS, max_qpu_s=0)
+    return CfcUnitConvergenceV1._select_hardware(SimpleNamespace(_hardware_grant=grant, _qsearch_policy=policy),
+                                                 compiled, selected_exact, receipt)
 
 
 def test_fakefez_dry_run_receipt_is_hardware_sealed_and_selects_under_a_grant(tmp_path, monkeypatch):

@@ -29,6 +29,7 @@ HARDWARE_DOMAIN = b"predator.qsearch.hardware-receipt.v1\n"
 HARDWARE_BACKEND_KIND = "ibm"
 HARDWARE_BIT_ORDER = "msb_first"
 ATLAS_QSEARCH_RECEIPT_SCHEMA = "AqrcQSearchJobReceiptV1"
+DRY_RUN_TARGETS = ("fake_fez",)       # a dry run spends nothing; ibm_fez never is one
 ENERGY_TOLERANCE = 1e-9
 MIN_KEY_BYTES = 16
 TOP_SAMPLES = 8
@@ -55,10 +56,14 @@ def _check_key(key: bytes) -> bytes:
 
 
 def is_hardware_body(body: Mapping[str, Any]) -> bool:
-    """True when the body claims IBM Sampler samples: ``backend.kind == "ibm"`` and a ``hardware`` block."""
+    """True when the body claims IBM Sampler samples: ``backend.kind == "ibm"``.
+
+    The class is decided by the backend kind alone; an ``ibm`` body without its
+    ``hardware`` block is refused by ``seal_receipt`` and ``verify_seal`` rather
+    than quietly sealed as a plain receipt.
+    """
     backend = body.get("backend") if isinstance(body, Mapping) else None
-    return (isinstance(backend, Mapping) and backend.get("kind") == HARDWARE_BACKEND_KIND
-            and isinstance(body.get("hardware"), Mapping))
+    return isinstance(backend, Mapping) and backend.get("kind") == HARDWARE_BACKEND_KIND
 
 
 def _seal_parts(body: Mapping[str, Any]) -> tuple[str, bytes]:
@@ -71,6 +76,8 @@ def seal_receipt(unsigned: Mapping[str, Any], key: bytes) -> dict[str, Any]:
     key = _check_key(key)
     body = {k: v for k, v in unsigned.items() if k != "seal"}
     prefix, domain = _seal_parts(body)
+    if prefix == HARDWARE_SEAL_PREFIX and not isinstance(body.get("hardware"), Mapping):
+        raise ReceiptAuditError("an ibm receipt must carry its hardware block")
     mac = hmac.new(key, domain + canonical_json(body).encode("utf-8"), hashlib.sha256).hexdigest()
     return {**body, "seal": prefix + mac}
 
@@ -82,6 +89,8 @@ def verify_seal(payload: Mapping[str, Any], key: bytes) -> None:
     seal = payload.get("seal")
     body = {k: v for k, v in payload.items() if k != "seal"}
     prefix, domain = _seal_parts(body)
+    if prefix == HARDWARE_SEAL_PREFIX and not isinstance(body.get("hardware"), Mapping):
+        raise SealError("an ibm receipt must carry its hardware block")
     if isinstance(seal, str) and seal.startswith(HARDWARE_SEAL_PREFIX) and prefix != HARDWARE_SEAL_PREFIX:
         raise SealError("hardware seal on a receipt that does not claim hardware samples")
     if prefix == HARDWARE_SEAL_PREFIX and not (isinstance(seal, str) and seal.startswith(HARDWARE_SEAL_PREFIX)):
@@ -244,6 +253,8 @@ def _hardware_pub(job: QSearchJob, atlas_receipt: Mapping[str, Any]) -> Mapping[
     if atlas_receipt.get("target") != job.target or not isinstance(atlas_receipt.get("job_id"), str) \
             or not atlas_receipt["job_id"] or not isinstance(atlas_receipt.get("backend_name"), str):
         raise ReceiptAuditError("hardware receipt target, job id or backend name is missing or differs")
+    if atlas_receipt.get("dry_run") is not (job.target in DRY_RUN_TARGETS):
+        raise ReceiptAuditError("hardware receipt dry_run flag contradicts its target")
     return pub
 
 
@@ -292,7 +303,7 @@ def hardware_receipt(job: QSearchJob, compiled: Any, atlas_receipt: Mapping[str,
                 "backend_name": atlas_receipt["backend_name"], "target": job.target, "purpose": purpose,
                 "job_id": atlas_receipt["job_id"], "pub_index": 0, "register": pub["register"],
                 "bit_order": HARDWARE_BIT_ORDER, "shots": len(raw), "raw_samples": raw,
-                "dry_run": bool(atlas_receipt.get("dry_run")),
+                "dry_run": atlas_receipt["dry_run"],
                 "atlas_receipt_sha256": canonical_digest(dict(atlas_receipt)),
             },
             "service": {"name": SERVICE_NAME, "engine": "aether_atlas.aqrc.campaign_runtime"},
@@ -302,7 +313,8 @@ def hardware_receipt(job: QSearchJob, compiled: Any, atlas_receipt: Mapping[str,
     return body
 
 
-__all__ = ["ATLAS_QSEARCH_RECEIPT_SCHEMA", "ENERGY_TOLERANCE", "HARDWARE_BACKEND_KIND", "HARDWARE_BIT_ORDER",
+__all__ = ["ATLAS_QSEARCH_RECEIPT_SCHEMA", "DRY_RUN_TARGETS", "ENERGY_TOLERANCE", "HARDWARE_BACKEND_KIND",
+           "HARDWARE_BIT_ORDER",
            "HARDWARE_DOMAIN", "HARDWARE_SEAL_PREFIX", "RECEIPT_SCHEMA", "ReceiptAuditError", "SEAL_PREFIX",
            "SealError", "energy_gap", "hardware_receipt", "is_hardware_body", "not_run_receipt", "ok_receipt",
            "refused_receipt", "seal_receipt", "verify_seal"]

@@ -151,6 +151,8 @@ take precedence over the environment.
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
 | `NANO_QSEARCH_PURPOSE` | `qsearch` | Child purpose recorded on IBM receipts, `qsearch` or `qcomms`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate for `ibm_fez`; see [IBM](#ibm-hardware). |
+| `AETHER_AQRC_AUTHORITY_KEY_PATH` | unset | Host authority key for `ibm_fez`; see [IBM](#ibm-hardware). |
+| `AETHER_AQRC_LEDGER_PATH` | unset | Campaign ledger (sqlite) for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_AUTHORITY_PATH` | unset | IBM gate; see [IBM](#ibm-hardware). |
 
 ### Service caps
@@ -339,11 +341,19 @@ absorb.
   `from_payload` accepts that seal only on a body that claims hardware, and a
   plain seal never on one that does.
 - **`ibm_fez` keeps every gate:** `AETHER_AQRC_HW_GO=1`, an existing authority
-  file at `AETHER_AQRC_AUTHORITY_PATH`, and `limits.max_qpu_s > 0`. Even then the
-  delegate reports `REFUSED ibm: RuntimeError` today: the frozen campaign
-  protocol has no reservable q-search stage (lane L4 hand-off in Predator-M
-  `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). **No real QPU job
-  can be submitted from the service**, and a recovered IBM job is never resubmitted.
+  file at `AETHER_AQRC_AUTHORITY_PATH`, and `limits.max_qpu_s > 0`. The delegate
+  then loads that file as the operator's plan-scoped authority token, the host
+  authority key from `AETHER_AQRC_AUTHORITY_KEY_PATH` and the campaign ledger
+  from `AETHER_AQRC_LEDGER_PATH`, and calls ATLAS
+  `campaign_runtime.submit_qsearch_child`, which re-checks GO, verifies the HMAC
+  authority against the ledger and the 600 s cap, and then stops: the frozen
+  campaign protocol has no reservable q-search stage (lane L4 hand-off in
+  Predator-M `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). Every
+  outcome on this path is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or
+  `REFUSED ibm: ValueError` (authority does not verify). **No real QPU job can be
+  submitted from the service**, and a recovered IBM job is never resubmitted.
+  An `ibm` receipt is sealed with the hardware seal by its `backend.kind` alone;
+  one without its `hardware` block is never sealed at all.
 
 The child purpose, `qsearch` (default) or `qcomms`, is a service setting
 (`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the

@@ -44,7 +44,7 @@ def spy():
         calls.append(("compile", job.job_digest))
         return _compiled(job)
 
-    def submit_fn(job, compiled, *, purpose):
+    def submit_fn(job, compiled, *, purpose, environ):
         calls.append(("submit", compiled.compiled_plan_digest, purpose))
         # x = (1,0,1,1), display order "1101", is the fixture's exact minimum (-1.6).
         return _atlas_receipt(job, ["1101"] * (job.shots - 1) + ["0000"])
@@ -104,7 +104,7 @@ def test_delegate_exception_becomes_refused(job, monkeypatch, tmp_path):
 
     def boom(job):
         raise RuntimeError("secret detail")
-    body = IbmRuntime(compile_fn=boom, submit_fn=lambda j, c, *, purpose: None).run(job)
+    body = IbmRuntime(compile_fn=boom, submit_fn=lambda j, c, *, purpose, environ: None).run(job)
     assert body["status"] == "REFUSED" and body["reason"] == "ibm: RuntimeError" and "secret" not in json.dumps(body)
 
 
@@ -154,9 +154,10 @@ def test_fakefez_dry_run_needs_no_go_and_yields_a_hardware_sealed_ordered_receip
     lambda r, j: r.update(job_id=""),
     lambda r, j: r.update(pubs=r["pubs"] * 2),
     lambda r, j: r.update(schema="CampaignResultV1"),
+    lambda r, j: r.update(dry_run=False),                                 # fake_fez claiming a real run
 ])
 def test_malformed_delegate_receipt_is_refused_not_sealed_as_ok(dry_job, mutate):
-    def submit_fn(job, compiled, *, purpose):
+    def submit_fn(job, compiled, *, purpose, environ):
         receipt = _atlas_receipt(job, ["1101"] * job.shots)
         mutate(receipt, job)
         return receipt
@@ -164,21 +165,81 @@ def test_malformed_delegate_receipt_is_refused_not_sealed_as_ok(dry_job, mutate)
     assert body["status"] == "REFUSED" and body["reason"] == "ibm: ReceiptAuditError"
 
 
+def test_ibm_fez_receipt_claiming_a_dry_run_is_refused(job, monkeypatch, tmp_path):
+    _open_gates(monkeypatch, tmp_path)
+
+    def submit_fn(job, compiled, *, purpose, environ):
+        return {**_atlas_receipt(job, ["1101"] * job.shots), "dry_run": True}
+    body = IbmRuntime(compile_fn=_compiled, submit_fn=submit_fn).run(job)
+    assert body["status"] == "REFUSED" and body["reason"] == "ibm: ReceiptAuditError"
+
+
 def test_sample_below_classical_floor_is_refused(dry_job):
     low = replace(dry_job, classical_min_energy=0.0)        # floor above the sampled energy
 
-    def submit_fn(job, compiled, *, purpose):
+    def submit_fn(job, compiled, *, purpose, environ):
         return _atlas_receipt(job, ["1101"] * job.shots)
     body = IbmRuntime(compile_fn=_compiled, submit_fn=submit_fn).run(low)
     assert body["status"] == "REFUSED" and body["reason"] == "ibm: ReceiptAuditError"
 
 
-def test_default_submit_blocks_ibm_fez_without_a_campaign_stage(job):
-    pytest.importorskip("aether_atlas")
+def test_ibm_body_without_hardware_block_never_gets_a_seal(dry_job):
+    from nano_qsearch.receipt import ReceiptAuditError, SealError
+    body = {"schema": "predator.qsearch.receipt.v1", "job_digest": dry_job.job_digest, "status": "OK",
+            "backend": {"kind": "ibm", "id": "fake_fez"}, "audit": {"agree": True}}
+    with pytest.raises(ReceiptAuditError, match="hardware block"):
+        seal_receipt(body, KEY)
+    import hashlib
+    import hmac
+    from nano_qsearch.canonical import canonical_json
+    plain = {**body, "seal": SEAL_PREFIX + hmac.new(KEY, canonical_json(body).encode(), hashlib.sha256).hexdigest()}
+    with pytest.raises(SealError, match="hardware block"):
+        verify_seal(plain, KEY)
+
+
+def _ibm_fez_fixture(job, tmp_path):
+    """A real campaign ledger and a plan-scoped authority token for this exact ibm_fez child."""
+    import time
     qiskit = pytest.importorskip("qiskit")
-    from nano_qsearch.runtime_ibm import atlas_campaign_submit
+    from aether_atlas.aqrc import campaign_runtime
+    from aether_atlas.aqrc.campaign import CampaignLedger, authorize_execution, protocol_document
     qc = qiskit.QuantumCircuit(job.n)
     qc.measure_all()
     compiled = SimpleNamespace(isa=qc, compiled_plan_digest="sha256:" + "c" * 64)
-    with pytest.raises(RuntimeError, match="BLOCKED"):
-        atlas_campaign_submit(job, compiled, purpose="qsearch")
+    child = campaign_runtime.prepare_qsearch_child(
+        qc, purpose="qsearch", target=job.target, shots=job.shots, job_digest=job.job_digest,
+        compiled_plan_digest=compiled.compiled_plan_digest, request_id=job.job_digest[len("sha256:"):][:40])
+    protocol = protocol_document(campaign_id="l4", instance="test-instance", backend="ibm_fez",
+                                 capability_mode="standard", cohort_sha256="a" * 64, scorer_sha256="b" * 64)
+    ledger = CampaignLedger.create(tmp_path / "ledger.sqlite", protocol, confirmed_start_seconds=600)
+    key = b"offline-test-host-key-never-used-for-hardware"
+    token = authorize_execution(key=key, ledger=ledger, scope="plan", subject_sha256=child["child_sha256"],
+                                max_seconds=60, expires_at=int(time.time()) + 60, operator="offline-test")
+    (tmp_path / "authority.json").write_text(json.dumps(token), encoding="utf-8")
+    (tmp_path / "authority.key").write_bytes(key)
+    environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_AUTHORITY_PATH": str(tmp_path / "authority.json"),
+               "AETHER_AQRC_AUTHORITY_KEY_PATH": str(tmp_path / "authority.key"),
+               "AETHER_AQRC_LEDGER_PATH": str(tmp_path / "ledger.sqlite")}
+    return compiled, ledger, token, environ
+
+
+def test_default_submit_routes_ibm_fez_through_go_authority_and_cap_then_blocks(job, tmp_path, monkeypatch):
+    pytest.importorskip("aether_atlas")
+    from nano_qsearch.runtime_ibm import atlas_campaign_submit
+    compiled, ledger, token, environ = _ibm_fez_fixture(job, tmp_path)
+    monkeypatch.setenv("AETHER_AQRC_HW_GO", "1")                       # ATLAS reads the GO from os.environ
+    with pytest.raises(RuntimeError, match="no reservable q-search stage"):
+        atlas_campaign_submit(job, compiled, purpose="qsearch", environ=environ)
+    assert ledger.totals()["jobs"] == 0
+    monkeypatch.delenv("AETHER_AQRC_HW_GO")
+    with pytest.raises(RuntimeError, match="AETHER_AQRC_HW_GO"):
+        atlas_campaign_submit(job, compiled, purpose="qsearch", environ=environ)
+    monkeypatch.setenv("AETHER_AQRC_HW_GO", "1")
+    (tmp_path / "authority.json").write_text(json.dumps({**token, "hmac_sha256": "0" * 64}), encoding="utf-8")
+    with pytest.raises(ValueError, match="signature differs"):
+        atlas_campaign_submit(job, compiled, purpose="qsearch", environ=environ)
+    with pytest.raises(RuntimeError, match="AETHER_AQRC_LEDGER_PATH"):
+        atlas_campaign_submit(job, compiled, purpose="qsearch", environ={**environ, "AETHER_AQRC_LEDGER_PATH": ""})
+    # Through the runtime every one of these is a REFUSED receipt naming the class only.
+    body = IbmRuntime(compile_fn=lambda j: compiled, environ={**environ, "AETHER_AQRC_AUTHORITY_KEY_PATH": ""}).run(job)
+    assert body["status"] == "REFUSED" and body["reason"] == "ibm: RuntimeError" and ledger.totals()["jobs"] == 0
