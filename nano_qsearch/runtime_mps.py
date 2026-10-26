@@ -41,7 +41,7 @@ STDERR_TAIL_BYTES = 400
 SECRET_ENV_PREFIXES = ("NANO_QSEARCH_KEY", "NANO_QSEARCH_REQUEST_KEY", "AETHER_AQRC_", "QISKIT_IBM", "IBM_", "IBMQ", "QE_TOKEN",
                        "PREDATOR_QSEARCH_")
 CHILD_OPTIONS = ("engine_path", "python", "wall_s_override")
-IBM_OPTIONS = ("compile_fn", "submit_fn", "environ")
+IBM_OPTIONS = ("compile_fn", "submit_fn", "environ", "purpose")
 
 
 def select_kind(service_kind: str, job: QSearchJob) -> str:

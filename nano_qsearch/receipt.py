@@ -20,6 +20,16 @@ from .job import QSearchJob
 
 RECEIPT_SCHEMA = "predator.qsearch.receipt.v1"
 SEAL_PREFIX = "hmac-sha256:"
+# Lane L4: a receipt whose samples came from an IBM Sampler (FakeFez dry run or
+# ibm_fez) is sealed under its own domain so it can never pass as a plain
+# service receipt and a plain receipt can never pass as hardware evidence.
+# Predator-M ``QSearchReceiptV1.from_payload`` mirrors these exact constants.
+HARDWARE_SEAL_PREFIX = "hmac-sha256+hardware:"
+HARDWARE_DOMAIN = b"predator.qsearch.hardware-receipt.v1\n"
+HARDWARE_BACKEND_KIND = "ibm"
+HARDWARE_BIT_ORDER = "msb_first"
+ATLAS_QSEARCH_RECEIPT_SCHEMA = "AqrcQSearchJobReceiptV1"
+DRY_RUN_TARGETS = ("fake_fez",)       # a dry run spends nothing; ibm_fez never is one
 ENERGY_TOLERANCE = 1e-9
 MIN_KEY_BYTES = 16
 TOP_SAMPLES = 8
@@ -45,11 +55,31 @@ def _check_key(key: bytes) -> bytes:
     return bytes(key)
 
 
+def is_hardware_body(body: Mapping[str, Any]) -> bool:
+    """True when the body claims IBM Sampler samples: ``backend.kind == "ibm"``.
+
+    The class is decided by the backend kind alone; an ``ibm`` body without its
+    ``hardware`` block is refused by ``seal_receipt`` and ``verify_seal`` rather
+    than quietly sealed as a plain receipt.
+    """
+    backend = body.get("backend") if isinstance(body, Mapping) else None
+    return isinstance(backend, Mapping) and backend.get("kind") == HARDWARE_BACKEND_KIND
+
+
+def _seal_parts(body: Mapping[str, Any]) -> tuple[str, bytes]:
+    """``(prefix, domain)`` for the seal class ``body`` must carry."""
+    return (HARDWARE_SEAL_PREFIX, HARDWARE_DOMAIN) if is_hardware_body(body) else (SEAL_PREFIX, b"")
+
+
 def seal_receipt(unsigned: Mapping[str, Any], key: bytes) -> dict[str, Any]:
+    """Seal ``unsigned``: the plain seal for engine receipts, the hardware seal for IBM Sampler bodies."""
     key = _check_key(key)
     body = {k: v for k, v in unsigned.items() if k != "seal"}
-    mac = hmac.new(key, canonical_json(body).encode("utf-8"), hashlib.sha256).hexdigest()
-    return {**body, "seal": SEAL_PREFIX + mac}
+    prefix, domain = _seal_parts(body)
+    if prefix == HARDWARE_SEAL_PREFIX and not isinstance(body.get("hardware"), Mapping):
+        raise ReceiptAuditError("an ibm receipt must carry its hardware block")
+    mac = hmac.new(key, domain + canonical_json(body).encode("utf-8"), hashlib.sha256).hexdigest()
+    return {**body, "seal": prefix + mac}
 
 
 def verify_seal(payload: Mapping[str, Any], key: bytes) -> None:
@@ -57,17 +87,24 @@ def verify_seal(payload: Mapping[str, Any], key: bytes) -> None:
     if not isinstance(payload, Mapping):
         raise SealError("receipt is not a JSON object")
     seal = payload.get("seal")
-    if not isinstance(seal, str) or not seal.startswith(SEAL_PREFIX):
+    body = {k: v for k, v in payload.items() if k != "seal"}
+    prefix, domain = _seal_parts(body)
+    if prefix == HARDWARE_SEAL_PREFIX and not isinstance(body.get("hardware"), Mapping):
+        raise SealError("an ibm receipt must carry its hardware block")
+    if isinstance(seal, str) and seal.startswith(HARDWARE_SEAL_PREFIX) and prefix != HARDWARE_SEAL_PREFIX:
+        raise SealError("hardware seal on a receipt that does not claim hardware samples")
+    if prefix == HARDWARE_SEAL_PREFIX and not (isinstance(seal, str) and seal.startswith(HARDWARE_SEAL_PREFIX)):
+        raise SealError("hardware receipts must carry the hardware seal")
+    if not isinstance(seal, str) or not seal.startswith(prefix):
         raise SealError("receipt carries no hmac-sha256 seal")
-    suffix = seal[len(SEAL_PREFIX):]
+    suffix = seal[len(prefix):]
     if len(suffix) != 64 or any(c not in _HEX for c in suffix):
         raise SealError("receipt seal is malformed")
-    body = {k: v for k, v in payload.items() if k != "seal"}
     try:
         text = canonical_json(body)
     except (CanonicalizationError, RecursionError):
         raise SealError("receipt body is not canonical JSON") from None
-    expected = hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
+    expected = hmac.new(key, domain + text.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(suffix, expected):
         raise SealError("receipt seal does not verify")
 
@@ -199,5 +236,85 @@ def _ok_body(job: QSearchJob, result: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["ENERGY_TOLERANCE", "RECEIPT_SCHEMA", "ReceiptAuditError", "SEAL_PREFIX", "SealError", "energy_gap",
-           "not_run_receipt", "ok_receipt", "refused_receipt", "seal_receipt", "verify_seal"]
+def _hardware_pub(job: QSearchJob, atlas_receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The single PUB of an ATLAS q-search job receipt, checked against ``job``."""
+    if not isinstance(atlas_receipt, Mapping) or atlas_receipt.get("schema") != ATLAS_QSEARCH_RECEIPT_SCHEMA:
+        raise ReceiptAuditError("delegate result is not an ATLAS q-search job receipt")
+    pubs = atlas_receipt.get("pubs")
+    if not isinstance(pubs, list) or len(pubs) != 1 or not isinstance(pubs[0], Mapping):
+        raise ReceiptAuditError("hardware receipt must carry exactly one PUB")
+    pub = pubs[0]
+    raw = pub.get("raw_samples")
+    if (pub.get("bit_order") != HARDWARE_BIT_ORDER or pub.get("pub_index") != 0
+            or not isinstance(pub.get("register"), str) or not pub["register"]
+            or not isinstance(raw, list) or not raw or len(raw) != job.shots or pub.get("shots") != len(raw)
+            or any(not isinstance(bits, str) or len(bits) != job.n or any(c not in _BITS for c in bits) for bits in raw)):
+        raise ReceiptAuditError("hardware PUB samples do not match the job's shots and width")
+    if atlas_receipt.get("target") != job.target or not isinstance(atlas_receipt.get("job_id"), str) \
+            or not atlas_receipt["job_id"] or not isinstance(atlas_receipt.get("backend_name"), str):
+        raise ReceiptAuditError("hardware receipt target, job id or backend name is missing or differs")
+    if atlas_receipt.get("dry_run") is not (job.target in DRY_RUN_TARGETS):
+        raise ReceiptAuditError("hardware receipt dry_run flag contradicts its target")
+    return pub
+
+
+def hardware_receipt(job: QSearchJob, compiled: Any, atlas_receipt: Mapping[str, Any], *, purpose: str,
+                     wall_s: float) -> dict[str, Any]:
+    """OK body for an IBM Sampler run (FakeFez dry run or ibm_fez), from the ATLAS job receipt.
+
+    Every raw sample (qiskit display order, ``bits[-1 - i]`` is ``x[i]``) is
+    re-energised against the job; the best may not undercut the classical
+    floor. The body keeps the ordered raw samples under ``hardware`` so the
+    host can recompute the selection itself, and ``seal_receipt`` gives it the
+    hardware seal because ``backend.kind`` is ``ibm``.
+    """
+    from collections import Counter
+    pub = _hardware_pub(job, atlas_receipt)
+    raw = list(pub["raw_samples"])
+    counts = Counter(bits[::-1] for bits in raw)                     # x0-first keys
+    samples = sorted(([bits, count, job.energy([int(c) for c in bits])] for bits, count in counts.items()),
+                     key=lambda r: (r[2], r[0]))
+    best, floor = float(samples[0][2]), job.classical_min_energy
+    if best < floor - ENERGY_TOLERANCE:
+        raise ReceiptAuditError("hardware best_sample_energy is below the classical floor")
+    agree = abs(best - floor) <= ENERGY_TOLERANCE
+    mean = sum(count * energy for _, count, energy in samples) / len(raw)
+    try:
+        body = {
+            **_base(job, "OK"),
+            "compiled_plan_digest": compiled.compiled_plan_digest,
+            "variant": compiled.variant,
+            "nuclei": [list(nucleus) for nucleus in compiled.nuclei],
+            "compile": dict(compiled.compile_record),
+            "metrics": dict(compiled.metrics),
+            "backend": {
+                "kind": HARDWARE_BACKEND_KIND, "id": atlas_receipt["backend_name"],
+                "chi_max": None, "chi_reached": None, "chi_source": None, "truncated": None,
+                "shots": job.shots, "seed": job.backend_seed, "wall_s": float(wall_s), "attempts": 1,
+            },
+            "samples": {
+                "bit_order": "x0_first",
+                "distribution_digest": canonical_digest([[bits, count] for bits, count, _ in samples]),
+                "top": [{"bits": bits, "count": count, "energy": energy} for bits, count, energy in samples[:TOP_SAMPLES]],
+            },
+            "audit": {"classical_min_energy": floor, "best_sample_energy": best, "agree": agree,
+                      "energy_gap_best": energy_gap(best, floor), "mean_energy_sample": mean},
+            "hardware": {
+                "backend_name": atlas_receipt["backend_name"], "target": job.target, "purpose": purpose,
+                "job_id": atlas_receipt["job_id"], "pub_index": 0, "register": pub["register"],
+                "bit_order": HARDWARE_BIT_ORDER, "shots": len(raw), "raw_samples": raw,
+                "dry_run": atlas_receipt["dry_run"],
+                "atlas_receipt_sha256": canonical_digest(dict(atlas_receipt)),
+            },
+            "service": {"name": SERVICE_NAME, "engine": "aether_atlas.aqrc.campaign_runtime"},
+        }
+    except (KeyError, TypeError, AttributeError, CanonicalizationError):
+        raise ReceiptAuditError(_MALFORMED) from None
+    return body
+
+
+__all__ = ["ATLAS_QSEARCH_RECEIPT_SCHEMA", "DRY_RUN_TARGETS", "ENERGY_TOLERANCE", "HARDWARE_BACKEND_KIND",
+           "HARDWARE_BIT_ORDER",
+           "HARDWARE_DOMAIN", "HARDWARE_SEAL_PREFIX", "RECEIPT_SCHEMA", "ReceiptAuditError", "SEAL_PREFIX",
+           "SealError", "energy_gap", "hardware_receipt", "is_hardware_body", "not_run_receipt", "ok_receipt",
+           "refused_receipt", "seal_receipt", "verify_seal"]
