@@ -108,6 +108,28 @@ def test_delegate_exception_becomes_refused(job, monkeypatch, tmp_path):
     assert body["status"] == "REFUSED" and body["reason"] == "ibm: RuntimeError" and "secret" not in json.dumps(body)
 
 
+@pytest.mark.parametrize("exc", [
+    MemoryError("aer allocation"), OSError("socket"), TimeoutError("slow"), ConnectionRefusedError(),
+    __import__("urllib.error").error.URLError("down"), __import__("http.client").client.RemoteDisconnected("eof"),
+])
+def test_resource_or_transport_failure_is_not_run_not_refused(dry_job, exc):
+    """E1-dry finding: a transient MemoryError from the FakeFez dry run is NOT a verdict about the job."""
+    def submit_fn(job, compiled, *, purpose, environ):
+        raise exc
+    body = IbmRuntime(compile_fn=_compiled, submit_fn=submit_fn).run(dry_job)
+    assert body["status"] == "NOT_RUN" and body["reason"] == f"ibm: {type(exc).__name__}"
+    assert body["backend"] == {"kind": "none"} and (not str(exc) or str(exc) not in json.dumps(body))
+    assert seal_receipt(body, KEY)["seal"].startswith(SEAL_PREFIX)
+
+
+def test_verdict_exceptions_stay_refused(dry_job):
+    for exc in (ValueError("authority"), RuntimeError("BLOCKED"), KeyError("x")):
+        def submit_fn(job, compiled, *, purpose, environ, exc=exc):
+            raise exc
+        body = IbmRuntime(compile_fn=_compiled, submit_fn=submit_fn).run(dry_job)
+        assert body["status"] == "REFUSED" and body["reason"] == f"ibm: {type(exc).__name__}"
+
+
 def test_build_runtime_ibm_refuses_by_default(job, monkeypatch):
     monkeypatch.delenv("AETHER_AQRC_HW_GO", raising=False)
     rt = build_runtime("ibm")

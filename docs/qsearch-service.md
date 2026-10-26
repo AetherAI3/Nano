@@ -350,7 +350,11 @@ absorb.
   campaign protocol has no reservable q-search stage (lane L4 hand-off in
   Predator-M `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). Every
   outcome on this path is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or
-  `REFUSED ibm: ValueError` (authority does not verify). **No real QPU job can be
+  `REFUSED ibm: ValueError` (authority does not verify). On either target a
+  resource or transport failure during compile or the Sampler run
+  (`MemoryError`, `OSError` and its socket/timeout subclasses, urllib and HTTP
+  errors) is `NOT_RUN ibm: <Class>`, not a refusal: the job was not run and the
+  host may retry it. **No real QPU job can be
   submitted from the service**, and a recovered IBM job is never resubmitted.
   An `ibm` receipt is sealed with the hardware seal by its `backend.kind` alone;
   one without its `hardware` block is never sealed at all.
