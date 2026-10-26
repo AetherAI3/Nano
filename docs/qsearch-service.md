@@ -149,7 +149,8 @@ take precedence over the environment.
 | `NANO_QSEARCH_REQUEST_TIMEOUT_S` | `30` | Socket idle timeout, in seconds. It applies to each read and each write on the connection separately, not to the request as a whole: a client that sends nothing for this long mid-request is disconnected, but one that keeps trickling bytes is not. It does not limit how long a job runs. |
 | `NANO_QSEARCH_ATLAS_PATH` | unset | `aether-atlas` directory, used by the engine child (and by the tests). |
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
-| `AETHER_AQRC_HW_GO` | unset | IBM gate; see [IBM](#ibm-hardware). |
+| `NANO_QSEARCH_PURPOSE` | `qsearch` | Child purpose recorded on IBM receipts, `qsearch` or `qcomms`; see [IBM](#ibm-hardware). |
+| `AETHER_AQRC_HW_GO` | unset | IBM gate for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_AUTHORITY_PATH` | unset | IBM gate; see [IBM](#ibm-hardware). |
 
 ### Service caps
@@ -323,13 +324,31 @@ absorb.
 ## IBM hardware
 
 `NANO_QSEARCH_BACKEND=ibm` (or a job asking for `ibm` while the service is in
-`auto` mode) selects `IbmRuntime`. It refuses unless all of these hold:
-`AETHER_AQRC_HW_GO=1`, `AETHER_AQRC_AUTHORITY_PATH` names an existing authority
-file, the job grants QPU seconds (`limits.max_qpu_s > 0`), and the target is
-`fake_fez` or `ibm_fez`. Even when every gate is open, submission is delegated
-to ATLAS `aqrc.campaign_runtime`. That runtime today admits only
-compiler-validation children, so the delegate imports it and still refuses without calling it. **In practice,
-every IBM job is REFUSED today**, and a recovered IBM job is never resubmitted.
+`auto` mode) selects `IbmRuntime`. The target decides the gate:
+
+- **`fake_fez` is a dry run.** Nothing is spent, so it needs no GO, no authority
+  file and no QPU seconds. The job is compiled by `nano_qsearch.compile` and the
+  ISA circuit runs through ATLAS `campaign_runtime.run_qsearch_dry`
+  (`qiskit_ibm_runtime.SamplerV2(mode=FakeFez())`, local testing mode on Aer),
+  the same PUB-in / ordered-samples-out path `ibm_fez` would take. The receipt
+  has `backend.kind = "ibm"`, a `hardware` block (`backend_name`, `target`,
+  `purpose`, `job_id`, `pub_index`, `register`, `bit_order: "msb_first"`,
+  `shots`, the shot-ordered `raw_samples`, `dry_run: true`) and the
+  **hardware seal** `hmac-sha256+hardware:<hex>`, an HMAC over
+  `b"predator.qsearch.hardware-receipt.v1\n"` + the canonical body. Predator's
+  `from_payload` accepts that seal only on a body that claims hardware, and a
+  plain seal never on one that does.
+- **`ibm_fez` keeps every gate:** `AETHER_AQRC_HW_GO=1`, an existing authority
+  file at `AETHER_AQRC_AUTHORITY_PATH`, and `limits.max_qpu_s > 0`. Even then the
+  delegate reports `REFUSED ibm: RuntimeError` today: the frozen campaign
+  protocol has no reservable q-search stage (lane L4 hand-off in Predator-M
+  `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). **No real QPU job
+  can be submitted from the service**, and a recovered IBM job is never resubmitted.
+
+The child purpose, `qsearch` (default) or `qcomms`, is a service setting
+(`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the
+job schema is frozen. It is passed to the ATLAS child and recorded in
+`hardware.purpose`; any other value is REFUSED.
 
 ## Predator side
 
