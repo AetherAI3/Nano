@@ -278,6 +278,29 @@ def test_settled_usage_merges_only_for_the_same_job_and_a_positive_amount():
     assert with_settled_usage(settled, {"job_id": "fake-job-1", "usage": 9.9}) is settled
 
 
+def test_atlas_settled_receipt_helper_is_used_and_its_extra_fields_stay_out_of_the_sealed_usage():
+    from types import SimpleNamespace
+    from nano_qsearch.runtime_ibm import SETTLED_RECEIPT_HELPER, settled_request_receipt
+    request = parse_request(_live())
+    pending = _pending(request)
+    completed = {**_settled(2.0)(request), "usage_settled_at": "2026-11-01T00:00:00Z",
+                 "provider_usage_at_receipt": 0}                      # ATLAS #184's completion fields
+    ledger = SimpleNamespace(get=lambda request_id: {"job_id": "fake-job-1", "usage": 9.9})
+    runtime = SimpleNamespace(**{SETTLED_RECEIPT_HELPER: lambda ledger, request_id: completed})
+    merged = settled_request_receipt(runtime, ledger, "req-hw0", pending)
+    assert merged is completed                                           # the helper wins over the row
+    body = IbmRuntime(environ=dict(LIVE_ENV))._request_body(request, merged)
+    assert set(body["usage"]) == {"quantum_seconds", "usage_pending", "provider_sub_jobs", "provider_metrics"}
+    assert body["usage"]["quantum_seconds"] == 2.0 and body["usage"]["usage_pending"] is False
+    assert "usage_settled_at" not in json.dumps(body)
+    for helper_result in (None, {**completed, "job_id": "other-job"}, {"request_id": "req-hw0", "receipt": None}):
+        runtime = SimpleNamespace(**{SETTLED_RECEIPT_HELPER: lambda ledger, request_id, r=helper_result: r})
+        assert settled_request_receipt(runtime, ledger, "req-hw0", pending) is pending      # stays pending
+    # An ATLAS pin without the helper: the row's settled usage (same job, positive) is the fallback.
+    fallback = settled_request_receipt(SimpleNamespace(), ledger, "req-hw0", pending)
+    assert fallback["provider_final_usage_seconds"] == 9.9 and fallback["usage_pending"] is False
+
+
 # --- Predator parity ---------------------------------------------------------------------------------
 
 

@@ -65,7 +65,8 @@ DONE or FAILED but whose provider usage is not yet final is HELD: the runtime
 returns None (the service answers 503 and keeps the request accepted; nothing
 is resubmitted) and notes ``accounting: pending`` in the caller's record. Each
 later recovery drives ATLAS ``recover_qsearch_submission``'s accounting read;
-the stored ATLAS receipt is merged with the ledger row's settled usage (same
+the stored ATLAS receipt is completed with the ledger's settled usage (ATLAS
+``qsearch_receipt_with_settled_usage``, else the row's settled usage; same
 provider job only), and only then is the OK or FAILED body returned, with
 ``usage_pending`` false. Zero or missing usage is never final. FakeFez dry runs
 and v1 receipts (which carry no usage) are unchanged.
@@ -106,6 +107,7 @@ ATLAS_JOB_RECEIPT_SCHEMA = "AqrcQSearchJobReceiptV1"
 SUBMITTED_PENDING = "QSearchSubmittedPending"      # ATLAS: a provider job id is attached, the outcome is not known yet
 SUBMITTED_STATES = ("submitted", "ambiguous_submission")
 ACCOUNTED_STATUSES = ("OK", "FAILED")   # v2 statuses that name a provider job and report its usage
+SETTLED_RECEIPT_HELPER = "qsearch_receipt_with_settled_usage"   # ATLAS #184; absent on older pins
 RECOVERY_NOT_RUN = "recovery: hardware jobs are never run from recovery"
 JOB_NEVER_SUBMITTED = "recovery: job was never submitted"
 PURPOSE_ENV = "NANO_QSEARCH_PURPOSE"
@@ -430,8 +432,26 @@ def atlas_request_recover(request: QSearchRequest, *, environ: Mapping[str, str]
         campaign_runtime.recover_qsearch_submission(request.request_id, context=context, ledger=ledger))
     if receipt is None:
         return None
-    # The recovery call above performed ATLAS's accounting read; the row now holds what is settled.
-    return with_settled_usage(receipt, ledger.get(request.request_id))
+    # The recovery call above performed ATLAS's accounting read; the ledger now holds what is settled.
+    return settled_request_receipt(campaign_runtime, ledger, request.request_id, receipt)
+
+
+def settled_request_receipt(campaign_runtime: Any, ledger: Any, request_id: str,
+                            receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The client view of a recovered ATLAS receipt with the ledger's settled usage.
+
+    ATLAS ``qsearch_receipt_with_settled_usage`` (AETHER-ATLAS #184) when present: the stored final
+    receipt, completed once and durably with the row's settled usage (still ``usage_pending`` while
+    unsettled). It is used only for the same provider job; otherwise the recovered receipt stands and
+    stays pending. An ATLAS pin without the helper falls back to ``with_settled_usage`` over the row.
+    """
+    helper = getattr(campaign_runtime, SETTLED_RECEIPT_HELPER, None)
+    if helper is None:
+        return with_settled_usage(receipt, ledger.get(request_id))
+    settled = _durable_request_receipt(helper(ledger, request_id))
+    if settled is None or settled.get("job_id") != receipt.get("job_id"):
+        return receipt
+    return settled
 
 
 def atlas_job_recover(job: QSearchJob, *, environ: Mapping[str, str] | None = None,
@@ -716,5 +736,6 @@ __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DE
            "RESOURCE_ERRORS", "SUBMITTED_PENDING", "IbmRuntime", "NeverSubmitted", "atlas_campaign_submit",
            "atlas_job_recover", "atlas_request_recover", "atlas_request_submit", "atlas_resolve_context",
            "atlas_submitted", "check_device_binding", "default_compile", "live_flags_reason",
-           "prepare_request_identity", "with_settled_usage", "ACCOUNTED_STATUSES"]
+           "prepare_request_identity", "settled_request_receipt", "with_settled_usage", "ACCOUNTED_STATUSES",
+           "SETTLED_RECEIPT_HELPER"]
 
