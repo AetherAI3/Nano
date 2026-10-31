@@ -52,6 +52,13 @@ whose provider job failed, or whose result does not audit, is ``FAILED``.
 L1: v1 ibm_fez jobs re-attach on restart through ``recover_qsearch_submission``
 too (``recover_job``), recompiling against the live target and requiring the
 same compiled plan digest.
+
+J6: a request's jobs compile against ONE resolved target (``compile.compile_jobs``:
+the live backend frozen once, one FakeFez for a dry run, compile options read
+once); the compile seconds go to the caller's ``record`` (kept beside the
+receipt, never in the sealed body); ``max_pubs`` (the service's
+``NANO_QSEARCH_V2_MAX_PUBS``) is passed to ATLAS ``prepare_qsearch_request``
+when it takes one.
 """
 from __future__ import annotations
 
@@ -216,14 +223,18 @@ def atlas_resolve_context(target: str, *, environ: Mapping[str, str] | None = No
     return campaign_runtime.resolve_qsearch_context(ledger, service_factory=service_factory, environ=environ)
 
 
-def check_device_binding(compiled: Any, context: Any) -> None:
-    """``ValueError`` unless ``compiled`` was frozen against this context's backend name and target (N2)."""
+def check_device_binding(compiled: Any, context: Any, *, live_digest: str | None = None) -> None:
+    """``ValueError`` unless ``compiled`` was frozen against this context's backend name and target (N2).
+
+    ``live_digest`` is the context target's digest when the caller already computed it (one per request).
+    """
     from .compile import target_digest
     record = getattr(compiled, "compile_record", None) or {}
     backend = getattr(context, "backend", None)
     name = getattr(context, "backend_name", None)
-    if (backend is None or record.get("backend_name") != name or getattr(backend, "name", None) != name
-            or record.get("target_digest") != target_digest(backend.target)):
+    if backend is None or record.get("backend_name") != name or getattr(backend, "name", None) != name:
+        raise ValueError("compiled plan is not bound to the resolved live backend's target")
+    if record.get("target_digest") != (live_digest if live_digest is not None else target_digest(backend.target)):
         raise ValueError("compiled plan is not bound to the resolved live backend's target")
 
 
@@ -278,8 +289,8 @@ def _request_pairs(request: QSearchRequest, compiled: list[Any], purpose: str) -
             for job, plan in zip(request.jobs, compiled)]
 
 
-def prepare_request_identity(request: QSearchRequest, compiled: list[Any], *,
-                             purpose: str) -> tuple[list[tuple[Any, dict[str, Any]]], dict[str, Any]]:
+def prepare_request_identity(request: QSearchRequest, compiled: list[Any], *, purpose: str,
+                             max_pubs: int | None = None) -> tuple[list[tuple[Any, dict[str, Any]]], dict[str, Any]]:
     """``(pairs, prepared)``: the frozen children and the ATLAS request whose ``request_sha256`` the
     operator's plan-scoped authority must name. It depends on the compiled ISA bytes, so for ibm_fez
     it is only known after compiling against the resolved live target (N2)."""
@@ -287,6 +298,8 @@ def prepare_request_identity(request: QSearchRequest, compiled: list[Any], *,
     pairs = _request_pairs(request, compiled, purpose)
     extra = ({"client_request_digest": request.request_digest}
              if _accepts(campaign_runtime.prepare_qsearch_request, "client_request_digest") else {})
+    if max_pubs is not None and _accepts(campaign_runtime.prepare_qsearch_request, "max_pubs"):
+        extra["max_pubs"] = max_pubs               # J6: ATLAS's request PUB cap follows the configured limit
     prepared = campaign_runtime.prepare_qsearch_request(pairs, request_id=request.request_id,
                                                         max_execution_time=request.max_execution_time, **extra)
     return pairs, prepared
@@ -309,7 +322,8 @@ def _check_pub_children(atlas_receipt: Mapping[str, Any], pairs: list[tuple[Any,
 def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpose: str,
                          environ: Mapping[str, str] | None = None, context: Any = None,
                          sampler_factory: Callable[..., Any] | None = None,
-                         backend_factory: Callable[..., Any] | None = None) -> Mapping[str, Any]:
+                         backend_factory: Callable[..., Any] | None = None,
+                         max_pubs: int | None = None) -> Mapping[str, Any]:
     """One ATLAS request over every job of ``request``: one ``sampler.run`` with N PUBs.
 
     Each compiled job becomes a frozen child (``prepare_qsearch_child``), the
@@ -319,19 +333,30 @@ def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpos
     ibm_fez under the environment's authority and ledger and the live context
     (every plan bound to its target, N2). The receipt's PUBs must name the
     prepared children in order.
+
+    J6: the request PUB bound passed to ATLAS is the ledger's Q-stage PUB cap
+    (``qsearch_max_request_pubs``) for ibm_fez, and ``max_pubs`` (the service's
+    ``NANO_QSEARCH_V2_MAX_PUBS``) for a FakeFez dry run, which has no ledger.
     """
     from aether_atlas.aqrc import campaign_runtime
     environ = environ if environ is not None else os.environ
-    pairs, prepared = prepare_request_identity(request, compiled, purpose=purpose)
-    if request.target in DRY_RUN_TARGETS:
-        result = campaign_runtime.run_qsearch_request_dry(pairs, prepared, sampler_factory=sampler_factory,
-                                                          backend_factory=backend_factory)
-    else:
+    live = request.target not in DRY_RUN_TARGETS
+    if live:
         token, key, ledger = _authority_from_env(environ)
         if context is None or not _has_qsearch_stage(ledger):
             raise RuntimeError(_NO_LIVE_CONTEXT)
+        ledger_cap = getattr(campaign_runtime, "qsearch_max_request_pubs", None)
+        if ledger_cap is not None:
+            max_pubs = ledger_cap(ledger)
+    pairs, prepared = prepare_request_identity(request, compiled, purpose=purpose, max_pubs=max_pubs)
+    if not live:
+        result = campaign_runtime.run_qsearch_request_dry(pairs, prepared, sampler_factory=sampler_factory,
+                                                          backend_factory=backend_factory)
+    else:
+        from .compile import target_digest
+        live_digest = target_digest(context.backend.target)          # once per request, not per plan
         for plan in compiled:
-            check_device_binding(plan, context)
+            check_device_binding(plan, context, live_digest=live_digest)
         result = campaign_runtime.submit_qsearch_request(pairs, prepared, context=context, ledger=ledger,
                                                          authority=token, authority_key=key,
                                                          sampler_factory=sampler_factory)
@@ -554,19 +579,35 @@ class IbmRuntime:
         except Exception:  # noqa: BLE001 - cannot even name the provider job: leave it for the operator
             return None
 
-    def run_request(self, request: QSearchRequest) -> dict[str, Any] | None:
+    def _compile_all(self, jobs: Any, context: Any) -> list[Any]:
+        """Every job against one resolved target: the batch compile for the default compiler (J6),
+        else the injected compiler per job with the one resolved backend."""
+        if self._compile is default_compile:
+            from .compile import compile_jobs
+            return compile_jobs(jobs, backend=None if context is None else context.backend)
+        return [self._compiled(job, context) for job in jobs]
+
+    def run_request(self, request: QSearchRequest, *, max_pubs: int | None = None,
+                    record: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """Run one v2 request once: the unsigned v2 body (OK, FAILED or NOT_RUN), or None when it reached
-        the provider and its outcome is not known yet (the service then answers 503 and recovers it)."""
+        the provider and its outcome is not known yet (the service then answers 503 and recovers it).
+
+        ``record`` (optional) receives ``compile_s``, ``compiled_jobs`` and ``target_resolutions``: kept
+        beside the receipt by the service, never in the sealed body. ``max_pubs`` goes to ATLAS."""
         reason = self._request_gate(request)
         if reason is not None:
             return not_run_v2(request, REFUSED_PREFIX + reason)
+        record = {} if record is None else record
         try:
             context = self._context(request.target, pub_count=request.block_count,
                                     default_delegate=self._request_submit is atlas_request_submit)
-            compiled = [self._compiled(job, context) for job in request.jobs]
+            record["target_resolutions"] = 0 if context is None else 1
+            started = time.perf_counter()
+            compiled = self._compile_all(request.jobs, context)
+            record.update(compile_s=round(time.perf_counter() - started, 3), compiled_jobs=len(compiled))
             atlas_receipt = self._request_submit(request, compiled, purpose=request.purpose, environ=self._environ,
                                                  context=context, sampler_factory=self._sampler_factory,
-                                                 backend_factory=self._backend_factory)
+                                                 backend_factory=self._backend_factory, max_pubs=max_pubs)
         except RESOURCE_ERRORS as exc:          # the run did not happen; class name only
             if self._handed_over(request.target, request.request_id, exc):
                 return None

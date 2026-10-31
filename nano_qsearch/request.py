@@ -8,7 +8,8 @@ The body Predator POSTs to ``/qsearch/v2/submit_request`` is::
 
 ``canonical_digest(descriptor)`` is the request digest every v2 receipt binds.
 Validation is strict and whole, like ``job.parse_job``: exact key sets, typed
-fields, 1..``MAX_BLOCKS`` blocks, no repeated job or ``(agent_id, chunk)``
+fields, 1..``max_blocks`` blocks (default ``MAX_BLOCKS``; the service passes
+``NANO_QSEARCH_V2_MAX_PUBS``, at most ``MAX_BLOCKS_LIMIT``), no repeated job or ``(agent_id, chunk)``
 recipient, and every job must agree with its block (``job_digest``, ``n``,
 ``shots``, ``seed`` = the job's backend seed, ``classical_min_energy``), be an
 ``ibm`` job on the descriptor's one ``target``, and (ibm_fez) the jobs'
@@ -30,7 +31,9 @@ from .job import JobValidationError, QSearchJob, parse_job
 REQUEST_SCHEMA = "predator.qsearch.request.v2"
 REQUEST_TARGETS = ("fake_fez", "ibm_fez")
 REQUEST_PURPOSES = ("qsearch", "qcomms")
-MAX_BLOCKS = 16                      # one Q-stage request: PredatorCampaignV2 stage_pub_caps["Q"]
+MAX_BLOCKS = 16                      # default: one Q-stage request of PredatorCampaignV2's default Q cap
+MAX_BLOCKS_LIMIT = 4096              # the most NANO_QSEARCH_V2_MAX_PUBS may admit (J6 preregistration §3)
+MAX_PUBS_ENV = "NANO_QSEARCH_V2_MAX_PUBS"
 MAX_EXECUTION_TIME_S = 600           # ATLAS QSEARCH_CAP_SECONDS
 REQUEST_BACKEND_KIND = "ibm"
 LIMITED_TARGETS = ("ibm_fez",)       # a FakeFez dry run spends nothing, so its jobs need grant no QPU seconds
@@ -148,10 +151,24 @@ def _descriptor_header(desc: Mapping[str, Any]) -> None:
         raise RequestValidationError("DESCRIPTOR", "batch_index must be a non-negative int")
 
 
-def _blocks(desc: Mapping[str, Any]) -> tuple[RequestBlock, ...]:
+def max_pubs_from_env(environ: Mapping[str, str]) -> int:
+    """``NANO_QSEARCH_V2_MAX_PUBS`` (default ``MAX_BLOCKS``); ``ValueError`` naming the variable unless 1..4096."""
+    raw = environ.get(MAX_PUBS_ENV)
+    if raw is None or raw == "":
+        return MAX_BLOCKS
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(f"{MAX_PUBS_ENV} must be an integer") from None
+    if not 1 <= value <= MAX_BLOCKS_LIMIT:
+        raise ValueError(f"{MAX_PUBS_ENV} must be in 1..{MAX_BLOCKS_LIMIT}")
+    return value
+
+
+def _blocks(desc: Mapping[str, Any], max_blocks: int) -> tuple[RequestBlock, ...]:
     raw = desc["blocks"]
-    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_BLOCKS:
-        raise RequestValidationError("DESCRIPTOR", f"a request carries 1..{MAX_BLOCKS} blocks")
+    if not isinstance(raw, list) or not 1 <= len(raw) <= max_blocks:
+        raise RequestValidationError("DESCRIPTOR", f"a request carries 1..{max_blocks} blocks")
     blocks = tuple(_block(item, i) for i, item in enumerate(raw))
     if len({b.job_digest for b in blocks}) != len(blocks):
         raise RequestValidationError("DESCRIPTOR", "a job appears twice in the request")
@@ -187,15 +204,21 @@ def _deep_freeze(value: Any) -> Any:
     return value
 
 
-def parse_request(body: Any) -> QSearchRequest:
-    """Validate ``body`` completely, then return the typed request (never partial)."""
+def parse_request(body: Any, *, max_blocks: int = MAX_BLOCKS) -> QSearchRequest:
+    """Validate ``body`` completely, then return the typed request (never partial).
+
+    ``max_blocks`` caps the PUB count (``MAX_BLOCKS`` unless the service was configured otherwise);
+    the block count is checked before any job is parsed, so an over-limit request costs no compile.
+    """
+    if isinstance(max_blocks, bool) or not isinstance(max_blocks, int) or not 1 <= max_blocks <= MAX_BLOCKS_LIMIT:
+        raise ValueError(f"max_blocks must be an int in 1..{MAX_BLOCKS_LIMIT}")
     if not isinstance(body, Mapping) or body.get("schema") != REQUEST_SCHEMA or set(body) != _BODY_KEYS:
         raise RequestValidationError("SCHEMA", f"body must be exactly schema={REQUEST_SCHEMA}, descriptor, jobs")
     desc = body["descriptor"]
     if not isinstance(desc, Mapping):
         raise RequestValidationError("DESCRIPTOR", "descriptor must be an object")
     _descriptor_header(desc)
-    blocks = _blocks(desc)
+    blocks = _blocks(desc, max_blocks)
     jobs = _jobs(body["jobs"], blocks, desc["target"])
     if desc["target"] in LIMITED_TARGETS and desc["max_execution_time"] > sum(job.max_qpu_s for job in jobs):
         raise RequestValidationError("LIMITS", "max_execution_time exceeds what the jobs' limits.max_qpu_s allow")
@@ -204,5 +227,6 @@ def parse_request(body: Any) -> QSearchRequest:
                           request_digest=canonical_digest(desc), descriptor=_deep_freeze(dict(desc)))
 
 
-__all__ = ["LIMITED_TARGETS", "MAX_BLOCKS", "MAX_EXECUTION_TIME_S", "QSearchRequest", "REQUEST_BACKEND_KIND", "REQUEST_PURPOSES",
+__all__ = ["LIMITED_TARGETS", "MAX_BLOCKS", "MAX_BLOCKS_LIMIT", "MAX_EXECUTION_TIME_S", "MAX_PUBS_ENV",
+           "max_pubs_from_env", "QSearchRequest", "REQUEST_BACKEND_KIND", "REQUEST_PURPOSES",
            "REQUEST_SCHEMA", "REQUEST_TARGETS", "RequestBlock", "RequestValidationError", "parse_request"]
