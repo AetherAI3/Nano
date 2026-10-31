@@ -476,6 +476,19 @@ re-attaches it through ATLAS, recompiles against the live target and requires
 the submitted child's compiled plan digest (else REFUSED); a provider failure
 is REFUSED `ibm: provider job failed`.
 
+**Large requests (J6).** `NANO_QSEARCH_V2_MAX_PUBS` sets the PUBs per v2
+request (default 16, at most 4,096; an invalid value stops the service at
+startup). The count is checked before any job is parsed or compiled, so an
+over-limit request is a 400 that costs nothing. A larger request needs a larger
+`NANO_QSEARCH_MAX_BODY_BYTES` too (a 1,200-job request of 16-variable jobs is a
+few MiB). All jobs of a request compile against one resolved target: the live
+backend's target is read and digested once, a dry run builds one FakeFez, and
+the compile options are read once (`compile.compile_jobs`). ATLAS is given the
+request PUB bound: the ledger's Q-stage cap (`qsearch_max_request_pubs`) for
+ibm_fez, `NANO_QSEARCH_V2_MAX_PUBS` for a FakeFez dry run. The compile seconds,
+the job count and the number of target resolutions are kept in the request
+row's `record_json` and logged on stderr; they are not in the sealed receipt.
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends

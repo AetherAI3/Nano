@@ -130,7 +130,7 @@ def test_run_request_compiles_each_job_once_and_makes_one_request_call():
         return atlas_request_receipt(req)
     body = IbmRuntime(compile_fn=lambda job: _plan(), request_submit_fn=submit).run_request(request)
     assert body["status"] == "OK" and len(body["blocks"]) == 3
-    assert seen == [("req-hw0", 3, ["backend_factory", "context", "environ", "purpose", "sampler_factory"])]
+    assert seen == [("req-hw0", 3, ["backend_factory", "context", "environ", "max_pubs", "purpose", "sampler_factory"])]
 
 
 def test_ibm_fez_request_keeps_nanos_spend_gates():
@@ -206,7 +206,7 @@ def test_live_request_on_a_v1_ledger_is_blocked_without_a_context(atlas):
     atlas.ledger.v2 = False
     request = parse_request(request_body(2, target="ibm_fez"))
     body = IbmRuntime(environ=atlas.environ, compile_fn=lambda job: _plan()).run_request(request)
-    assert body["reason"] == "refused: ibm: RuntimeError" and [c[0] for c in atlas.calls] == ["child", "child", "request"]
+    assert body["reason"] == "refused: ibm: RuntimeError" and atlas.calls == []      # blocked before any child
 
 
 def test_dry_request_goes_through_run_qsearch_request_dry_with_injected_factories(atlas):

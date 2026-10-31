@@ -38,6 +38,11 @@ was already used is never submitted again: it is re-attached through
 stays pending (503) until the provider job is done. ``recover()`` does the
 same for every ACCEPTED request on startup.
 
+J6: the PUB limit per request is ``NANO_QSEARCH_V2_MAX_PUBS`` (default 16,
+at most 4,096; an invalid value refuses startup). A larger request also needs
+a larger ``NANO_QSEARCH_MAX_BODY_BYTES``. The run's compile seconds are kept in
+the request row's ``record_json`` and logged; they are not in the sealed body.
+
 Amendment R3 H1 / L1: a job or request that reached the provider is never
 sealed NOT_RUN. When the IBM runtime returns None (submitted, outcome not
 known yet) the row stays ACCEPTED with its attempt used and the caller gets
@@ -69,7 +74,9 @@ from .canonical import canonical_json
 from .job import JobValidationError, QSearchJob, parse_job
 from .receipt import MIN_KEY_BYTES, not_run_receipt, refused_receipt, seal_receipt
 from .receipt_v2 import not_run_v2, seal_receipt_v2
-from .request import QSearchRequest, RequestValidationError, parse_request
+from .request import (
+    MAX_BLOCKS, MAX_BLOCKS_LIMIT, QSearchRequest, RequestValidationError, max_pubs_from_env, parse_request,
+)
 from .runtime_mps import SERVICE_KINDS, build_runtime, select_kind
 from .store import JobRecord, JobStore, RequestIdConflict
 
@@ -188,6 +195,7 @@ class ServiceConfig:
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S
     verbose: bool = False
     v2_enabled: bool = False          # NANO_QSEARCH_V2=1: /qsearch/v2/submit_request answers
+    v2_max_pubs: int = MAX_BLOCKS     # NANO_QSEARCH_V2_MAX_PUBS: PUBs per v2 request, 1..MAX_BLOCKS_LIMIT
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
@@ -201,6 +209,9 @@ class ServiceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
+        if (isinstance(self.v2_max_pubs, bool) or not isinstance(self.v2_max_pubs, int)
+                or not 1 <= self.v2_max_pubs <= MAX_BLOCKS_LIMIT):
+            raise ValueError(f"v2_max_pubs must be an int in 1..{MAX_BLOCKS_LIMIT}")
         timeout = self.request_timeout_s
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not (math.isfinite(timeout) and timeout > 0):
             raise ValueError("request_timeout_s must be a positive number of seconds")
@@ -238,7 +249,8 @@ class ServiceConfig:
                    max_chi=cap("NANO_QSEARCH_MAX_CHI", DEFAULT_MAX_CHI),
                    max_concurrent=cap("NANO_QSEARCH_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT),
                    request_timeout_s=_env_number("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S, float),
-                   verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1")
+                   verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1",
+                   v2_max_pubs=max_pubs_from_env(env))
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -464,7 +476,24 @@ class QSearchService:
             return self._sealed_v2(request, lambda: not_run_v2(request, "refused: " + reason))
         with self._slots:
             self.store.mark_request_attempt(request.request_digest)
-            return self._sealed_v2(request, lambda: runtime.run_request(request))
+            record: dict[str, Any] = {}
+            try:
+                return self._sealed_v2(request, lambda: runtime.run_request(
+                    request, max_pubs=self.config.v2_max_pubs, record=record))
+            finally:
+                self._keep_record(request, record)
+
+    def _keep_record(self, request: QSearchRequest, record: dict[str, Any]) -> None:
+        """Store and log the run record (compile seconds); a failure here never touches the receipt."""
+        if not record:
+            return
+        try:
+            self.store.set_request_record(request.request_digest, json.dumps(record, sort_keys=True))
+        except Exception as exc:  # noqa: BLE001 - the record is evidence beside the receipt, not the receipt
+            _log(f"request {request.request_digest} record not stored: {type(exc).__name__}")
+        if "compile_s" in record:
+            _log(f"request {request.request_digest} compiled {record.get('compiled_jobs')} jobs "
+                 f"in {record['compile_s']} s ({record.get('target_resolutions')} target resolution)")
 
     def _complete_request(self, request: QSearchRequest, sealed: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         """Store ``sealed``; if the row is already DONE (``ValueError``), the stored receipt wins."""
@@ -522,7 +551,7 @@ class QSearchService:
             return refusal
         try:
             parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
-            request = parse_request(parsed)
+            request = parse_request(parsed, max_blocks=self.config.v2_max_pubs)
         except RequestValidationError as exc:
             return 400, {"error": "invalid request", "code": exc.code}
         except (ValueError, UnicodeDecodeError, RecursionError):
@@ -543,7 +572,7 @@ class QSearchService:
                 recovered.append(job.job_digest)
         for row in self.store.pending_requests():
             try:
-                request = parse_request(json.loads(row.request_json))
+                request = parse_request(json.loads(row.request_json), max_blocks=MAX_BLOCKS_LIMIT)  # admitted
             except (RequestValidationError, ValueError, RecursionError) as exc:
                 _log(f"pending request {row.request_digest} is unreadable and stays pending: {type(exc).__name__}")
                 continue
