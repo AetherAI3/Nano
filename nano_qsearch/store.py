@@ -222,6 +222,19 @@ class JobStore:
             if cur.rowcount != 1:
                 raise KeyError(request_digest)
 
+    def reseal_request(self, request_digest: str, old_receipt_json: str, new_receipt_json: str) -> None:
+        """Replace a DONE receipt sealed while usage was pending by its settled re-seal (compare-and-swap).
+
+        ``ValueError`` unless the row is DONE and still holds exactly ``old_receipt_json``; the caller
+        keeps the replaced seal in the request record, so the history stays visible.
+        """
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET receipt_json=?, completed_at=? WHERE request_digest=? "
+                                   "AND state='DONE' AND receipt_json=?",
+                                   (new_receipt_json, time.time(), request_digest, old_receipt_json))
+            if cur.rowcount != 1:
+                raise ValueError("stored receipt changed or is not DONE; nothing re-sealed")
+
     def request_record(self, request_digest: str) -> str | None:
         with self._lock:
             row = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
