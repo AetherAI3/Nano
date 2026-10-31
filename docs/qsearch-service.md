@@ -346,11 +346,19 @@ absorb.
   authority key from `AETHER_AQRC_AUTHORITY_KEY_PATH` and the campaign ledger
   from `AETHER_AQRC_LEDGER_PATH`, and calls ATLAS
   `campaign_runtime.submit_qsearch_child`, which re-checks GO, verifies the HMAC
-  authority against the ledger and the 600 s cap, and then stops: the frozen
-  campaign protocol has no reservable q-search stage (lane L4 hand-off in
-  Predator-M `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). Every
-  outcome on this path is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or
-  `REFUSED ibm: ValueError` (authority does not verify). On either target a
+  authority against the ledger and the 600 s cap. On a frozen
+  `PredatorCampaignV1` ledger it then stops: that protocol has no reservable
+  q-search stage (lane L4 hand-off in Predator-M
+  `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`), and every outcome
+  is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or `REFUSED ibm: ValueError`
+  (authority does not verify). On a `PredatorCampaignV2` ledger (lane HW0) the
+  live context comes from ATLAS `resolve_qsearch_context` (a real
+  `QiskitRuntimeService` only behind `AETHER_AQRC_HW_GO=1` and
+  `AETHER_AQRC_QSEARCH_LIVE=1`), the job is compiled against **that backend's
+  `Target`** (backend name and a target digest are bound into the ISA metadata,
+  the QPY bytes and `compiled_plan_digest`; a plan bound to another target is
+  refused), and the child's `max_execution_time` (provider limit and ledger
+  reservation) is the job's `limits.max_qpu_s`. On either target a
   resource or transport failure during compile or the Sampler run
   (`MemoryError`, `OSError` and its socket/timeout subclasses, urllib and HTTP
   errors) is `NOT_RUN ibm: <Class>`, not a refusal: the job was not run and the
@@ -363,6 +371,73 @@ The child purpose, `qsearch` (default) or `qcomms`, is a service setting
 (`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the
 job schema is frozen. It is passed to the ATLAS child and recorded in
 `hardware.purpose`; any other value is REFUSED.
+
+## Packed requests: `POST /qsearch/v2/submit_request` (lane HW0)
+
+Off unless `NANO_QSEARCH_V2=1`: otherwise the path answers 404
+`{"error": "not found", "code": "NOT_ENABLED"}` before authentication. It uses
+the v1 request auth (the path is part of the MAC). The body is
+
+```json
+{"schema": "predator.qsearch.request.v2",
+ "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez",
+                "purpose": "qsearch|qcomms", "max_execution_time": 10, "manifest_digest": "sha256:...",
+                "batch_index": 0, "batch_digest": "sha256:...",
+                "blocks": [{"pub_index": 0, "job_digest": "sha256:...",
+                            "recipients": [{"agent_id": "...", "chunk": 0, "slot": 0}],
+                            "n": 4, "shots": 3, "seed": 7, "classical_min_energy": -1.6}]},
+ "jobs": ["<predator.qsearch.job.v1 body>, one per block, in block order"]}
+```
+
+`canonical_digest(descriptor)` is the request digest. Each job must match its
+block (digest, width, shots, backend seed, classical floor), be `backend.kind
+== "ibm"` on the one target, 1..16 blocks, no repeated job or `(agent_id,
+chunk)`; for `ibm_fez` the jobs' `limits.max_qpu_s` must sum to at least
+`max_execution_time`. A failure is 400 with no receipt. Each job is compiled
+(device compile for `ibm_fez`), frozen as an ATLAS child, the children become
+one ATLAS request (`prepare_qsearch_request`) and run once:
+`run_qsearch_request_dry` (FakeFez) or `submit_qsearch_request` (ibm_fez,
+additionally `AETHER_AQRC_QSEARCH_PACKED=1` for more than one PUB, enforced by
+ATLAS). The receipt is `predator.qsearch.receipt.v2`: per block `counts` keyed
+by the raw `msb_first` display strings and an `audit` (`classical_min_energy`,
+`best_sample_energy`, `agree`; every sample re-energised, a best below the
+floor refuses the request), `hardware` (`backend_name`, `provider_job_id`,
+`bit_order`, `register`, `purpose`, `dry_run`, `max_execution_time`,
+`job_tags`) and `usage` (`quantum_seconds`, `usage_pending` true when that is
+null or 0, `provider_sub_jobs`, `provider_metrics`), sealed
+`hmac-sha256+hardware-v2:` over `b"predator.qsearch.hardware-receipt.v2\n"`.
+v2 has no REFUSED status: anything that did not produce every block is
+`NOT_RUN` with `blocks: []`, `backend.kind: "none"` and the `hmac-sha256+v2:`
+seal; a resource or transport failure reads `ibm: <Class>`, a verdict
+`refused: ...`. The request is recorded ACCEPTED before anything is submitted
+and its single attempt is marked immediately before the run; a repeated digest
+returns the stored receipt; a request whose attempt was used is never submitted
+again but re-attached on restart (or repeat) through ATLAS
+`recover_qsearch_submission`, and stays pending (503) until the provider job is
+done. Because ATLAS fingerprints the ISA bytes into the request identity, the
+operator's plan-scoped authority names a `request_sha256` that is only known
+after compiling against the live target (`runtime_ibm.prepare_request_identity`).
+Nano passes the request digest to ATLAS (`client_request_digest`), and the
+receipt's `hardware.job_tags` are ATLAS's effective tags (recovery tag first).
+
+Amendment R3. **Flags first (M3):** an ibm_fez request needs
+`AETHER_AQRC_HW_GO=1`, `AETHER_AQRC_QSEARCH_LIVE=1` and, above one PUB,
+`AETHER_AQRC_QSEARCH_PACKED=1` in Nano's environment before any live context is
+resolved (otherwise NOT_RUN `refused: ibm: <FLAG>=1 is required`; no
+`QiskitRuntimeService` is built). **Submitted means never NOT_RUN (H1):** once
+ATLAS has handed the request to the provider (`QSearchSubmittedPending`, or a
+ledger row with a job id or an ambiguous submission) nothing is sealed: the
+answer is 503, the row stays ACCEPTED, and the request finishes through ATLAS
+recovery as OK or **`FAILED`** (provider ERROR / CANCELLED / max time, or a
+result that does not audit): `blocks: []`, `block_count: 0`, `reason`
+(`provider: <status>` or `refused: ibm: <Class>`), `hardware` with the provider
+job id, `usage`, hardware seal. A reservation ATLAS released (definite provider
+refusal, or an operator release of an ambiguous row) completes as NOT_RUN. **v1
+singletons (H1, L1)** follow the same rule with v1 statuses: a submitted job
+answers 503 until recovery; on a repeat or restart `IbmRuntime.recover_job`
+re-attaches it through ATLAS, recompiles against the live target and requires
+the submitted child's compiled plan digest (else REFUSED); a provider failure
+is REFUSED `ibm: provider job failed`.
 
 ## Predator side
 
