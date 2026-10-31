@@ -55,6 +55,7 @@ LAYOUT_BACKEND_ENV = "NANO_QSEARCH_LAYOUT_BACKEND"
 CALIBRATION_PREFIX = "calibration:"
 LAYOUT_MODES = ("target", "calibration")
 FEZ_TARGETS = ("fake_fez", "ibm_fez")      # targets whose physical qubits are the Fez register
+SNAPSHOT_ENTRIES = {"fake_fez": ("fake_fez", "ibm_fez"), "ibm_fez": ("ibm_fez",)}   # entries a target may rank from
 
 
 class TargetUnavailable(RuntimeError):
@@ -75,9 +76,12 @@ class CompileOptions:
     bit ``i`` on the ``i``-th best physical qubit, ranked by readout error plus
     half the ``x`` error (a bit is 1 about half the time); qubits with a missing
     or out-of-range error or T1 are never chosen. ``"target"`` ranks by the
-    transpile target's own instruction errors; ``"calibration"`` by one backend
-    of a calibration snapshot (``backends.<name>.{num_qubits, readout_error,
-    one_qubit_error.x, t1_s}``), ``layout_backend`` or else the job's target.
+    transpile target's own instruction errors (the record then carries a digest of
+    the numbers ranked); ``"calibration"`` by one backend of a calibration snapshot
+    (``backends.<name>.{num_qubits, readout_error, one_qubit_error.x, t1_s}``):
+    the job's target, or ``layout_backend`` where ``SNAPSHOT_ENTRIES`` allows it
+    (a ``fake_fez`` rehearsal may read the ``ibm_fez`` entry; nothing else may
+    stand in for another device).
     """
 
     basis_prep: bool = False
@@ -91,6 +95,8 @@ class CompileOptions:
             raise ValueError(f"layout must be None or one of {list(LAYOUT_MODES)}")
         if (self.layout == "calibration") != (self.calibration is not None):
             raise ValueError("a calibration snapshot is required by, and only by, layout='calibration'")
+        if self.layout_backend is not None and self.layout != "calibration":
+            raise ValueError("layout_backend applies only to layout='calibration'")
 
     @property
     def enabled(self) -> bool:
@@ -128,9 +134,12 @@ def diagonal_ground(q) -> tuple[int, ...] | None:
     """The unique minimiser of a strictly diagonal QUBO (bit ``i`` is 1 iff ``Q_ii < 0``), else ``None``.
 
     With no coupling ``xᵀQx = Σ Q_ii x_i``; every nonzero diagonal entry fixes its bit, a zero one leaves
-    two minimisers, so that case (and any coupling) is not a basis state and gets ``None``.
+    two minimisers, so that case (and any coupling) is not a basis state and gets ``None``. A non-finite
+    entry is a ``ValueError`` (``parse_job`` already refuses one; this guards direct callers).
     """
     n = len(q)
+    if any(not math.isfinite(q[i][j]) for i in range(n) for j in range(n)):
+        raise ValueError("QUBO has a non-finite entry")
     if any(q[i][j] != 0.0 for i in range(n) for j in range(n) if i != j) or any(q[i][i] == 0.0 for i in range(n)):
         return None
     return tuple(1 if q[i][i] < 0 else 0 for i in range(n))
@@ -163,9 +172,21 @@ def _target_errors(target) -> dict[int, tuple[Any, Any, Any]]:
     return out
 
 
-def _snapshot_errors(entry: Mapping[str, Any]) -> dict[int, tuple[Any, Any, Any]]:
-    readout, x, t1 = entry["readout_error"], entry["one_qubit_error"]["x"], entry["t1_s"]
-    return {int(q): (readout.get(q), x.get(q), t1.get(q)) for q in readout}
+def _snapshot_errors(entry: Mapping[str, Any], num_qubits: int) -> dict[int, tuple[Any, Any, Any]]:
+    """``{q: (readout, x, t1)}`` for the qubits ``"0"…"<num_qubits-1>"`` of a snapshot entry; ``ValueError`` on shape."""
+    one = entry.get("one_qubit_error")
+    readout, t1 = entry.get("readout_error"), entry.get("t1_s")
+    x = one.get("x") if isinstance(one, Mapping) else None
+    if not all(isinstance(m, Mapping) for m in (readout, x, t1)):
+        raise ValueError("layout: calibration entry needs readout_error, one_qubit_error.x and t1_s mappings")
+    return {q: (readout.get(str(q)), x.get(str(q)), t1.get(str(q))) for q in range(num_qubits)}
+
+
+def _errors_digest(errors: Mapping[int, tuple[Any, Any, Any]]) -> str:
+    """Digest of the numbers a ranking used (rankable qubits only), so a record names the calibration it saw."""
+    rows = [[q, float(ro), float(x), float(t1)] for q, (ro, x, t1) in sorted(errors.items())
+            if _finite_in(ro, 0.0, 1.0) and _finite_in(x, 0.0, 1.0) and _finite_in(t1, 1e-12, math.inf)]
+    return canonical_digest({"schema": "nano.qsearch.layout-errors.v1", "qubits": rows})
 
 
 @dataclass(frozen=True)
@@ -303,14 +324,18 @@ def _layout(job: QSearchJob, options: CompileOptions, logical, backend) -> tuple
         return None, {**info, "applied": False, "reason": "target has no device calibration"}
     if _two_qubit_count(logical):
         return None, {**info, "applied": False, "reason": "circuit has two-qubit gates"}
+    width = backend.target.num_qubits
     if options.layout == "target":
         errors = _target_errors(backend.target)
+        info["errors_digest"] = _errors_digest(errors)        # which calibration the target carried
     else:
         name = options.layout_backend or job.target
+        if name not in SNAPSHOT_ENTRIES[job.target]:
+            raise ValueError(f"layout: a {job.target} job may not rank qubits from the {name!r} entry")
         entry = options.calibration.get(name)
-        if not isinstance(entry, Mapping) or entry.get("num_qubits") != backend.target.num_qubits:
-            raise ValueError(f"layout: calibration snapshot has no {backend.target.num_qubits}-qubit entry {name!r}")
-        errors = _snapshot_errors(entry)
+        if not isinstance(entry, Mapping) or entry.get("num_qubits") != width:
+            raise ValueError(f"layout: calibration snapshot has no {width}-qubit entry {name!r}")
+        errors = _snapshot_errors(entry, width)
         info.update({"backend": name, "calibration_sha256": options.calibration_sha256,
                      "last_update": entry.get("last_update")})
     physical = rank_qubits(errors, logical.num_qubits)
@@ -423,5 +448,5 @@ def compile_program(job: QSearchJob, *, backend: Any = None, options: CompileOpt
 
 __all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram", "DEVICE_TARGETS",
            "FEZ_TARGETS", "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV", "LAYOUT_ENV", "LAYOUT_MODES", "PLAN_SCHEMA",
-           "TARGET_METADATA_KEY", "TARGET_SCHEMA", "TargetUnavailable", "check_isa", "compile_program",
-           "diagonal_ground", "heavy_hex_map", "rank_qubits", "target_digest"]
+           "SNAPSHOT_ENTRIES", "TARGET_METADATA_KEY", "TARGET_SCHEMA", "TargetUnavailable", "check_isa",
+           "compile_program", "diagonal_ground", "heavy_hex_map", "rank_qubits", "target_digest"]
