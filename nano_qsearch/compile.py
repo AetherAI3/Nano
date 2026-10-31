@@ -196,7 +196,8 @@ def _two_qubit_count(circuit) -> int:
     return sum(1 for inst in circuit.data if len(inst.qubits) == 2 and inst.operation.name != "barrier")
 
 
-def _fake_fez():
+def _device_backend(job: QSearchJob):
+    """The backend a Fez-register job is transpiled against (FakeFez); the layout ranking reads the same target."""
     try:
         from qiskit_ibm_runtime.fake_provider import FakeFez
         return FakeFez()
@@ -212,7 +213,7 @@ def _transpile(circuit, job: QSearchJob, *, backend=None, initial_layout: list[i
         isa = transpile(circuit, coupling_map=cm, basis_gates=BASIS, optimization_level=job.opt_level,
                         seed_transpiler=job.compile_seed)
         return isa, f"heavy_hex_d{_heavy_hex_distance(cm)}"
-    backend = _fake_fez() if backend is None else backend
+    backend = _device_backend(job) if backend is None else backend
     isa = transpile(circuit, backend=backend, optimization_level=job.opt_level, seed_transpiler=job.compile_seed,
                     initial_layout=initial_layout)
     return isa, "fake_fez"
@@ -291,7 +292,7 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
         logical, mapping = build_nucleus_program(
             [list(row) for row in job.q], variant=variant, nuclei=[tuple(v) for v in nuclei],
             gammas=list(job.gammas), betas=list(job.betas), objective_offset=job.offset)
-    backend = _fake_fez() if options.layout is not None and job.target in DEVICE_TARGETS else None
+    backend = _device_backend(job) if options.layout is not None and job.target in DEVICE_TARGETS else None
     physical, layout = _layout(job, options, logical, backend)
     isa, cm_name = _transpile(logical, job, backend=backend, initial_layout=physical)
     if physical is not None and [int(q) for q in isa.layout.initial_index_layout(filter_ancillas=True)] != physical:
