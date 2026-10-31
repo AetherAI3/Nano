@@ -26,7 +26,12 @@ RECEIPT_KEY = b"receipt-key-" + b"0" * 20
 REQUEST_KEY = b"request-key-" + b"1" * 20
 LIVE_ENV = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1", "AETHER_AQRC_QSEARCH_PACKED": "1",
             "AETHER_AQRC_AUTHORITY_PATH": __file__}
-PENDING = (503, {"error": "job not completed", "code": "ACCOUNTING_PENDING"})
+PENDING = (503, "ACCOUNTING_PENDING")
+
+
+def _code(response):
+    status, payload = response
+    return status, payload.get("code")
 
 
 class QSearchSubmittedPending(Exception):
@@ -103,11 +108,13 @@ def test_pending_usage_is_held_then_sealed_once_with_the_settled_usage(tmp_path)
     provider = Provider(_pending, recoveries=[_pending, _settled(2.0)])
     svc = _service(tmp_path, provider)
     try:
-        assert _post(svc, body) == PENDING
+        status, held = _post(svc, body)
+        assert held == {"error": "job not completed", "code": "ACCOUNTING_PENDING", "job_id": "fake-job-1",
+                        "result": "OK", "provider_status": "DONE", "terminal": False, "usage_pending": True}
         digest = parse_request(body).request_digest
         row = svc.store.get_request(digest)
         assert row.state == "ACCEPTED" and row.attempts == 1 and _record(svc, body)["accounting"] == "pending"
-        assert _post(svc, body) == PENDING                                    # recovery: still not final
+        assert _code(_post(svc, body)) == PENDING                                    # recovery: still not final
         status, receipt = _post(svc, body)
         assert status == 200 and receipt["status"] == "OK" and len(receipt["blocks"]) == 3
         assert receipt["usage"]["quantum_seconds"] == 2.0 and receipt["usage"]["usage_pending"] is False
@@ -127,7 +134,7 @@ def test_settlement_survives_a_restart(tmp_path):
     body = _live()
     provider = Provider(_pending, recoveries=[_pending])
     svc = _service(tmp_path, provider)
-    assert _post(svc, body) == PENDING
+    assert _code(_post(svc, body)) == PENDING
     svc.close()
     svc = _service(tmp_path, provider)
     try:
@@ -146,7 +153,9 @@ def test_a_terminal_failure_with_late_usage_is_failed_with_the_settled_usage(tmp
     svc = _service(tmp_path, provider)
     try:
         assert _post(svc, body) == (503, {"error": "job not completed"})     # outcome not known yet
-        assert _post(svc, body) == PENDING                                    # FAILED, usage not final
+        status, held = _post(svc, body)                                       # FAILED, usage not final
+        assert (status, held["code"], held["terminal"], held["provider_status"]) == \
+            (503, "ACCOUNTING_PENDING_TERMINAL", True, "ERROR")
         status, receipt = _post(svc, body)
         assert status == 200 and receipt["status"] == "FAILED" and receipt["blocks"] == []
         assert receipt["usage"]["quantum_seconds"] == 0.7 and receipt["usage"]["usage_pending"] is False
@@ -180,9 +189,9 @@ def test_the_window_bounds_waiting_but_never_seals_or_gives_up(tmp_path):
     provider = Provider(_pending, recoveries=[_pending])
     svc = _service(tmp_path, provider, accounting_window_s=1.0)
     try:
-        assert _post(svc, body) == PENDING
+        assert _code(_post(svc, body)) == PENDING
         time.sleep(1.2)
-        assert _post(svc, body) == (503, {"error": "job not completed", "code": "ACCOUNTING_TIMEOUT"})
+        assert _code(_post(svc, body)) == (503, "ACCOUNTING_TIMEOUT")
         assert svc.store.get_request(parse_request(body).request_digest).state == "ACCEPTED"
         provider.recoveries = [_settled(3.0)]
         status, receipt = _post(svc, body)                                    # late accounting still lands
@@ -250,7 +259,7 @@ def test_a_receipt_sealed_pending_is_never_served_while_unsettled_or_inconsisten
     provider = Provider(_pending, recoveries=[_pending])
     svc = _service(tmp_path, provider)
     try:
-        assert _post(svc, body) == PENDING
+        assert _code(_post(svc, body)) == PENDING
         assert json.loads(svc.store.get_request(digest).receipt_json) == stale and provider.submits == 0
 
         def different(request):
@@ -310,7 +319,7 @@ def test_settled_and_resealed_receipts_verify_under_predator(tmp_path):
     expected = receipt_v2.ExpectedRequestV2.from_descriptor(body["descriptor"])
     svc = _service(tmp_path / "a", Provider(_pending, recoveries=[_settled(2.0)]))
     try:
-        assert _post(svc, body) == PENDING
+        assert _code(_post(svc, body)) == PENDING
         status, receipt = _post(svc, body)
     finally:
         svc.close()
@@ -326,3 +335,76 @@ def test_settled_and_resealed_receipts_verify_under_predator(tmp_path):
         svc.close()
     verified = receipt_v2.verify_qsearch_receipt(resealed, key=RECEIPT_KEY, expected=expected)
     assert verified.usage["usage_pending"] is False and verified.usage["quantum_seconds"] == 2.0
+
+
+# --- review #54: what a held request tells the client; settlement without live flags ------------
+
+
+class _Submitted(Exception):
+    """ATLAS's QSearchSubmittedPending shape: names the provider job."""
+
+    def __init__(self, request_id, job_id):
+        super().__init__(f"{request_id} submitted as {job_id}")
+        self.request_id, self.job_id = request_id, job_id
+
+
+_Submitted.__name__ = "QSearchSubmittedPending"
+
+
+def test_a_cancelled_job_with_zero_usage_is_held_and_reported_as_terminal(tmp_path):
+    """Reviewer's reproduction: cancelled, usage 0, four POSTs. Never sealed (never usage final at 0),
+    but every 503 names the provider job, its terminal status and the reason, so the client can record it."""
+    body = _live()
+    provider = Provider(_Submitted("req-hw0", "fake-job-1"),
+                        recoveries=[lambda r: {**_failed(0)(r), "provider_status": "CANCELLED"}])
+    svc = _service(tmp_path, provider)
+    try:
+        assert _post(svc, body) == (503, {"error": "job not completed", "code": "SUBMITTED_PENDING",
+                                          "job_id": "fake-job-1"})
+        for _ in range(3):
+            assert _post(svc, body) == (503, {"error": "job not completed", "code": "ACCOUNTING_PENDING_TERMINAL",
+                                              "job_id": "fake-job-1", "result": "FAILED",
+                                              "provider_status": "CANCELLED", "terminal": True,
+                                              "usage_pending": True, "reason": "provider: CANCELLED"})
+        row = svc.store.get_request(parse_request(body).request_digest)
+        assert row.state == "ACCEPTED" and row.receipt_json is None and provider.submits == 1
+    finally:
+        svc.close()
+
+
+def test_a_settled_historical_receipt_is_resealed_from_the_ledger_without_live_flags(tmp_path):
+    body = _live()
+    stale = _seed_sealed_pending(tmp_path, body)
+    request = parse_request(body)
+    calls = []
+    no_flags = {"AETHER_AQRC_AUTHORITY_PATH": __file__}                       # GO / LIVE absent
+    settled_view = {"value": _settled(2.0)(request)}
+
+    def settled_fn(req, **k):
+        calls.append("ledger")
+        return settled_view["value"]
+    # ATLAS's own recovery (the default) is the production path: without GO / LIVE it must not be reached.
+    runtime = IbmRuntime(compile_fn=lambda job: None, environ=no_flags, context_fn=None, request_settled_fn=settled_fn)
+    cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=tmp_path, receipt_key=RECEIPT_KEY,
+                        request_key=REQUEST_KEY, v2_enabled=True)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime)
+    try:
+        status, receipt = _post(svc, body)
+        assert status == 200 and receipt["usage"]["quantum_seconds"] == 2.0 and calls == ["ledger"]
+        record = _record(svc, body)
+        assert receipt["blocks"] == stale["blocks"] and record["reseals"][0]["previous_seal"] == stale["seal"]
+        assert "provider_metrics" in record["usage_note"]                      # 0 at completion vs settled 2.0
+    finally:
+        svc.close()
+    (tmp_path / "unsettled").mkdir()
+    _seed_sealed_pending(tmp_path / "unsettled", body)
+    settled_view["value"] = _pending(request)                                  # the row is not settled yet
+    cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=tmp_path / "unsettled", receipt_key=RECEIPT_KEY,
+                        request_key=REQUEST_KEY, v2_enabled=True)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime)
+    try:
+        status, held = _post(svc, body)
+        assert (status, held["code"], held["job_id"]) == (503, "ACCOUNTING_NEEDS_LIVE_CONTEXT", "fake-job-1")
+        assert calls == ["ledger", "ledger"]                                  # ledger read; no provider path
+    finally:
+        svc.close()

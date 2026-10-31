@@ -128,6 +128,7 @@ SubmitFn = Callable[..., Mapping[str, Any]]     # submit_fn(job, compiled, purpo
 ContextFn = Callable[..., Any]                  # context_fn(target, environ=..., service_factory=...) -> context | None
 RequestSubmitFn = Callable[..., Mapping[str, Any]]   # (request, compiled_list, purpose=, environ=, context=, ...)
 RequestRecoverFn = Callable[..., Any]                # (request, environ=, service_factory=) -> ATLAS receipt | None
+RequestSettledFn = Callable[..., Any]                # (request, environ=) -> ATLAS receipt | None; ledger only
 JobRecoverFn = Callable[..., Any]                    # (job, environ=, service_factory=) -> (ATLAS receipt | None, context)
 SubmittedProbe = Callable[..., bool]                 # (request_id, environ=) -> handed to the provider?
 _AUTO = object()
@@ -436,6 +437,27 @@ def atlas_request_recover(request: QSearchRequest, *, environ: Mapping[str, str]
     return settled_request_receipt(campaign_runtime, ledger, request.request_id, receipt)
 
 
+def atlas_request_settled(request: QSearchRequest, *,
+                          environ: Mapping[str, str] | None = None) -> Mapping[str, Any] | None:
+    """The stored final ATLAS receipt with the ledger's settled usage, read from the ledger alone.
+
+    No provider call, no live context, no flags: ATLAS ``qsearch_receipt_with_settled_usage``
+    (or, on older pins, the row's settled usage). None while the row has no final receipt;
+    ``NeverSubmitted`` when the ledger has no row. Its usage may still read pending.
+    """
+    environ = environ if environ is not None else os.environ
+    ledger = _load_ledger(environ)
+    row = ledger.get(request.request_id)
+    if row is None:
+        raise NeverSubmitted(NEVER_SUBMITTED)
+    from aether_atlas.aqrc import campaign_runtime
+    helper = getattr(campaign_runtime, SETTLED_RECEIPT_HELPER, None)
+    if helper is not None:
+        return _durable_request_receipt(helper(ledger, request.request_id))
+    receipt = _durable_request_receipt(row)
+    return None if receipt is None else with_settled_usage(receipt, row)
+
+
 def settled_request_receipt(campaign_runtime: Any, ledger: Any, request_id: str,
                             receipt: Mapping[str, Any]) -> Mapping[str, Any]:
     """The client view of a recovered ATLAS receipt with the ledger's settled usage.
@@ -480,6 +502,7 @@ class IbmRuntime:
                  environ: Mapping[str, str] | None = None, purpose: str | None = None,
                  context_fn: Any = _AUTO, request_submit_fn: RequestSubmitFn = atlas_request_submit,
                  request_recover_fn: RequestRecoverFn = atlas_request_recover,
+                 request_settled_fn: Any = _AUTO,
                  job_recover_fn: JobRecoverFn = atlas_job_recover,
                  submitted_probe: SubmittedProbe = atlas_submitted,
                  service_factory: Callable[..., Any] | None = None,
@@ -492,6 +515,9 @@ class IbmRuntime:
         self._context_fn = context_fn
         self._request_submit = request_submit_fn
         self._request_recover = request_recover_fn
+        # The ledger-only settled view belongs with ATLAS's own recovery; an injected recovery owns its own.
+        self._request_settled = ((atlas_request_settled if request_recover_fn is atlas_request_recover else None)
+                                 if request_settled_fn is _AUTO else request_settled_fn)
         self._job_recover = job_recover_fn
         self._submitted_probe = submitted_probe
         self._service_factory = service_factory
@@ -684,26 +710,47 @@ class IbmRuntime:
                                                  backend_factory=self._backend_factory, max_pubs=max_pubs)
         except RESOURCE_ERRORS as exc:          # the run did not happen; class name only
             if submission_attempted and self._handed_over(request.target, request.request_id, exc):
-                return None
+                return self._held_unknown(exc, record)
             return not_run_v2(request, f"ibm: {type(exc).__name__}")
         except Exception as exc:  # noqa: BLE001 - a verdict (BLOCKED, authority, audit); class name only
             if submission_attempted and self._handed_over(request.target, request.request_id, exc):
-                return None
+                return self._held_unknown(exc, record)
             return not_run_v2(request, f"{REFUSED_PREFIX}ibm: {type(exc).__name__}")
-        return self._final(request, self._request_body(request, atlas_receipt), record)
+        return self._final(request, self._request_body(request, atlas_receipt), record, atlas_receipt)
 
     @staticmethod
-    def _final(request: QSearchRequest, body: dict[str, Any] | None,
-               record: dict[str, Any] | None) -> dict[str, Any] | None:
-        """``body``, or None while a live result's provider usage is not final (accounting gate)."""
+    def _held_unknown(exc: BaseException, record: dict[str, Any] | None) -> None:
+        """Submitted, outcome not known: remember the provider job id when ATLAS names it (503 detail)."""
+        job_id = getattr(exc, "job_id", None)
+        if record is not None and isinstance(job_id, str) and job_id:
+            record["provider_job_id"] = job_id
+        return None
+
+    @staticmethod
+    def _final(request: QSearchRequest, body: dict[str, Any] | None, record: dict[str, Any] | None,
+               atlas_receipt: Any = None) -> dict[str, Any] | None:
+        """``body``, or None while a live result's provider usage is not final (accounting gate).
+
+        The record keeps what a client needs while the result is held: the provider job id, the
+        result (OK / FAILED), the provider's terminal status and, for FAILED, the reason. A settled
+        record notes that ``provider_metrics`` is the read at job completion (it may show 0 there).
+        """
         if body is None or request.target not in LIVE_TARGETS or body.get("status") not in ACCOUNTED_STATUSES:
             return body
         pending = body["usage"]["usage_pending"]
         if record is not None:
+            status = atlas_receipt.get("provider_status") if isinstance(atlas_receipt, Mapping) else None
             record.update(accounting="pending" if pending else "settled",
-                          provider_job_id=body["hardware"]["provider_job_id"])
+                          provider_job_id=body["hardware"]["provider_job_id"], result=body["status"],
+                          provider_status=status if isinstance(status, str) and status else
+                          ("DONE" if body["status"] == "OK" else None),
+                          reason=body.get("reason"))
             if not pending:
                 record["quantum_seconds"] = body["usage"]["quantum_seconds"]
+                record["usage_note"] = ("quantum_seconds is the ledger's settled usage; usage.provider_metrics is "
+                                        "the provider's read at job completion and may predate it")
+                if isinstance(atlas_receipt, Mapping) and "provider_usage_at_receipt" in atlas_receipt:
+                    record["provider_usage_at_receipt"] = atlas_receipt["provider_usage_at_receipt"]
         return None if pending else body
 
     def recover_request(self, request: QSearchRequest, *,
@@ -718,16 +765,36 @@ class IbmRuntime:
         """
         if request.target not in LIVE_TARGETS:
             return not_run_v2(request, "recovery: hardware requests are never run from recovery")
+        if self._request_settled is not None:
+            # Ledger only: a row already settled needs no provider call, no live context and no flags.
+            try:
+                settled = self._request_settled(request, environ=self._environ)
+            except NeverSubmitted:
+                return not_run_v2(request, NEVER_SUBMITTED)
+            except Exception:  # noqa: BLE001 - unreadable here; provider recovery decides below
+                settled = None
+            if settled is not None:
+                body = self._final(request, self._request_body(request, settled), record, settled)
+                if body is not None:
+                    return body
+        # ATLAS's own recovery resolves a live context, which needs the flags; an injected one owns its context.
+        missing = live_flags_reason(self._environ) if self._request_recover is atlas_request_recover else None
+        if missing is not None:                 # the accounting read needs the provider: say so, keep holding
+            if record is not None:
+                record["accounting_blocker"] = "needs_live_context"
+            return None
+        if record is not None:
+            record["accounting_blocker"] = None
         try:
             atlas_receipt = self._request_recover(request, environ=self._environ,
                                                   service_factory=self._service_factory)
         except NeverSubmitted:
             return not_run_v2(request, NEVER_SUBMITTED)
-        except Exception:  # noqa: BLE001 - the reservation stays held; a later recovery tries again
-            return None
+        except Exception as exc:  # noqa: BLE001 - the reservation stays held; a later recovery tries again
+            return self._held_unknown(exc, record)
         if atlas_receipt is None:
             return None
-        return self._final(request, self._request_body(request, atlas_receipt), record)
+        return self._final(request, self._request_body(request, atlas_receipt), record, atlas_receipt)
 
 
 __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DEFAULT_PURPOSE", "DRY_RUN_TARGETS",
@@ -737,5 +804,6 @@ __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DE
            "atlas_job_recover", "atlas_request_recover", "atlas_request_submit", "atlas_resolve_context",
            "atlas_submitted", "check_device_binding", "default_compile", "live_flags_reason",
            "prepare_request_identity", "settled_request_receipt", "with_settled_usage", "ACCOUNTED_STATUSES",
+           "atlas_request_settled",
            "SETTLED_RECEIPT_HELPER"]
 

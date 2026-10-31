@@ -516,6 +516,23 @@ or answered 503 until accounting settles (`RESEAL_MISMATCH` if the settled
 results would differ). FakeFez dry runs and v1 receipts (which carry no usage)
 are unchanged.
 
+While nothing is sealed the 503 says what the client can record. Outcome not
+known yet: `SUBMITTED_PENDING` with the provider `job_id` when ATLAS named it.
+Results held for accounting: `job_id`, `result` (OK / FAILED),
+`provider_status`, `terminal`, `usage_pending: true` and, for FAILED, `reason`,
+under code `ACCOUNTING_PENDING_TERMINAL` when the provider job ended FAILED
+(cancelled, errored, max time; its usage may stay 0 and is then never reported
+as final), `ACCOUNTING_PENDING` otherwise, `ACCOUNTING_TIMEOUT` after the
+window, and `ACCOUNTING_NEEDS_LIVE_CONTEXT` when the accounting read needs the
+provider but `AETHER_AQRC_HW_GO` / `AETHER_AQRC_QSEARCH_LIVE` are off. Every
+recovery first reads ATLAS's ledger-only `qsearch_receipt_with_settled_usage`
+(no provider call, no flags), so an already settled row (a historical re-seal
+included) completes without a live context; only an unsettled row goes on to
+provider recovery. In a settled receipt `usage.quantum_seconds` is the ledger's
+settled usage while `usage.provider_metrics` is the provider's read at job
+completion and may still show 0 there; `record_json` says so (`usage_note`,
+`provider_usage_at_receipt`).
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends

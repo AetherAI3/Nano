@@ -232,7 +232,9 @@ def test_zero_usage_is_held_until_atlas_settles_it_then_sealed_once(tmp_path, mo
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
     svc = _service(tmp_path, environ, provider)
     try:
-        assert _post(svc, body, "b1" * 16) == (503, {"error": "job not completed", "code": "ACCOUNTING_PENDING"})
+        status, held = _post(svc, body, "b1" * 16)
+        assert (status, held["code"], held["job_id"], held["provider_status"]) == \
+            (503, "ACCOUNTING_PENDING", "fake-fez-job-1", "DONE")
         row = ledger.get("req-p")
         assert row["usage"] is None and row["state"] == "awaiting_accounting" and row["cap"] == 10
         assert _post(svc, body, "b2" * 16)[0] == 503                          # provider still reports 0
@@ -402,7 +404,8 @@ def test_provider_error_is_pending_then_failed_never_not_run(tmp_path, monkeypat
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
     svc = _service(tmp_path, environ, provider)
     try:
-        assert _post(svc, body, "0a" * 16) == (503, {"error": "job not completed"})
+        assert _post(svc, body, "0a" * 16) == (503, {"error": "job not completed", "code": "SUBMITTED_PENDING",
+                                                    "job_id": "fake-fez-job-1"})
         digest = parse_request(body).request_digest
         assert svc.store.get_request(digest).state == "ACCEPTED" and ledger.get("req-p")["job_id"] == "fake-fez-job-1"
         assert svc.recover() == [digest]
@@ -443,5 +446,65 @@ def test_a_definite_provider_refusal_is_not_run_and_releases_the_reservation(tmp
         status, receipt = _post(svc, body, "2a" * 16)
         assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "refused: ibm: QSearchNotSubmitted"
         assert ledger.get("req-p") is None and ledger.totals()["jobs"] == 0
+    finally:
+        svc.close()
+
+
+
+def test_review_reproduction_cancelled_zero_usage_through_real_atlas(tmp_path, monkeypatch):
+    """Cancelled job, usage 0, four POSTs: never sealed, every 503 names the job and its terminal status."""
+    provider = Provider(usage=0, status="CANCELLED")
+    body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    svc = _service(tmp_path, environ, provider)
+    try:
+        status, first = _post(svc, body, "c1" * 16)
+        assert (status, first["code"], first["job_id"]) == (503, "SUBMITTED_PENDING", "fake-fez-job-1")
+        for nonce in ("c2" * 16, "c3" * 16, "c4" * 16):
+            status, held = _post(svc, body, nonce)
+            assert status == 503 and held["code"] == "ACCOUNTING_PENDING_TERMINAL" and held["terminal"] is True
+            assert held["provider_status"] == "CANCELLED" and held["job_id"] == "fake-fez-job-1"
+            assert held["reason"] == "provider: CANCELLED" and held["usage_pending"] is True
+        row = ledger.get("req-p")
+        assert row["usage"] is None and row["state"] == "awaiting_accounting" and len(provider.runs) == 1
+        assert svc.store.get_request(parse_request(body).request_digest).receipt_json is None
+    finally:
+        svc.close()
+
+
+def test_a_historical_receipt_reseals_from_the_settled_ledger_without_live_flags(tmp_path, monkeypatch):
+    """An older Nano sealed this receipt while usage was pending; ATLAS has since settled the row. A Nano
+    without GO / LIVE re-seals it from the ledger alone (qsearch_receipt_with_settled_usage)."""
+    from nano_qsearch.receipt_v2 import seal_receipt_v2
+    from nano_qsearch.store import JobStore
+    provider = Provider(usage=0)
+    body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    svc = _service(tmp_path, environ, provider)
+    try:
+        assert _post(svc, body, "d1" * 16)[0] == 503
+        provider.jobs[0]._usage = 2.0
+        status, settled = _post(svc, body, "d2" * 16)
+        assert status == 200 and settled["usage"]["quantum_seconds"] == 2.0
+    finally:
+        svc.close()
+    stale = seal_receipt_v2({**{k: v for k, v in settled.items() if k != "seal"},
+                             "usage": {**settled["usage"], "quantum_seconds": 0.0, "usage_pending": True}}, RECEIPT_KEY)
+    old = tmp_path / "old-nano"
+    store = JobStore(old / "qsearch.sqlite3")
+    request = parse_request(body)
+    store.begin_request(request.request_digest, request.request_id, json.dumps(body))
+    store.mark_request_attempt(request.request_digest)
+    store.complete_request(request.request_digest, json.dumps(stale, sort_keys=True))
+    store.close()
+    monkeypatch.delenv(GO)
+    no_flags = {k: v for k, v in environ.items() if k not in (GO, LIVE)}
+    services_before = provider.services
+    cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=old, receipt_key=RECEIPT_KEY,
+                        request_key=REQUEST_KEY, v2_enabled=True)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: IbmRuntime(environ=no_flags))
+    try:
+        status, resealed = _post(svc, body, "d3" * 16)
+        assert status == 200 and resealed["usage"]["quantum_seconds"] == 2.0
+        assert resealed["usage"]["usage_pending"] is False and resealed["blocks"] == stale["blocks"]
+        assert provider.services == services_before                    # no provider context was resolved
     finally:
         svc.close()

@@ -110,6 +110,9 @@ NOT_FOUND = {"error": "not found"}
 NOT_ENABLED = {"error": "not found", "code": "NOT_ENABLED"}
 ACCOUNTING_PENDING = {"error": "job not completed", "code": "ACCOUNTING_PENDING"}
 ACCOUNTING_TIMEOUT = {"error": "job not completed", "code": "ACCOUNTING_TIMEOUT"}
+ACCOUNTING_PENDING_TERMINAL = {"error": "job not completed", "code": "ACCOUNTING_PENDING_TERMINAL"}
+ACCOUNTING_NEEDS_LIVE_CONTEXT = {"error": "job not completed", "code": "ACCOUNTING_NEEDS_LIVE_CONTEXT"}
+SUBMITTED_PENDING = {"error": "job not completed", "code": "SUBMITTED_PENDING"}
 RESEAL_MISMATCH = {"error": "job not completed", "code": "RESEAL_MISMATCH"}
 ACCOUNTING_WINDOW_ENV = "NANO_QSEARCH_ACCOUNTING_WINDOW_S"
 DEFAULT_ACCOUNTING_WINDOW_S = 900.0
@@ -530,12 +533,33 @@ class QSearchService:
         return merged
 
     def _pending(self, record: Mapping[str, Any]) -> tuple[int, dict[str, Any]]:
-        """503: still running at the provider, or results held until accounting is final (bounded window)."""
+        """503 with what the client can record while nothing is sealed.
+
+        Outcome not known: ``SUBMITTED_PENDING`` with the provider job id when ATLAS named it (else
+        the plain body). Results held for accounting: ``ACCOUNTING_NEEDS_LIVE_CONTEXT`` (the accounting
+        read needs the live flags), else ``ACCOUNTING_TIMEOUT`` after the window, else
+        ``ACCOUNTING_PENDING_TERMINAL`` (the provider job ended FAILED: cancelled, errored, max time) or
+        ``ACCOUNTING_PENDING``; each with the job id, the result, the provider status, the reason and
+        ``terminal``. Usage is never reported final, and a zero is never a free run.
+        """
+        job_id = record.get("provider_job_id")
         if record.get("accounting") != "pending":
-            return 503, dict(NOT_COMPLETED)
+            return 503, ({**SUBMITTED_PENDING, "job_id": job_id} if isinstance(job_id, str) and job_id
+                         else dict(NOT_COMPLETED))
         since = record.get("accounting_pending_since")
         late = isinstance(since, (int, float)) and time.time() - since > self.config.accounting_window_s
-        return 503, dict(ACCOUNTING_TIMEOUT if late else ACCOUNTING_PENDING)
+        terminal = record.get("result") == "FAILED"
+        if record.get("accounting_blocker") == "needs_live_context":
+            base = ACCOUNTING_NEEDS_LIVE_CONTEXT
+        elif late:
+            base = ACCOUNTING_TIMEOUT
+        else:
+            base = ACCOUNTING_PENDING_TERMINAL if terminal else ACCOUNTING_PENDING
+        detail = {"job_id": job_id, "result": record.get("result"), "provider_status": record.get("provider_status"),
+                  "terminal": terminal, "usage_pending": True}
+        if terminal:
+            detail["reason"] = record.get("reason")
+        return 503, {**base, **detail}
 
     @staticmethod
     def _sealed_pending(receipt: Mapping[str, Any]) -> bool:
