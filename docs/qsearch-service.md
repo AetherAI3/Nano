@@ -152,7 +152,7 @@ take precedence over the environment.
 | `NANO_QSEARCH_PURPOSE` | `qsearch` | Child purpose recorded on IBM receipts, `qsearch` or `qcomms`; see [IBM](#ibm-hardware). |
 | `NANO_QSEARCH_BASIS_PREP` | unset (off) | `1`: a strictly diagonal QUBO (no coupling, no zero diagonal entry) compiles to its unique minimiser, `x` on the 1 bits then measure, instead of the QAOA layer; the output then no longer depends on `gammas`/`betas`. Other QUBOs and explicit `joint5` jobs are unchanged. See [Compile options](#compile-options). |
 | `NANO_QSEARCH_LAYOUT` | unset (off) | `target` or `calibration:<snapshot.json>`: a circuit without two-qubit gates on a Fez target (`fake_fez`, `ibm_fez`) puts logical bit `i` on the `i`-th best qubit by readout error plus half the `x` error, ranked from the transpile target's own errors (`target`) or from a calibration snapshot. See [Compile options](#compile-options). |
-| `NANO_QSEARCH_LAYOUT_BACKEND` | the job's target | Snapshot entry (`backends.<name>`) used by `NANO_QSEARCH_LAYOUT=calibration:...`, e.g. `ibm_fez` for a `fake_fez` rehearsal of a hardware layout. |
+| `NANO_QSEARCH_LAYOUT_BACKEND` | the job's target | Snapshot entry (`backends.<name>`) used by `NANO_QSEARCH_LAYOUT=calibration:...`; the only substitution allowed is `ibm_fez` for a `fake_fez` rehearsal of a hardware layout. Set with any other layout mode it is refused. |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_AUTHORITY_KEY_PATH` | unset | Host authority key for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_LEDGER_PATH` | unset | Campaign ledger (sqlite) for `ibm_fez`; see [IBM](#ibm-hardware). |
@@ -352,7 +352,10 @@ the Fez register. The snapshot format is one JSON object `{"backends": {name:
 {"num_qubits", "last_update", "readout_error": {"q": e}, "one_qubit_error":
 {"x": {"q": e}, ...}, "t1_s": {"q": s}}}}`; a qubit with a missing or
 out-of-range error or T1 is never chosen, and a snapshot without a
-`num_qubits`-matching entry for the backend is refused. The transpile keeps the
+`num_qubits`-matching entry for the backend (or an entry of another device) is
+refused. With `target`, the record carries `errors_digest`, a digest of the
+error numbers the ranking read, so two compiles that placed differently say
+why. The transpile keeps the
 chosen placement (`initial_layout`); if the transpiler moved it, the compile is
 refused. Use a snapshot fetched shortly before a hardware run: the ranking is
 only as fresh as the calibration it reads.

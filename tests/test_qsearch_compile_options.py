@@ -58,6 +58,8 @@ def test_diagonal_ground_is_the_sign_vector_and_refuses_couplings_or_zero_fields
     assert diagonal_ground([[-1.0, 0.0], [0.0, 2.0]]) == (1, 0)
     assert diagonal_ground([[-1.0, 0.5], [0.5, 2.0]]) is None
     assert diagonal_ground([[-1.0, 0.0], [0.0, 0.0]]) is None
+    with pytest.raises(ValueError):
+        diagonal_ground([[float("nan"), 0.0], [0.0, 1.0]])     # never silently read as a 0 bit
 
 
 def test_rank_qubits_orders_by_cost_and_skips_uncalibrated_qubits():
@@ -76,11 +78,14 @@ def test_from_env_parses_and_fails_closed(tmp_path):
     path.write_text(json.dumps({"backends": {"ibm_fez": _snapshot(list(range(10, 26)))}}), encoding="utf-8")
     opts = CompileOptions.from_env({LAYOUT_ENV: f"calibration:{path}", LAYOUT_BACKEND_ENV: "ibm_fez"})
     assert opts.layout == "calibration" and opts.layout_backend == "ibm_fez" and len(opts.calibration_sha256) == 64
-    for bad in ({BASIS_PREP_ENV: "yes"}, {LAYOUT_ENV: "best"}, {LAYOUT_ENV: f"calibration:{tmp_path / 'none.json'}"}):
+    for bad in ({BASIS_PREP_ENV: "yes"}, {LAYOUT_ENV: "best"}, {LAYOUT_ENV: f"calibration:{tmp_path / 'none.json'}"},
+                {LAYOUT_ENV: "target", LAYOUT_BACKEND_ENV: "ibm_kingston"}, {LAYOUT_BACKEND_ENV: "ibm_fez"}):
         with pytest.raises(ValueError):
             CompileOptions.from_env(bad)
     with pytest.raises(ValueError):
         CompileOptions(layout="calibration")             # a snapshot is required
+    with pytest.raises(ValueError):
+        CompileOptions(layout="target", layout_backend="ibm_fez")   # would be ignored, so it is refused
 
 
 # -- default stays the default --------------------------------------------------------------------------------------
@@ -142,12 +147,32 @@ def test_calibration_layout_refuses_a_snapshot_without_the_backend(four):
         compile_program(job, options=opts)
 
 
+@pytest.mark.parametrize("target", ["fake_fez", "ibm_fez"])
+def test_calibration_layout_refuses_another_devices_entry(four, target):
+    pytest.importorskip("qiskit_ibm_runtime")
+    job = replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target=target)
+    opts = CompileOptions(layout="calibration", calibration={"ibm_kingston": _snapshot([1, 2, 3, 4])},
+                          layout_backend="ibm_kingston")              # same width, another device's errors
+    with pytest.raises(ValueError, match="may not rank"):
+        compile_program(job, options=opts)
+
+
+def test_calibration_layout_refuses_a_malformed_entry(four):
+    pytest.importorskip("qiskit_ibm_runtime")
+    entry = {k: v for k, v in _snapshot([1, 2, 3, 4]).items() if k != "t1_s"}
+    job = replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="fake_fez")
+    opts = CompileOptions(layout="calibration", calibration={"fake_fez": entry})
+    with pytest.raises(ValueError, match="mappings"):
+        compile_program(job, options=opts)
+
+
 def test_target_layout_ranks_by_the_targets_own_errors_and_skips_entangled_circuits(four, pair02):
     pytest.importorskip("qiskit_ibm_runtime")
     plan = compile_program(replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="fake_fez"),
                            options=CompileOptions(basis_prep=True, layout="target"))
     layout = plan.compile_record["rewrites"]["layout"]
     assert layout["applied"] and plan.inspection["initial_layout"] == layout["physical"]
+    assert layout["errors_digest"].startswith("sha256:")               # names the calibration the target carried
     coupled = compile_program(replace(pair02, target="fake_fez"), options=CompileOptions(layout="target"))
     assert coupled.compile_record["rewrites"]["layout"] == {"mode": "target", "applied": False,
                                                             "reason": "circuit has two-qubit gates"}
