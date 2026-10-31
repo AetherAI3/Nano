@@ -97,9 +97,12 @@ SUBMITTED_STATES = ("submitted", "ambiguous_submission")
 RECOVERY_NOT_RUN = "recovery: hardware jobs are never run from recovery"
 JOB_NEVER_SUBMITTED = "recovery: job was never submitted"
 PURPOSE_ENV = "NANO_QSEARCH_PURPOSE"
-IBM_TARGETS = ("fake_fez", "ibm_fez")
+# J6 amendment A2: ibm_kingston and ibm_marrakesh are live targets with exactly ibm_fez's gates and
+# semantics (live context, device compile against that backend, never a dry run); fake_fez stays the
+# only dry-run target.
+IBM_TARGETS = ("fake_fez", "ibm_fez", "ibm_kingston", "ibm_marrakesh")
 DRY_RUN_TARGETS = ("fake_fez",)
-LIVE_TARGETS = ("ibm_fez",)
+LIVE_TARGETS = ("ibm_fez", "ibm_kingston", "ibm_marrakesh")
 PURPOSES = ("qsearch", "qcomms")
 DEFAULT_PURPOSE = "qsearch"
 REFUSED_PREFIX = "refused: "         # v2 has no REFUSED status: a verdict is a NOT_RUN with this reason prefix

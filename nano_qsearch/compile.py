@@ -16,7 +16,10 @@ instructions), not FakeFez, checked against it instruction by instruction, and
 frozen: the backend name and ``target_digest`` (a digest of the target's
 structure) ride in the ISA's metadata, so the QPY bytes bind them, and in the
 plan digest. ``fake_fez`` and ``heron_heavy_hex`` compile exactly as before;
-one function, the target source chosen by the job's target.
+one function, the target source chosen by the job's target. J6 amendment A2:
+``ibm_kingston`` and ``ibm_marrakesh`` take the same device path and compile
+only against their resolved live backend (no fake stands in for them); a
+calibration layout ranks their own snapshot entry.
 
 Two rewrites are available and off by default (``CompileOptions``, read from
 the environment when no options are passed): ``basis_prep`` prepares the unique
@@ -46,7 +49,9 @@ HEAVY_HEX_DISTANCES = (3, 5, 7, 9, 11)
 PLAN_SCHEMA = "nano.qsearch.compiled-plan.v1"
 QPY_CIRCUIT_NAME = "nano.qsearch.isa"
 TARGET_SCHEMA = "nano.qsearch.device-target.v1"
-DEVICE_TARGETS = ("ibm_fez",)          # targets compiled against a resolved live backend when one is given
+DEVICE_TARGETS = ("ibm_fez", "ibm_kingston", "ibm_marrakesh")   # compiled against a resolved live backend when one is given
+# J6 amendment A2: no fake backend stands in for these two; they compile only against their resolved live backend.
+LIVE_ONLY_TARGETS = ("ibm_kingston", "ibm_marrakesh")
 TARGET_METADATA_KEY = "nano_device_target"
 _UNCHECKED_OPS = frozenset({"barrier"})
 
@@ -75,7 +80,9 @@ LAYOUT_BACKEND_ENV = "NANO_QSEARCH_LAYOUT_BACKEND"
 CALIBRATION_PREFIX = "calibration:"
 LAYOUT_MODES = ("target", "calibration")
 FEZ_TARGETS = ("fake_fez", "ibm_fez")      # targets whose physical qubits are the Fez register
-SNAPSHOT_ENTRIES = {"fake_fez": ("fake_fez", "ibm_fez"), "ibm_fez": ("ibm_fez",)}   # entries a target may rank from
+CALIBRATED_TARGETS = FEZ_TARGETS + LIVE_ONLY_TARGETS   # targets with a device calibration a layout may rank
+SNAPSHOT_ENTRIES = {"fake_fez": ("fake_fez", "ibm_fez"), "ibm_fez": ("ibm_fez",),     # entries a target may rank from
+                    "ibm_kingston": ("ibm_kingston",), "ibm_marrakesh": ("ibm_marrakesh",)}
 
 
 class TargetUnavailable(RuntimeError):
@@ -341,7 +348,7 @@ def _layout(job: QSearchJob, options: CompileOptions, logical, backend) -> tuple
     if options.layout is None:
         return None, {"mode": "off"}
     info: dict[str, Any] = {"mode": options.layout}
-    if job.target not in FEZ_TARGETS:
+    if job.target not in CALIBRATED_TARGETS:
         return None, {**info, "applied": False, "reason": "target has no device calibration"}
     if _two_qubit_count(logical):
         return None, {**info, "applied": False, "reason": "circuit has two-qubit gates"}
@@ -412,8 +419,12 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
 
 
 def _device_backend(job: QSearchJob, backend: Any) -> Any:
-    """The backend to compile against, or None for the FakeFez / heavy-hex path; refuse a mismatched one."""
+    """The backend to compile against, or None for the FakeFez / heavy-hex path; refuse a mismatched one.
+
+    A live-only target (``LIVE_ONLY_TARGETS``) without a backend is refused: nothing may stand in for it."""
     if backend is None:
+        if job.target in LIVE_ONLY_TARGETS:
+            raise ValueError(f"{job.target} compiles only against its resolved live backend")
         return None
     if job.target not in DEVICE_TARGETS:
         raise ValueError(f"a live backend applies only to targets {list(DEVICE_TARGETS)}")
@@ -484,7 +495,8 @@ def compile_jobs(jobs: Any, *, backend: Any = None, options: CompileOptions | No
     return [compile_program(job, backend=frozen, options=options, fez=fez) for job in jobs]
 
 
-__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram", "DEVICE_TARGETS",
-           "FEZ_TARGETS", "FrozenTarget", "compile_jobs", "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV", "LAYOUT_ENV", "LAYOUT_MODES", "PLAN_SCHEMA",
+__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATED_TARGETS", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram",
+           "DEVICE_TARGETS", "FEZ_TARGETS", "FrozenTarget", "compile_jobs", "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV",
+           "LAYOUT_ENV", "LAYOUT_MODES", "LIVE_ONLY_TARGETS", "PLAN_SCHEMA",
            "SNAPSHOT_ENTRIES", "TARGET_METADATA_KEY", "TARGET_SCHEMA", "TargetUnavailable", "check_isa",
            "compile_program", "diagonal_ground", "heavy_hex_map", "rank_qubits", "target_digest"]

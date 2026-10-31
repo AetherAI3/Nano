@@ -12,7 +12,8 @@ fields, 1..``max_blocks`` blocks (default ``MAX_BLOCKS``; the service passes
 ``NANO_QSEARCH_V2_MAX_PUBS``, at most ``MAX_BLOCKS_LIMIT``), no repeated job or ``(agent_id, chunk)``
 recipient, and every job must agree with its block (``job_digest``, ``n``,
 ``shots``, ``seed`` = the job's backend seed, ``classical_min_energy``), be an
-``ibm`` job on the descriptor's one ``target``, and (ibm_fez) the jobs'
+``ibm`` job on the descriptor's one ``target``, and (a live target: ibm_fez,
+or since J6 A2 ibm_kingston / ibm_marrakesh) the jobs'
 ``limits.max_qpu_s`` must together allow ``descriptor.max_execution_time``.
 A body that fails here gets no receipt (the service answers 400).
 """
@@ -29,14 +30,14 @@ from .canonical import canonical_digest, validate_digest
 from .job import JobValidationError, QSearchJob, parse_job
 
 REQUEST_SCHEMA = "predator.qsearch.request.v2"
-REQUEST_TARGETS = ("fake_fez", "ibm_fez")
+REQUEST_TARGETS = ("fake_fez", "ibm_fez", "ibm_kingston", "ibm_marrakesh")   # J6 A2 adds the last two (live)
 REQUEST_PURPOSES = ("qsearch", "qcomms")
 MAX_BLOCKS = 16                      # default: one Q-stage request of PredatorCampaignV2's default Q cap
 MAX_BLOCKS_LIMIT = 4096              # the most NANO_QSEARCH_V2_MAX_PUBS may admit (J6 preregistration §3)
 MAX_PUBS_ENV = "NANO_QSEARCH_V2_MAX_PUBS"
 MAX_EXECUTION_TIME_S = 600           # ATLAS QSEARCH_CAP_SECONDS
 REQUEST_BACKEND_KIND = "ibm"
-LIMITED_TARGETS = ("ibm_fez",)       # a FakeFez dry run spends nothing, so its jobs need grant no QPU seconds
+LIMITED_TARGETS = ("ibm_fez", "ibm_kingston", "ibm_marrakesh")   # a FakeFez dry run spends nothing, so its jobs need grant no QPU seconds
 _REQUEST_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 _BODY_KEYS = frozenset({"schema", "descriptor", "jobs"})
 _DESCRIPTOR_KEYS = frozenset({"schema", "request_id", "target", "purpose", "max_execution_time", "manifest_digest",
