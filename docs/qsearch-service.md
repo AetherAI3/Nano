@@ -417,6 +417,27 @@ again but re-attached on restart (or repeat) through ATLAS
 done. Because ATLAS fingerprints the ISA bytes into the request identity, the
 operator's plan-scoped authority names a `request_sha256` that is only known
 after compiling against the live target (`runtime_ibm.prepare_request_identity`).
+Nano passes the request digest to ATLAS (`client_request_digest`), and the
+receipt's `hardware.job_tags` are ATLAS's effective tags (recovery tag first).
+
+Amendment R3. **Flags first (M3):** an ibm_fez request needs
+`AETHER_AQRC_HW_GO=1`, `AETHER_AQRC_QSEARCH_LIVE=1` and, above one PUB,
+`AETHER_AQRC_QSEARCH_PACKED=1` in Nano's environment before any live context is
+resolved (otherwise NOT_RUN `refused: ibm: <FLAG>=1 is required`; no
+`QiskitRuntimeService` is built). **Submitted means never NOT_RUN (H1):** once
+ATLAS has handed the request to the provider (`QSearchSubmittedPending`, or a
+ledger row with a job id or an ambiguous submission) nothing is sealed: the
+answer is 503, the row stays ACCEPTED, and the request finishes through ATLAS
+recovery as OK or **`FAILED`** (provider ERROR / CANCELLED / max time, or a
+result that does not audit): `blocks: []`, `block_count: 0`, `reason`
+(`provider: <status>` or `refused: ibm: <Class>`), `hardware` with the provider
+job id, `usage`, hardware seal. A reservation ATLAS released (definite provider
+refusal, or an operator release of an ambiguous row) completes as NOT_RUN. **v1
+singletons (H1, L1)** follow the same rule with v1 statuses: a submitted job
+answers 503 until recovery; on a repeat or restart `IbmRuntime.recover_job`
+re-attaches it through ATLAS, recompiles against the live target and requires
+the submitted child's compiled plan digest (else REFUSED); a provider failure
+is REFUSED `ibm: provider job failed`.
 
 ## Predator side
 

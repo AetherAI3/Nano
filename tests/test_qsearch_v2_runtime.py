@@ -103,7 +103,8 @@ def atlas(monkeypatch, tmp_path):
     authority.write_text(json.dumps({"body": {"scope": "plan"}}), encoding="utf-8")
     (tmp_path / "authority.key").write_bytes(b"k" * 32)
     (tmp_path / "ledger.sqlite").write_bytes(b"")
-    state.environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_AUTHORITY_PATH": str(authority),
+    state.environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1", "AETHER_AQRC_QSEARCH_PACKED": "1",
+                     "AETHER_AQRC_AUTHORITY_PATH": str(authority),
                      "AETHER_AQRC_AUTHORITY_KEY_PATH": str(tmp_path / "authority.key"),
                      "AETHER_AQRC_LEDGER_PATH": str(tmp_path / "ledger.sqlite")}
     return state
@@ -185,7 +186,8 @@ def test_live_context_is_resolved_once_and_compile_gets_its_backend(atlas):
     assert [c[0] for c in atlas.calls] == ["context", "child", "child", "request", "submit"]
     assert atlas.calls[0][1] == {"service_factory": "svc", "environ": atlas.environ}
     assert [c[1]["max_execution_time"] for c in atlas.calls if c[0] == "child"] == [10, 10]
-    assert atlas.calls[3] == ("request", 2, {"request_id": "req-hw0", "max_execution_time": 10})
+    assert atlas.calls[3] == ("request", 2, {"request_id": "req-hw0", "max_execution_time": 10,
+                                             "client_request_digest": request.request_digest})
     submit_kw = atlas.calls[4][2]
     assert submit_kw["context"] is atlas.context and submit_kw["sampler_factory"] is sampler
     assert submit_kw["authority"] == {"body": {"scope": "plan"}} and submit_kw["authority_key"] == b"k" * 32

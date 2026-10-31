@@ -72,12 +72,14 @@ def test_descriptor_digest_and_canonical_json_agree_with_predator():
 def test_ok_receipts_verify_under_predator(tmp_path, target):
     authority = tmp_path / "authority.json"
     authority.write_text("{}", encoding="utf-8")              # Nano's gate needs the file; the delegate is fake
-    environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_AUTHORITY_PATH": str(authority)}
+    environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1", "AETHER_AQRC_QSEARCH_PACKED": "1",
+               "AETHER_AQRC_AUTHORITY_PATH": str(authority)}
     body = request_body(3, target=target, max_qpu_s=5, max_execution_time=10)
     receipt = _sealed(tmp_path / "svc", body, _delegate(), environ)
     assert receipt["status"] == "OK", receipt
     expected = receipt_v2.ExpectedRequestV2.from_descriptor(body["descriptor"])
-    verified = receipt_v2.verify_qsearch_receipt(receipt, key=RECEIPT_KEY, expected=expected)
+    jobs = [_predator_job(job) for job in body["jobs"]]
+    verified = receipt_v2.verify_qsearch_receipt(receipt, key=RECEIPT_KEY, expected=expected, jobs=jobs)
     assert verified.status == "OK" and len(verified.blocks) == 3
     assert [b.job_digest for b in verified.blocks] == [j["job_digest"] for j in body["jobs"]]
     assert all(b.agree for b in verified.blocks)
@@ -170,6 +172,80 @@ def test_predator_submit_request_round_trips_through_nano(tmp_path):
         assert verified.status == "OK", verified.reason
         assert [b.block_index for b in verified.blocks] == [0, 1, 2]
         assert svc.store.get_request(expected.request_digest).state == "DONE"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+        svc.close()
+
+
+# --- R3 H1: FAILED parity ------------------------------------------------------------------------
+
+_HAS_FAILED = "FAILED" in getattr(receipt_v2, "_STATUSES", ())
+
+
+def _failed_atlas_receipt(request):
+    receipt = atlas_request_receipt(request, usage=0.7)
+    receipt.update(status="FAILED", pubs=[], provider_status="ERROR", reason="provider job ended ERROR")
+    return receipt
+
+
+@pytest.mark.skipif(not _HAS_FAILED, reason="Predator checkout predates the R3 FAILED status")
+def test_failed_receipts_verify_under_predator(tmp_path):
+    authority = tmp_path / "authority.json"
+    authority.write_text("{}", encoding="utf-8")
+    environ = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1", "AETHER_AQRC_QSEARCH_PACKED": "1",
+               "AETHER_AQRC_AUTHORITY_PATH": str(authority)}
+    body = request_body(3, target="ibm_fez", max_qpu_s=5, max_execution_time=10)
+    receipt = _sealed(tmp_path / "svc", body, lambda request, compiled, **kw: _failed_atlas_receipt(request), environ)
+    assert receipt["status"] == "FAILED"
+    expected = receipt_v2.ExpectedRequestV2.from_descriptor(body["descriptor"])
+    verified = receipt_v2.verify_qsearch_receipt(receipt, key=RECEIPT_KEY, expected=expected)
+    assert verified.status == "FAILED" and verified.blocks == () and verified.reason == "provider: ERROR"
+    assert verified.hardware["provider_job_id"] == "fake-job-1" and verified.usage["quantum_seconds"] == 0.7
+    tampered = copy.deepcopy(receipt)
+    tampered["status"] = "NOT_RUN"                                     # a submitted job never reads NOT_RUN
+    with pytest.raises(StageRefusal):
+        receipt_v2.verify_qsearch_receipt(tampered, key=RECEIPT_KEY, expected=expected)
+
+
+@pytest.mark.skipif(not _HAS_FAILED, reason="Predator checkout predates the R3 FAILED status")
+def test_predator_client_sees_pending_then_failed_through_nano(tmp_path):
+    authority = tmp_path / "authority.json"
+    authority.write_text("{}", encoding="utf-8")
+    body = request_body(3, target="ibm_fez", max_qpu_s=5, max_execution_time=10)
+    jobs = [_predator_job(job) for job in body["jobs"]]
+    expected = receipt_v2.ExpectedRequestV2.from_descriptor(body["descriptor"])
+    grant = PackedGrantV1.from_payload(seal_packed_grant(
+        {"schema": "predator.qsearch.packed-grant.v1", "grant_id": "hw0-nano-r3", "issued_at": _stamp(-60),
+         "expires_at": _stamp(3600), "request_digest": expected.request_digest, "target": "ibm_fez",
+         "pub_count": 3, "max_execution_time": 10, "max_qpu_s": 15, "issuer": "nano-test"}, GRANT_KEY), key=GRANT_KEY)
+    done = []
+
+    class QSearchSubmittedPending(Exception):
+        pass
+
+    def submit(request, compiled, **kw):
+        raise QSearchSubmittedPending("req-hw0", "fake-job-1")
+    runtime = IbmRuntime(compile_fn=lambda job: None, request_submit_fn=submit,
+                         request_recover_fn=lambda request, **kw: _failed_atlas_receipt(request) if done else None,
+                         environ={"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1",
+                                  "AETHER_AQRC_QSEARCH_PACKED": "1", "AETHER_AQRC_AUTHORITY_PATH": str(authority)})
+    cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=tmp_path / "svc", receipt_key=RECEIPT_KEY,
+                        request_key=REQUEST_KEY, v2_enabled=True)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime)
+    server, thread = serve_in_thread(svc)
+    try:
+        client = qsearch_backend.NanoRuntimeQSearchBackend(f"http://127.0.0.1:{server.server_port}",
+                                                          key=RECEIPT_KEY, opener=_signing_opener(REQUEST_KEY))
+        packed = {"PREDATOR_QSEARCH_PACKED": "1"}
+        with pytest.raises(StageRefusal) as pending:
+            client.submit_request(expected, jobs, grant=grant, environ=packed)
+        assert pending.value.code == "QSEARCH_PENDING"                 # 503 is pending, never an outcome
+        assert svc.store.get_request(expected.request_digest).state == "ACCEPTED"
+        done.append(True)
+        verified = client.submit_request(expected, jobs, grant=grant, environ=packed)
+        assert verified.status == "FAILED" and verified.blocks == () and verified.reason == "provider: ERROR"
     finally:
         server.shutdown()
         server.server_close()

@@ -37,6 +37,14 @@ was already used is never submitted again: it is re-attached through
 ``IbmRuntime.recover_request`` (ATLAS ``recover_qsearch_submission``) and
 stays pending (503) until the provider job is done. ``recover()`` does the
 same for every ACCEPTED request on startup.
+
+Amendment R3 H1 / L1: a job or request that reached the provider is never
+sealed NOT_RUN. When the IBM runtime returns None (submitted, outcome not
+known yet) the row stays ACCEPTED with its attempt used and the caller gets
+503; a repeat or a restart re-attaches it through ATLAS recovery
+(``IbmRuntime.recover_job`` for v1, ``recover_request`` for v2), which yields
+the receipt (v2: OK or FAILED) or keeps it pending. A runtime without
+``recover_job`` keeps the v1 rule that hardware jobs are never run from recovery.
 """
 from __future__ import annotations
 
@@ -282,15 +290,21 @@ class QSearchService:
             return f"limits: compile.seed outside 0..{SEED_MAX}"
         return None
 
-    def _sealed(self, job: QSearchJob, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-        """Seal the receipt ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only."""
+    def _sealed(self, job: QSearchJob, build: Callable[[], dict[str, Any] | None]) -> dict[str, Any] | None:
+        """Seal the receipt ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only.
+
+        None from ``build()`` means the job reached the provider and is still pending: nothing is sealed.
+        """
         try:
-            return seal_receipt(build(), self.config.receipt_key)
+            unsigned = build()
+            if unsigned is None:
+                return None
+            return seal_receipt(unsigned, self.config.receipt_key)
         except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
             _log(f"job {job.job_digest} not run: {type(exc).__name__}")
             return seal_receipt(not_run_receipt(job, f"service: {type(exc).__name__}"), self.config.receipt_key)
 
-    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any]:
+    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any] | None:
         """Refuse or run one job on runtime ``kind`` and return the SEALED receipt.
 
         A refusal needs no slot and records no attempt. A run waits for a concurrency slot
@@ -305,17 +319,23 @@ class QSearchService:
             self.store.mark_attempt(job.job_digest)
             return self._sealed(job, lambda: self._runtime(kind).run(job))
 
-    def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any]:
-        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt.
+    def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any] | None:
+        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt,
+        or None while a job that reached the provider is still pending.
 
         The runtime kind is the one recorded when the job was accepted; rows from before
-        that column existed fall back to the current service backend.
+        that column existed fall back to the current service backend. A resumed IBM job is
+        never run again: a runtime with ``recover_job`` re-attaches it (L1), any other
+        completes it as NOT_RUN.
         """
         kind = record.kind or select_kind(self.config.backend, job)
         resuming = recovering or record.attempts > 0
         if record.attempts >= MAX_ATTEMPTS:
             unsigned = not_run_receipt(job, "recovery: attempt limit reached")
         elif resuming and kind == "ibm":
+            recover = getattr(self._runtime(kind), "recover_job", None)
+            if recover is not None:
+                return self._sealed(job, lambda: recover(job))
             unsigned = not_run_receipt(job, "recovery: hardware jobs are never run from recovery")
         else:
             return self._execute(job, kind)
@@ -357,6 +377,8 @@ class QSearchService:
             record = self.store.begin(job.job_digest, canonical_json(job.payload),
                                       kind=select_kind(self.config.backend, job))
             sealed = self._attempt(job, record, recovering=recovering)
+            if sealed is None:                 # reached the provider, outcome not known yet: stays ACCEPTED
+                return 503, dict(NOT_COMPLETED)
             return self._complete(job, sealed)
         except Exception as exc:  # noqa: BLE001 - the store failed; the row stays ACCEPTED for a later attempt
             _log(f"job {job.job_digest} not completed: {type(exc).__name__}")
@@ -399,10 +421,17 @@ class QSearchService:
 
     # --- v2 requests ---------------------------------------------------------------------------
 
-    def _sealed_v2(self, request: QSearchRequest, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-        """Seal the v2 body ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only."""
+    def _sealed_v2(self, request: QSearchRequest,
+                   build: Callable[[], dict[str, Any] | None]) -> dict[str, Any] | None:
+        """Seal the v2 body ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only.
+
+        None from ``build()`` means the request reached the provider and is still pending: nothing is sealed.
+        """
         try:
-            return seal_receipt_v2(build(), self.config.receipt_key)
+            unsigned = build()
+            if unsigned is None:
+                return None
+            return seal_receipt_v2(unsigned, self.config.receipt_key)
         except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
             _log(f"request {request.request_digest} not run: {type(exc).__name__}")
             return seal_receipt_v2(not_run_v2(request, f"service: {type(exc).__name__}"), self.config.receipt_key)
@@ -429,8 +458,7 @@ class QSearchService:
         """
         runtime = self._runtime(REQUEST_RUNTIME_KIND)
         if resuming:
-            unsigned = runtime.recover_request(request)
-            return None if unsigned is None else self._sealed_v2(request, lambda: unsigned)
+            return self._sealed_v2(request, lambda: runtime.recover_request(request))
         reason = self._request_cap_violation(request)
         if reason is not None:
             return self._sealed_v2(request, lambda: not_run_v2(request, "refused: " + reason))

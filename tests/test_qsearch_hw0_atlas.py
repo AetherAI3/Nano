@@ -10,6 +10,7 @@ sets ``AETHER_AQRC_HW_GO`` and ``AETHER_AQRC_QSEARCH_LIVE`` together.
 """
 import json
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -53,8 +54,9 @@ class _Crash(BaseException):
 class Provider:
     """The fake IBM side: one ``ibm_fez`` backend with a non-FakeFez target, a job store and a sampler."""
 
-    def __init__(self, *, usage=2.0, crash_result=False):
+    def __init__(self, *, usage=2.0, crash_result=False, status="DONE", run_error=None):
         self.jobs, self.usage, self.crash_result = [], usage, crash_result
+        self.status, self.run_error = status, run_error
         self.constructed, self.runs, self.services = [], [], 0
 
     # -- QiskitRuntimeService stand-in, built by service_factory(args) --
@@ -62,7 +64,8 @@ class Provider:
         self.services += 1
         service = SimpleNamespace()
         backend = SimpleNamespace(name="ibm_fez", _instance=args.instance, service=service, target=_TARGET,
-                                  options=SimpleNamespace(use_fractional_gates=False))
+                                  options=SimpleNamespace(use_fractional_gates=False),
+                                  status=lambda: SimpleNamespace(operational=True, status_msg="active"))
         service.backend = lambda name, *, instance, use_fractional_gates: backend
         service.active_instance = lambda: INSTANCE
         service.usage = lambda: {"usage_remaining_seconds": 600.0}
@@ -87,16 +90,20 @@ class Provider:
     def _run(self, sampler, pubs, shots):
         pubs = [pub if isinstance(pub, tuple) else (pub, None, shots) for pub in pubs]
         self.runs.append(pubs)
-        job = FakeJob(f"fake-fez-job-{len(self.runs)}", pubs, sampler.options.environment.job_tags[0],
-                      usage=self.usage, crash_result=self.crash_result)
+        if self.run_error is not None:
+            raise self.run_error
+        job = FakeJob(f"fake-fez-job-{len(self.runs)}", pubs, list(sampler.options.environment.job_tags),
+                      usage=self.usage, crash_result=self.crash_result, status=self.status)
         self.jobs.append(job)
         return job
 
 
 class FakeJob:
-    def __init__(self, job_id, pubs, tag, *, usage, crash_result):
+    def __init__(self, job_id, pubs, tags, *, usage, crash_result, status="DONE"):
         self._id, self._pubs, self._usage, self.crash_result = job_id, list(pubs), usage, crash_result
-        self.tags, self.instance, self.inputs = [tag], INSTANCE, {"pubs": [list(p) for p in pubs]}
+        self._status = status
+        self.tags, self.instance, self.inputs = list(tags), INSTANCE, {"pubs": [list(p) for p in pubs]}
+        self.creation_date = datetime.now(timezone.utc)
 
     def job_id(self):
         return self._id
@@ -105,7 +112,10 @@ class FakeJob:
         return SimpleNamespace(name="ibm_fez")
 
     def status(self):
-        return "DONE"
+        return self._status
+
+    def error_message(self):
+        return "Job ran longer than the max_execution_time (free provider text)"
 
     def usage(self):
         return self._usage
@@ -114,6 +124,8 @@ class FakeJob:
         return {"usage": {"quantum_seconds": self._usage}}
 
     def result(self):
+        if self._status != "DONE":
+            raise RuntimeError("provider job failed")
         if self.crash_result:
             self.crash_result = False
             raise _Crash()
@@ -145,7 +157,8 @@ def _authorize(tmp_path, ledger, subject):
                                 max_seconds=60, expires_at=int(time.time()) + 600, operator="offline-test")
     (tmp_path / "authority.json").write_text(json.dumps(token), encoding="utf-8")
     (tmp_path / "authority.key").write_bytes(AUTHORITY_KEY)
-    return {GO: "1", "AETHER_AQRC_AUTHORITY_PATH": str(tmp_path / "authority.json"),
+    # LIVE in Nano's own environ (R3 M3); every runtime built from it injects the fake service and sampler.
+    return {GO: "1", LIVE: "1", PACKED: "1", "AETHER_AQRC_AUTHORITY_PATH": str(tmp_path / "authority.json"),
             "AETHER_AQRC_AUTHORITY_KEY_PATH": str(tmp_path / "authority.key"),
             "AETHER_AQRC_LEDGER_PATH": str(tmp_path / "ledger.sqlite")}
 
@@ -196,11 +209,13 @@ def test_packed_request_runs_once_with_its_limit_and_tag_and_reserves_exactly_th
         assert status == 200 and receipt["status"] == "OK", receipt
         verify_seal_v2(receipt, RECEIPT_KEY)
         tag = "atlas-qsearch-req-req-p"
-        assert provider.constructed == [{"max_execution_time": 10, "environment": {"job_tags": [tag]}}]
+        [options] = provider.constructed
+        tags = options["environment"]["job_tags"]
+        assert options["max_execution_time"] == 10 and tags[0] == tag
         assert len(provider.runs) == 1 and len(provider.runs[0]) == 3          # one sampler.run, three PUBs
         row = ledger.get("req-p")
         assert (row["cap"], row["pubs"], row["state"], row["usage"]) == (10, 3, "done", 2.0)
-        assert receipt["hardware"]["job_tags"] == [tag] and receipt["hardware"]["max_execution_time"] == 10
+        assert receipt["hardware"]["job_tags"] == tags and receipt["hardware"]["max_execution_time"] == 10
         assert receipt["hardware"]["provider_job_id"] == "fake-fez-job-1" and receipt["backend"]["dry_run"] is False
         assert receipt["usage"]["quantum_seconds"] == 2.0 and receipt["usage"]["usage_pending"] is False
         assert [b["job_digest"] for b in receipt["blocks"]] == [j["job_digest"] for j in body["jobs"]]
@@ -249,7 +264,8 @@ def test_singletons_carry_their_5s_limit_through_v2_and_v1(tmp_path, monkeypatch
                          sampler_factory=provider.sampler_factory, purpose="qsearch").run(job)
     assert receipt["status"] == "OK", receipt
     tag = child["envelope"]["recovery_tag"]
-    assert provider.constructed[-1] == {"max_execution_time": 5, "environment": {"job_tags": [tag]}}
+    assert provider.constructed[-1]["max_execution_time"] == 5
+    assert provider.constructed[-1]["environment"]["job_tags"][0] == tag
     assert ledger1.get(job.job_digest[7:47])["cap"] == 5 and receipt["compile"]["coupling_map"] == "target:ibm_fez"
 
 
@@ -324,6 +340,7 @@ def test_hardware_unreachable_when_any_flag_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(qiskit_ibm_runtime, "QiskitRuntimeService", tripwire("QiskitRuntimeService"))
     provider = Provider()
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    services_before = provider.services               # the operator's identity step resolved one fake context
     monkeypatch.delenv(GO)
     monkeypatch.delenv(PACKED)
 
@@ -333,24 +350,86 @@ def test_hardware_unreachable_when_any_flag_is_missing(tmp_path, monkeypatch):
                             receipt_key=RECEIPT_KEY, request_key=REQUEST_KEY, v2_enabled=True)
         return QSearchService(cfg, runtime_factory=lambda kind: IbmRuntime(environ=env))
 
+    no_go = {k: v for k, v in environ.items() if k != GO}
+    no_live = {k: v for k, v in environ.items() if k != LIVE}
+    no_packed = {k: v for k, v in environ.items() if k != PACKED}
     # NANO_QSEARCH_V2 missing: 404 before anything is parsed.
     svc = _service(tmp_path, environ, provider, v2=False)
     assert _post(svc, body, "f1" * 16) == (404, NOT_ENABLED)
     svc.close()
     # GO missing: Nano's own gate.
-    svc = production({k: v for k, v in environ.items() if k != GO}, "no-go")
+    svc = production(no_go, "no-go")
     status, receipt = _post(svc, body, "f2" * 16)
     assert receipt["status"] == "NOT_RUN" and receipt["reason"] == f"refused: ibm: {GO}=1 is required"
     svc.close()
-    # LIVE missing (GO set): ATLAS refuses to build a live context; no service, no sampler.
+    # LIVE missing (GO set): Nano refuses before resolving any live context (R3 M3).
     monkeypatch.setenv(GO, "1")
-    svc = production(environ, "no-live")
+    svc = production(no_live, "no-live")
     status, receipt = _post(svc, body, "f3" * 16)
-    assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "refused: ibm: RuntimeError"
+    assert receipt["status"] == "NOT_RUN" and receipt["reason"] == f"refused: ibm: {LIVE}=1 is required"
     svc.close()
-    # PACKED missing (GO set, fakes injected so LIVE is never needed): ATLAS refuses before any sampler.
-    svc = _service(tmp_path, environ, provider)
+    # PACKED missing (GO and LIVE set, so the fakes are injected): Nano refuses before any context too.
+    svc = _service(tmp_path, no_packed, provider)
     status, receipt = _post(svc, body, "f4" * 16)
+    assert receipt["status"] == "NOT_RUN" and receipt["reason"].startswith(f"refused: ibm: {PACKED}=1 is required")
+    svc.close()
+    # And ATLAS's own PACKED gate still holds when only Nano's flag is set (os.environ lacks it).
+    svc = _service(tmp_path / "atlas-packed", environ, provider)
+    status, receipt = _post(svc, body, "f5" * 16)
     assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "refused: ibm: RuntimeError"
     svc.close()
     assert touched == [] and provider.constructed == [] and provider.runs == [] and ledger.totals()["jobs"] == 0
+    assert provider.services == services_before + 1    # only the ATLAS-gate case resolved a (fake) context
+
+
+# --- R3 H1: a submitted request is never NOT_RUN ------------------------------------------------
+
+
+def test_provider_error_is_pending_then_failed_never_not_run(tmp_path, monkeypatch):
+    provider = Provider(usage=0.7, status="ERROR")
+    body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    svc = _service(tmp_path, environ, provider)
+    try:
+        assert _post(svc, body, "0a" * 16) == (503, {"error": "job not completed"})
+        digest = parse_request(body).request_digest
+        assert svc.store.get_request(digest).state == "ACCEPTED" and ledger.get("req-p")["job_id"] == "fake-fez-job-1"
+        assert svc.recover() == [digest]
+        status, receipt = _post(svc, body, "0b" * 16)
+        assert status == 200 and receipt["status"] == "FAILED" and receipt["blocks"] == []
+        assert receipt["reason"] == "provider: ERROR" and "free provider text" not in json.dumps(receipt)
+        assert receipt["hardware"]["provider_job_id"] == "fake-fez-job-1" and receipt["request"]["block_count"] == 0
+        assert receipt["usage"]["quantum_seconds"] == 0.7 and receipt["usage"]["usage_pending"] is False
+        verify_seal_v2(receipt, RECEIPT_KEY)
+        assert ledger.get("req-p")["usage"] == 0.7 and len(provider.runs) == 1
+    finally:
+        svc.close()
+
+
+def test_an_ambiguous_submission_stays_pending_until_released(tmp_path, monkeypatch):
+    provider = Provider(run_error=ConnectionError("socket closed mid-request"))
+    body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    svc = _service(tmp_path, environ, provider)
+    try:
+        assert _post(svc, body, "1a" * 16)[0] == 503
+        assert ledger.get("req-p")["state"] == "ambiguous_submission"
+        assert svc.recover() == [] and _post(svc, body, "1b" * 16)[0] == 503      # no job found by tag yet
+        ledger.release_unsubmitted("req-p", reason="operator: zero-match tag lookup after grace")
+        assert svc.recover() == [parse_request(body).request_digest]
+        status, receipt = _post(svc, body, "1c" * 16)
+        assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "recovery: request was never submitted"
+    finally:
+        svc.close()
+    assert len(provider.runs) == 1
+
+
+def test_a_definite_provider_refusal_is_not_run_and_releases_the_reservation(tmp_path, monkeypatch):
+    from qiskit_ibm_runtime.exceptions import IBMInputValueError
+    provider = Provider(run_error=IBMInputValueError("circuit is not ISA for this target"))
+    body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
+    svc = _service(tmp_path, environ, provider)
+    try:
+        status, receipt = _post(svc, body, "2a" * 16)
+        assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "refused: ibm: QSearchNotSubmitted"
+        assert ledger.get("req-p") is None and ledger.totals()["jobs"] == 0
+    finally:
+        svc.close()

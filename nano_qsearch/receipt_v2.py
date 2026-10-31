@@ -11,10 +11,13 @@ re-energised and a best below the classical floor refuses the whole request);
 
 Counts are keyed by the **raw display strings** (``msb_first``: ``bits[-1 - i]``
 is ``x[i]``) of the ordered samples, so ``sum(counts) == shots`` per block.
-v2 is all-or-nothing: a request that did not produce every block is
-``NOT_RUN`` with ``blocks == []`` and ``backend.kind == "none"``; there is no
-REFUSED status in v2, so a policy verdict is a NOT_RUN whose reason starts
-with ``refused:``.
+v2 is all-or-nothing. A request that was never submitted is ``NOT_RUN``
+(``blocks == []``, ``backend.kind == "none"``); there is no REFUSED status, so
+a policy verdict is a NOT_RUN whose reason starts with ``refused:``. A request
+that WAS submitted (a provider job id exists, amendment R3 H1) is never
+NOT_RUN: a provider-terminal failure or a result that does not audit is
+``FAILED`` (``blocks == []``, ``block_count == 0``, ``reason``, ``hardware``
+with the provider job id, ``usage``; hardware seal).
 
 Seal: HMAC-SHA256 over ``domain + canonical_json(body without seal)`` with
 ``b"predator.qsearch.hardware-receipt.v2\\n"`` / ``hmac-sha256+hardware-v2:``
@@ -44,6 +47,9 @@ HARDWARE_KIND = "ibm"
 BIT_ORDER = "msb_first"
 ATLAS_REQUEST_RECEIPT_SCHEMA = "AqrcQSearchRequestReceiptV1"
 DRY_RUN_TARGETS = ("fake_fez",)
+DEFAULT_REGISTER = "meas"            # the register compile_program measures into (build_nucleus_program)
+MAX_JOB_TAGS = 16                    # Predator's verifier bound on hardware.job_tags
+MAX_TAG_CHARS = 256
 _HEX = frozenset("0123456789abcdef")
 _BITS = frozenset("01")
 
@@ -137,7 +143,12 @@ def _usage(atlas_receipt: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def atlas_request_envelope(request: QSearchRequest, atlas_receipt: Any) -> Mapping[str, Any]:
-    """Check the ATLAS request receipt's identity against ``request``; return its frozen request envelope."""
+    """Check the ATLAS request receipt's identity against ``request``; return its frozen request envelope.
+
+    Identity only (schema, request id, PUB count, limit, target, purpose, recovery tag, provider job
+    id, dry-run flag and, when ATLAS records it, Predator's request digest); the PUBs are checked by
+    the OK path, since a FAILED receipt carries none.
+    """
     if not isinstance(atlas_receipt, Mapping) or atlas_receipt.get("schema") != ATLAS_REQUEST_RECEIPT_SCHEMA:
         raise ReceiptAuditError("delegate result is not an ATLAS q-search request receipt")
     frozen = atlas_receipt.get("request")
@@ -146,7 +157,8 @@ def atlas_request_envelope(request: QSearchRequest, atlas_receipt: Any) -> Mappi
             or envelope.get("pub_count") != request.block_count
             or envelope.get("max_execution_time") != request.max_execution_time
             or envelope.get("target") != request.target or envelope.get("purpose") != request.purpose
-            or not isinstance(envelope.get("recovery_tag"), str) or not envelope["recovery_tag"]):
+            or not isinstance(envelope.get("recovery_tag"), str) or not envelope["recovery_tag"]
+            or envelope.get("client_request_digest", request.request_digest) != request.request_digest):
         raise ReceiptAuditError("ATLAS request envelope differs from the v2 request")
     if (atlas_receipt.get("target") != request.target or atlas_receipt.get("backend_name") != request.target
             or not isinstance(atlas_receipt.get("job_id"), str) or not atlas_receipt["job_id"]):
@@ -154,10 +166,8 @@ def atlas_request_envelope(request: QSearchRequest, atlas_receipt: Any) -> Mappi
     if atlas_receipt.get("dry_run") is not (request.target in DRY_RUN_TARGETS):
         raise ReceiptAuditError("ATLAS request receipt dry_run flag contradicts its target")
     children = envelope.get("children")
-    pubs = atlas_receipt.get("pubs")
-    if (not isinstance(children, list) or not isinstance(pubs, list) or len(pubs) != request.block_count
-            or len(children) != request.block_count):
-        raise ReceiptAuditError("ATLAS request receipt must carry exactly one PUB per requested block")
+    if not isinstance(children, list) or len(children) != request.block_count:
+        raise ReceiptAuditError("ATLAS request envelope must name one child per requested block")
     return envelope
 
 
@@ -184,33 +194,99 @@ def _block(request: QSearchRequest, index: int, pub: Any, child_sha256: Any) -> 
     return block, pub["register"]
 
 
-def request_receipt(request: QSearchRequest, atlas_receipt: Mapping[str, Any], *, purpose: str) -> dict[str, Any]:
-    """OK v2 body from an ATLAS ``AqrcQSearchRequestReceiptV1`` (FakeFez dry run or ibm_fez); unsigned."""
-    envelope = atlas_request_envelope(request, atlas_receipt)
-    built = [_block(request, i, pub, child) for i, (pub, child)
-             in enumerate(zip(atlas_receipt["pubs"], envelope["children"]))]
-    registers = {register for _, register in built}
-    if len(registers) != 1:
-        raise ReceiptAuditError("PUBs of one request must share one measurement register")
-    blocks = [block for block, _ in built]
-    backend_name = atlas_receipt["backend_name"]
+def _job_tags(atlas_receipt: Mapping[str, Any], envelope: Mapping[str, Any]) -> list[str]:
+    """The provider job tags ATLAS reports (recovery tag first, then e.g. its ledger tag), else the recovery tag."""
+    tags = atlas_receipt.get("job_tags")
+    if (isinstance(tags, list) and 1 <= len(tags) <= MAX_JOB_TAGS and tags[0] == envelope["recovery_tag"]
+            and all(isinstance(t, str) and 0 < len(t) <= MAX_TAG_CHARS for t in tags)):
+        return list(tags)
+    return [envelope["recovery_tag"]]
+
+
+def _hardware(request: QSearchRequest, atlas_receipt: Mapping[str, Any], envelope: Mapping[str, Any], *,
+              register: str, purpose: str) -> dict[str, Any]:
+    return {"backend_name": atlas_receipt["backend_name"], "provider_job_id": atlas_receipt["job_id"],
+            "bit_order": BIT_ORDER, "register": register, "purpose": purpose,
+            "dry_run": atlas_receipt["dry_run"], "max_execution_time": request.max_execution_time,
+            "job_tags": _job_tags(atlas_receipt, envelope)}
+
+
+def _finished(body: dict[str, Any]) -> dict[str, Any]:
     try:
-        body = {
-            "schema": SCHEMA_V2, "receipt_version": RECEIPT_VERSION, "status": "OK",
-            "request": {"request_digest": request.request_digest, "block_count": len(blocks)},
-            "backend": {"kind": HARDWARE_KIND, "id": backend_name, "dry_run": atlas_receipt["dry_run"]},
-            "hardware": {"backend_name": backend_name, "provider_job_id": atlas_receipt["job_id"],
-                         "bit_order": BIT_ORDER, "register": registers.pop(), "purpose": purpose,
-                         "dry_run": atlas_receipt["dry_run"], "max_execution_time": request.max_execution_time,
-                         "job_tags": [envelope["recovery_tag"]]},
-            "blocks": blocks, "results_digest": results_digest(blocks), "usage": _usage(atlas_receipt),
-        }
         canonical_json(body)                 # fail here, not at sealing, on a non-canonical provider value
-    except (KeyError, TypeError, CanonicalizationError):
+    except (TypeError, CanonicalizationError, RecursionError):
         raise ReceiptAuditError("ATLAS request receipt is missing or malformed fields") from None
     return body
 
 
+def failed_v2(request: QSearchRequest, atlas_receipt: Mapping[str, Any], *, purpose: str,
+              reason: str) -> dict[str, Any]:
+    """FAILED body: the request WAS submitted (a provider job id exists) but yields no verified blocks.
+
+    A provider-terminal failure (ERROR / CANCELLED / max time) or a result that does not audit. Same
+    top-level keys as OK plus ``reason``; ``blocks == []``, ``block_count == 0``; ``hardware`` names the
+    provider job and ``usage`` reports what the provider charged. Sealed with the hardware seal.
+    """
+    envelope = atlas_request_envelope(request, atlas_receipt)
+    if atlas_receipt.get("dry_run") is not False:
+        raise ReceiptAuditError("only a submitted (non-dry-run) request can be FAILED")
+    pubs = atlas_receipt.get("pubs")
+    register = (pubs[0].get("register") if isinstance(pubs, list) and pubs and isinstance(pubs[0], Mapping)
+                else atlas_receipt.get("register"))
+    register = register if isinstance(register, str) and register else DEFAULT_REGISTER
+    try:
+        body = {
+            "schema": SCHEMA_V2, "receipt_version": RECEIPT_VERSION, "status": "FAILED",
+            "request": {"request_digest": request.request_digest, "block_count": 0},
+            "backend": {"kind": HARDWARE_KIND, "id": atlas_receipt["backend_name"], "dry_run": False},
+            "hardware": _hardware(request, atlas_receipt, envelope, register=register, purpose=purpose),
+            "blocks": [], "results_digest": results_digest([]), "usage": _usage(atlas_receipt),
+            "reason": _reason(reason),
+        }
+    except (KeyError, TypeError):
+        raise ReceiptAuditError("ATLAS request receipt is missing or malformed fields") from None
+    return _finished(body)
+
+
+def provider_failure_reason(atlas_receipt: Mapping[str, Any]) -> str:
+    """``provider: <terminal status>`` for a FAILED ATLAS receipt.
+
+    The provider's status name only (ERROR, CANCELLED, ...); the provider's free-text error
+    message stays in ATLAS's ledger receipt, as Nano reasons never carry provider or OS text.
+    """
+    status = atlas_receipt.get("provider_status")
+    ok = isinstance(status, str) and 0 < len(status) <= 40 and status.replace("_", "").isalnum()
+    return "provider: " + (status if ok else "job failed")
+
+
+def request_receipt(request: QSearchRequest, atlas_receipt: Mapping[str, Any], *, purpose: str) -> dict[str, Any]:
+    """OK (or, for a provider-terminal failure, FAILED) v2 body from an ATLAS ``AqrcQSearchRequestReceiptV1``."""
+    envelope = atlas_request_envelope(request, atlas_receipt)
+    if atlas_receipt.get("status") == "FAILED":
+        return failed_v2(request, atlas_receipt, purpose=purpose, reason=provider_failure_reason(atlas_receipt))
+    pubs = atlas_receipt.get("pubs")
+    if not isinstance(pubs, list) or len(pubs) != request.block_count:
+        raise ReceiptAuditError("ATLAS request receipt must carry exactly one PUB per requested block")
+    built = [_block(request, i, pub, child) for i, (pub, child) in enumerate(zip(pubs, envelope["children"]))]
+    registers = {register for _, register in built}
+    if len(registers) != 1:
+        raise ReceiptAuditError("PUBs of one request must share one measurement register")
+    blocks = [block for block, _ in built]
+    try:
+        body = {
+            "schema": SCHEMA_V2, "receipt_version": RECEIPT_VERSION, "status": "OK",
+            "request": {"request_digest": request.request_digest, "block_count": len(blocks)},
+            "backend": {"kind": HARDWARE_KIND, "id": atlas_receipt["backend_name"],
+                        "dry_run": atlas_receipt["dry_run"]},
+            "hardware": _hardware(request, atlas_receipt, envelope, register=registers.pop(), purpose=purpose),
+            "blocks": blocks, "results_digest": results_digest(blocks), "usage": _usage(atlas_receipt),
+        }
+    except (KeyError, TypeError):
+        raise ReceiptAuditError("ATLAS request receipt is missing or malformed fields") from None
+    return _finished(body)
+
+
 __all__ = ["ATLAS_REQUEST_RECEIPT_SCHEMA", "BIT_ORDER", "DOMAIN_V2", "HARDWARE_DOMAIN_V2", "HARDWARE_SEAL_PREFIX_V2",
-           "RECEIPT_VERSION", "SCHEMA_V2", "SEAL_PREFIX_V2", "atlas_request_envelope", "not_run_v2",
-           "request_receipt", "results_digest", "seal_receipt_v2", "verify_seal_v2"]
+           "DEFAULT_REGISTER", "RECEIPT_VERSION", "SCHEMA_V2", "SEAL_PREFIX_V2", "atlas_request_envelope", "failed_v2",
+           "not_run_v2", "provider_failure_reason", "request_receipt", "results_digest", "seal_receipt_v2",
+           "verify_seal_v2"]
