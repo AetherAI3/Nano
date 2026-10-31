@@ -87,18 +87,18 @@ def test_from_env_parses_and_fails_closed(tmp_path):
 @pytest.mark.parametrize("name", ["job_4var.json", "job_pair02.json"])
 def test_options_off_keep_the_compile_and_digest(fixtures_dir, name):
     job = parse_job(json.loads((fixtures_dir / name).read_text(encoding="utf-8")))
-    a, b = compile_program(job), compile_program(job, CompileOptions())
+    a, b = compile_program(job), compile_program(job, options=CompileOptions())
     assert a.compiled_plan_digest == b.compiled_plan_digest and "rewrites" not in a.compile_record
 
 
 # -- basis_prep -----------------------------------------------------------------------------------------------------
 def test_basis_prep_prepares_the_unique_minimiser_whatever_the_angles(four):
     job = _diagonal(four, [-1.0, 1.0, -0.5, 2.0])            # minimiser x = (1, 0, 1, 0)
-    plan = compile_program(job, CompileOptions(basis_prep=True))
+    plan = compile_program(job, options=CompileOptions(basis_prep=True))
     assert plan.compile_record["rewrites"] == {"basis_prep": "applied", "layout": {"mode": "off"}}
     assert _ideal_bits(plan) == {"0101"}                    # qiskit order: x3 x2 x1 x0
     assert set(plan.isa.count_ops()) <= {"x", "measure"} and plan.metrics["native_2q"] == 0
-    other = compile_program(replace(job, gammas=(1.234,), betas=(-0.7,)), CompileOptions(basis_prep=True))
+    other = compile_program(replace(job, gammas=(1.234,), betas=(-0.7,)), options=CompileOptions(basis_prep=True))
     assert other.compiled_plan_digest == plan.compiled_plan_digest
     default = compile_program(job)                          # QAOA at (0.4, 0.4) does not output the minimiser
     assert _ideal_bits(default) != {"0101"}
@@ -106,11 +106,11 @@ def test_basis_prep_prepares_the_unique_minimiser_whatever_the_angles(four):
 
 def test_basis_prep_leaves_coupled_qubos_and_explicit_joint5_alone(pair02):
     plain = compile_program(pair02)
-    plan = compile_program(pair02, CompileOptions(basis_prep=True))
+    plan = compile_program(pair02, options=CompileOptions(basis_prep=True))
     assert plan.compile_record["rewrites"]["basis_prep"] == "not_applicable"
     assert plan.inspection == plain.inspection and plan.variant == plain.variant
     assert plan.compiled_plan_digest != plain.compiled_plan_digest     # the record says an option was on
-    joint = compile_program(replace(pair02, variant="joint5"), CompileOptions(basis_prep=True))
+    joint = compile_program(replace(pair02, variant="joint5"), options=CompileOptions(basis_prep=True))
     assert joint.variant == "joint5"
 
 
@@ -127,7 +127,7 @@ def test_calibration_layout_puts_bit_i_on_the_ith_best_qubit(four):
     job = replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="fake_fez")
     opts = CompileOptions(basis_prep=True, layout="calibration", calibration={"ibm_fez": _snapshot(good)},
                           calibration_sha256="ab" * 32, layout_backend="ibm_fez")
-    plan = compile_program(job, opts)
+    plan = compile_program(job, options=opts)
     layout = plan.compile_record["rewrites"]["layout"]
     assert layout["applied"] and layout["physical"] == good and layout["calibration_sha256"] == "ab" * 32
     assert plan.inspection["initial_layout"] == good
@@ -139,20 +139,20 @@ def test_calibration_layout_refuses_a_snapshot_without_the_backend(four):
     job = replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="fake_fez")
     opts = CompileOptions(layout="calibration", calibration={"ibm_kingston": _snapshot([1, 2, 3, 4])})
     with pytest.raises(ValueError):
-        compile_program(job, opts)
+        compile_program(job, options=opts)
 
 
 def test_target_layout_ranks_by_the_targets_own_errors_and_skips_entangled_circuits(four, pair02):
     pytest.importorskip("qiskit_ibm_runtime")
     plan = compile_program(replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="fake_fez"),
-                           CompileOptions(basis_prep=True, layout="target"))
+                           options=CompileOptions(basis_prep=True, layout="target"))
     layout = plan.compile_record["rewrites"]["layout"]
     assert layout["applied"] and plan.inspection["initial_layout"] == layout["physical"]
-    coupled = compile_program(replace(pair02, target="fake_fez"), CompileOptions(layout="target"))
+    coupled = compile_program(replace(pair02, target="fake_fez"), options=CompileOptions(layout="target"))
     assert coupled.compile_record["rewrites"]["layout"] == {"mode": "target", "applied": False,
                                                             "reason": "circuit has two-qubit gates"}
 
 
 def test_layout_is_not_applied_off_the_fez_register(four):
-    plan = compile_program(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), CompileOptions(layout="target"))
+    plan = compile_program(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), options=CompileOptions(layout="target"))
     assert plan.compile_record["rewrites"]["layout"]["applied"] is False      # heron_heavy_hex has no calibration

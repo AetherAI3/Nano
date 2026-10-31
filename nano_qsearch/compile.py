@@ -40,7 +40,7 @@ LAYOUT_ENV = "NANO_QSEARCH_LAYOUT"
 LAYOUT_BACKEND_ENV = "NANO_QSEARCH_LAYOUT_BACKEND"
 CALIBRATION_PREFIX = "calibration:"
 LAYOUT_MODES = ("target", "calibration")
-DEVICE_TARGETS = ("fake_fez", "ibm_fez")      # targets whose physical qubits are the Fez register
+FEZ_TARGETS = ("fake_fez", "ibm_fez")      # targets whose physical qubits are the Fez register
 
 
 class TargetUnavailable(RuntimeError):
@@ -196,7 +196,7 @@ def _two_qubit_count(circuit) -> int:
     return sum(1 for inst in circuit.data if len(inst.qubits) == 2 and inst.operation.name != "barrier")
 
 
-def _device_backend(job: QSearchJob):
+def _fez_backend(job: QSearchJob):
     """The backend a Fez-register job is transpiled against (FakeFez); the layout ranking reads the same target."""
     try:
         from qiskit_ibm_runtime.fake_provider import FakeFez
@@ -213,7 +213,7 @@ def _transpile(circuit, job: QSearchJob, *, backend=None, initial_layout: list[i
         isa = transpile(circuit, coupling_map=cm, basis_gates=BASIS, optimization_level=job.opt_level,
                         seed_transpiler=job.compile_seed)
         return isa, f"heavy_hex_d{_heavy_hex_distance(cm)}"
-    backend = _device_backend(job) if backend is None else backend
+    backend = _fez_backend(job) if backend is None else backend
     isa = transpile(circuit, backend=backend, optimization_level=job.opt_level, seed_transpiler=job.compile_seed,
                     initial_layout=initial_layout)
     return isa, "fake_fez"
@@ -238,7 +238,7 @@ def _layout(job: QSearchJob, options: CompileOptions, logical, backend) -> tuple
     if options.layout is None:
         return None, {"mode": "off"}
     info: dict[str, Any] = {"mode": options.layout}
-    if job.target not in DEVICE_TARGETS:
+    if job.target not in FEZ_TARGETS:
         return None, {**info, "applied": False, "reason": "target has no device calibration"}
     if _two_qubit_count(logical):
         return None, {**info, "applied": False, "reason": "circuit has two-qubit gates"}
@@ -292,7 +292,7 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
         logical, mapping = build_nucleus_program(
             [list(row) for row in job.q], variant=variant, nuclei=[tuple(v) for v in nuclei],
             gammas=list(job.gammas), betas=list(job.betas), objective_offset=job.offset)
-    backend = _device_backend(job) if options.layout is not None and job.target in DEVICE_TARGETS else None
+    backend = _fez_backend(job) if options.layout is not None and job.target in FEZ_TARGETS else None
     physical, layout = _layout(job, options, logical, backend)
     isa, cm_name = _transpile(logical, job, backend=backend, initial_layout=physical)
     if physical is not None and [int(q) for q in isa.layout.initial_index_layout(filter_ancillas=True)] != physical:
@@ -302,7 +302,7 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
     return logical, isa, list(mapping), metrics, cm_name, layout
 
 
-def compile_program(job: QSearchJob, options: CompileOptions | None = None) -> CompiledProgram:
+def compile_program(job: QSearchJob, *, options: CompileOptions | None = None) -> CompiledProgram:
     """Compile ``job``; ``options=None`` reads ``CompileOptions.from_env()`` (all off when the env is unset)."""
     options = CompileOptions.from_env() if options is None else options
     ground = diagonal_ground(job.q) if options.basis_prep and job.variant != "joint5" else None
@@ -343,6 +343,6 @@ def compile_program(job: QSearchJob, options: CompileOptions | None = None) -> C
                            inspection=inspection)
 
 
-__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram", "DEVICE_TARGETS",
+__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram", "FEZ_TARGETS",
            "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV", "LAYOUT_ENV", "LAYOUT_MODES", "PLAN_SCHEMA",
            "TargetUnavailable", "compile_program", "diagonal_ground", "heavy_hex_map", "rank_qubits"]
