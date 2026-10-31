@@ -205,3 +205,26 @@ def test_live_backend_compile_composes_with_basis_prep_and_layout(four):
     assert snap.inspection["initial_layout"] == good and snap.compile_record["rewrites"]["layout"]["backend"] == "ibm_fez"
     off = compile_program(job, backend=live)
     assert "rewrites" not in off.compile_record and off.compile_record["backend_name"] == "ibm_fez"
+
+
+def test_the_runtime_device_compile_picks_the_options_up_from_the_environment(four, tmp_path, monkeypatch):
+    """The J3 path: env on the Nano process -> ``IbmRuntime`` -> ``default_compile(job, backend=<live>)``."""
+    pytest.importorskip("qiskit_ibm_runtime")
+    from types import SimpleNamespace
+
+    from qiskit_ibm_runtime.fake_provider import FakeFez
+
+    from nano_qsearch.runtime_ibm import default_compile
+    good = [3 + 5 * i for i in range(4)]
+    path = tmp_path / "heron_calibration.json"
+    path.write_text(json.dumps({"backends": {"ibm_fez": _snapshot(good)}}), encoding="utf-8")
+    monkeypatch.setenv(BASIS_PREP_ENV, "1")
+    monkeypatch.setenv(LAYOUT_ENV, f"calibration:{path}")
+    live = SimpleNamespace(name="ibm_fez", target=FakeFez().target)
+    plan = default_compile(replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="ibm_fez"), backend=live)
+    layout = plan.compile_record["rewrites"]["layout"]
+    assert plan.compile_record["rewrites"]["basis_prep"] == "applied" and layout["physical"] == good
+    assert layout["backend"] == "ibm_fez" and plan.compile_record["backend_name"] == "ibm_fez"
+    monkeypatch.setenv(LAYOUT_BACKEND_ENV, "ibm_kingston")             # another device's entry: refused
+    with pytest.raises(ValueError):
+        default_compile(replace(_diagonal(four, [-1.0, 1.0, -0.5, 2.0]), target="ibm_fez"), backend=live)
