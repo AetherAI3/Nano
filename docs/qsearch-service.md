@@ -150,6 +150,9 @@ take precedence over the environment.
 | `NANO_QSEARCH_ATLAS_PATH` | unset | `aether-atlas` directory, used by the engine child (and by the tests). |
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
 | `NANO_QSEARCH_PURPOSE` | `qsearch` | Child purpose recorded on IBM receipts, `qsearch` or `qcomms`; see [IBM](#ibm-hardware). |
+| `NANO_QSEARCH_BASIS_PREP` | unset (off) | `1`: a strictly diagonal QUBO (no coupling, no zero diagonal entry) compiles to its unique minimiser, `x` on the 1 bits then measure, instead of the QAOA layer; the output then no longer depends on `gammas`/`betas`. Other QUBOs and explicit `joint5` jobs are unchanged. See [Compile options](#compile-options). |
+| `NANO_QSEARCH_LAYOUT` | unset (off) | `target` or `calibration:<snapshot.json>`: a circuit without two-qubit gates on a Fez target (`fake_fez`, `ibm_fez`) puts logical bit `i` on the `i`-th best qubit by readout error plus half the `x` error, ranked from the transpile target's own errors (`target`) or from a calibration snapshot. See [Compile options](#compile-options). |
+| `NANO_QSEARCH_LAYOUT_BACKEND` | the job's target | Snapshot entry (`backends.<name>`) used by `NANO_QSEARCH_LAYOUT=calibration:...`, e.g. `ibm_fez` for a `fake_fez` rehearsal of a hardware layout. |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_AUTHORITY_KEY_PATH` | unset | Host authority key for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_LEDGER_PATH` | unset | Campaign ledger (sqlite) for `ibm_fez`; see [IBM](#ibm-hardware). |
@@ -322,6 +325,37 @@ bytes of that file. That text never enters a receipt. On Windows, run the servic
 PowerShell with the system Python: importing qiskit segfaults under Git Bash on
 some hosts, and Aer MPS intermittently access-violates, which the retries
 absorb.
+
+## Compile options
+
+`compile_program(job, *, options=None)` takes a `CompileOptions`; with `None`
+it reads `CompileOptions.from_env()` (the three `NANO_QSEARCH_BASIS_PREP` /
+`NANO_QSEARCH_LAYOUT` / `NANO_QSEARCH_LAYOUT_BACKEND` variables above). All
+off is the unchanged compile: same ISA, same record, same
+`compiled_plan_digest`. A malformed value or an unreadable snapshot is a
+`ValueError`, so the IBM runtime answers `REFUSED`, never a silent default.
+
+When an option is on, the compile record (`compile` in the receipt) and the
+plan digest carry a `rewrites` block, for example:
+
+```json
+{"basis_prep": "applied",
+ "layout": {"mode": "calibration", "applied": true, "backend": "ibm_fez",
+            "calibration_sha256": "30d75cc6...", "last_update": "2026-10-31 10:57:39+00:00",
+            "physical": [2, 22, 86, 134, ...]}}
+```
+
+`basis_prep` is `applied`, `not_applicable` (the QUBO has a coupling or a zero
+diagonal entry, or the job asks for `joint5`) or `off`. `layout.applied` is
+false, with a `reason`, for a circuit with two-qubit gates or a target outside
+the Fez register. The snapshot format is one JSON object `{"backends": {name:
+{"num_qubits", "last_update", "readout_error": {"q": e}, "one_qubit_error":
+{"x": {"q": e}, ...}, "t1_s": {"q": s}}}}`; a qubit with a missing or
+out-of-range error or T1 is never chosen, and a snapshot without a
+`num_qubits`-matching entry for the backend is refused. The transpile keeps the
+chosen placement (`initial_layout`); if the transpiler moved it, the compile is
+refused. Use a snapshot fetched shortly before a hardware run: the ranking is
+only as fresh as the calibration it reads.
 
 ## IBM hardware
 
