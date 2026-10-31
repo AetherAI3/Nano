@@ -403,6 +403,15 @@ only as fresh as the calibration it reads.
   submitted from the service**, and a recovered IBM job is never resubmitted.
   An `ibm` receipt is sealed with the hardware seal by its `backend.kind` alone;
   one without its `hardware` block is never sealed at all.
+- **`ibm_kingston` and `ibm_marrakesh` (J6 amendment A2) are live targets with
+  exactly `ibm_fez`'s gates** (GO, authority, QPU seconds, LIVE / PACKED flags,
+  live context, device binding, recovery through ATLAS; never a dry run). They
+  compile **only** against their resolved live backend: no fake backend stands
+  in for them, so a job on one of them without a live context is refused
+  (`ValueError`), including on a V1 ledger and on the local MPS / statevector
+  engines. A calibration layout ranks only that backend's own snapshot entry
+  (`backends.ibm_kingston` / `backends.ibm_marrakesh`). `fake_fez` stays the
+  only dry-run target.
 
 The child purpose, `qsearch` (default) or `qcomms`, is a service setting
 (`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the
@@ -417,7 +426,7 @@ the v1 request auth (the path is part of the MAC). The body is
 
 ```json
 {"schema": "predator.qsearch.request.v2",
- "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez",
+ "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez|ibm_kingston|ibm_marrakesh",
                 "purpose": "qsearch|qcomms", "max_execution_time": 10, "manifest_digest": "sha256:...",
                 "batch_index": 0, "batch_digest": "sha256:...",
                 "blocks": [{"pub_index": 0, "job_digest": "sha256:...",
@@ -429,7 +438,7 @@ the v1 request auth (the path is part of the MAC). The body is
 `canonical_digest(descriptor)` is the request digest. Each job must match its
 block (digest, width, shots, backend seed, classical floor), be `backend.kind
 == "ibm"` on the one target, 1..16 blocks, no repeated job or `(agent_id,
-chunk)`; for `ibm_fez` the jobs' `limits.max_qpu_s` must sum to at least
+chunk)`; for a live target (`ibm_fez`, `ibm_kingston`, `ibm_marrakesh`) the jobs' `limits.max_qpu_s` must sum to at least
 `max_execution_time`. A failure is 400 with no receipt. Each job is compiled
 (device compile for `ibm_fez`), frozen as an ATLAS child, the children become
 one ATLAS request (`prepare_qsearch_request`) and run once:
