@@ -498,6 +498,24 @@ ibm_fez, `NANO_QSEARCH_V2_MAX_PUBS` for a FakeFez dry run. The compile seconds,
 the job count and the number of target resolutions are kept in the request
 row's `record_json` and logged on stderr; they are not in the sealed receipt.
 
+**Final usage before a final receipt (accounting gate).** A live request whose
+provider job is DONE or FAILED but whose usage is not final yet (missing or
+zero, which is never a free run) is held: the row stays ACCEPTED, the answer is
+503 `{"code": "ACCOUNTING_PENDING"}`, and nothing is resubmitted. Every repeat
+of the same request (and every restart) drives ATLAS recovery, whose accounting
+read settles the ledger row; Nano merges the row's settled usage into the stored
+ATLAS receipt (same provider job, positive usage only) and only then seals the
+OK or FAILED receipt, once, with `usage_pending: false`. After
+`NANO_QSEARCH_ACCOUNTING_WINDOW_S` (default 900) the 503 code becomes
+`ACCOUNTING_TIMEOUT`, but the request is still held and still settles if
+accounting arrives later; it is never sealed pending and never NOT_RUN. A DONE
+receipt an older version sealed while usage was pending is never served as
+final: on retrieval it is re-derived from the settled row (the results must be
+identical; the replaced seal and usage are kept in `record_json["reseals"]`),
+or answered 503 until accounting settles (`RESEAL_MISMATCH` if the settled
+results would differ). FakeFez dry runs and v1 receipts (which carry no usage)
+are unchanged.
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends

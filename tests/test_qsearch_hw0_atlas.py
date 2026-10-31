@@ -225,16 +225,28 @@ def test_packed_request_runs_once_with_its_limit_and_tag_and_reserves_exactly_th
         svc.close()
 
 
-def test_zero_usage_is_pending_and_the_reservation_stays_held(tmp_path, monkeypatch):
+def test_zero_usage_is_held_until_atlas_settles_it_then_sealed_once(tmp_path, monkeypatch):
+    """Accounting gate through the real ATLAS ledger: usage 0 at submission is pending, never free;
+    Nano answers 503 and seals only after ATLAS's accounting read settles the row."""
     provider = Provider(usage=0)
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
     svc = _service(tmp_path, environ, provider)
     try:
-        status, receipt = _post(svc, body, "b1" * 16)
-        assert receipt["usage"] == {"quantum_seconds": 0.0, "usage_pending": True, "provider_sub_jobs": None,
-                                    "provider_metrics": {"usage": {"quantum_seconds": 0}}}
+        assert _post(svc, body, "b1" * 16) == (503, {"error": "job not completed", "code": "ACCOUNTING_PENDING"})
         row = ledger.get("req-p")
         assert row["usage"] is None and row["state"] == "awaiting_accounting" and row["cap"] == 10
+        assert _post(svc, body, "b2" * 16)[0] == 503                          # provider still reports 0
+        provider.jobs[0]._usage = 2.0                                        # the provider's accounting lands
+        status, receipt = _post(svc, body, "b3" * 16)
+        assert status == 200 and receipt["status"] == "OK" and len(receipt["blocks"]) == 3
+        assert receipt["usage"]["quantum_seconds"] == 2.0 and receipt["usage"]["usage_pending"] is False
+        verify_seal_v2(receipt, RECEIPT_KEY)
+        for nonce in ("b4" * 16, "b5" * 16):
+            assert _post(svc, body, nonce) == (200, receipt)                  # repeated retrieval: same receipt
+        row = ledger.get("req-p")
+        assert row["usage"] == 2.0 and row["state"] == "done"
+        assert ledger.totals()["finalized_seconds"] == 2.0 and ledger.totals()["jobs"] == 1   # settled exactly once
+        assert len(provider.runs) == 1
     finally:
         svc.close()
 

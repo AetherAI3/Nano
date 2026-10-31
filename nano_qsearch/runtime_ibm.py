@@ -59,12 +59,23 @@ once); the compile seconds go to the caller's ``record`` (kept beside the
 receipt, never in the sealed body); ``max_pubs`` (the service's
 ``NANO_QSEARCH_V2_MAX_PUBS``) is passed to ATLAS ``prepare_qsearch_request``
 when it takes one.
+
+Accounting (promotion gate): a live (non-dry) v2 request whose ATLAS result is
+DONE or FAILED but whose provider usage is not yet final is HELD: the runtime
+returns None (the service answers 503 and keeps the request accepted; nothing
+is resubmitted) and notes ``accounting: pending`` in the caller's record. Each
+later recovery drives ATLAS ``recover_qsearch_submission``'s accounting read;
+the stored ATLAS receipt is merged with the ledger row's settled usage (same
+provider job only), and only then is the OK or FAILED body returned, with
+``usage_pending`` false. Zero or missing usage is never final. FakeFez dry runs
+and v1 receipts (which carry no usage) are unchanged.
 """
 from __future__ import annotations
 
 import http.client
 import inspect
 import json
+import math
 import os
 import time
 import urllib.error
@@ -94,6 +105,7 @@ PACKED_ENV = "AETHER_AQRC_QSEARCH_PACKED"
 ATLAS_JOB_RECEIPT_SCHEMA = "AqrcQSearchJobReceiptV1"
 SUBMITTED_PENDING = "QSearchSubmittedPending"      # ATLAS: a provider job id is attached, the outcome is not known yet
 SUBMITTED_STATES = ("submitted", "ambiguous_submission")
+ACCOUNTED_STATUSES = ("OK", "FAILED")   # v2 statuses that name a provider job and report its usage
 RECOVERY_NOT_RUN = "recovery: hardware jobs are never run from recovery"
 JOB_NEVER_SUBMITTED = "recovery: job was never submitted"
 PURPOSE_ENV = "NANO_QSEARCH_PURPOSE"
@@ -312,6 +324,32 @@ def _durable_request_receipt(value: Any) -> Mapping[str, Any] | None:
     return _durable(value, ATLAS_REQUEST_RECEIPT_SCHEMA)
 
 
+def _positive_finite(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value)) and float(value) > 0
+    except OverflowError:
+        return False
+
+
+def with_settled_usage(receipt: Mapping[str, Any], row: Any) -> Mapping[str, Any]:
+    """``receipt`` with the ledger row's settled usage when the receipt still reads pending.
+
+    ATLAS can finalize a row's ``usage`` after the receipt it stored said ``usage_pending``; the
+    row is the accounting truth. Merged only for the same provider job and a positive finite
+    usage: zero or missing usage stays pending (never a free run), and nothing else changes.
+    """
+    if not isinstance(receipt, Mapping):
+        return receipt
+    if receipt.get("usage_pending") is False and _positive_finite(receipt.get("provider_final_usage_seconds")):
+        return receipt
+    if not isinstance(row, Mapping) or row.get("job_id") != receipt.get("job_id") \
+            or not _positive_finite(row.get("usage")):
+        return receipt
+    return {**receipt, "provider_final_usage_seconds": float(row["usage"]), "usage_pending": False}
+
+
 def _check_pub_children(atlas_receipt: Mapping[str, Any], pairs: list[tuple[Any, dict[str, Any]]]) -> None:
     if atlas_receipt.get("status") == "FAILED":
         return                                         # a provider-terminal failure carries no PUBs
@@ -388,8 +426,12 @@ def atlas_request_recover(request: QSearchRequest, *, environ: Mapping[str, str]
     context = atlas_resolve_context(request.target, environ=environ, service_factory=service_factory)
     if context is None:
         raise RuntimeError(_NO_LIVE_CONTEXT)
-    return _durable_request_receipt(
+    receipt = _durable_request_receipt(
         campaign_runtime.recover_qsearch_submission(request.request_id, context=context, ledger=ledger))
+    if receipt is None:
+        return None
+    # The recovery call above performed ATLAS's accounting read; the row now holds what is settled.
+    return with_settled_usage(receipt, ledger.get(request.request_id))
 
 
 def atlas_job_recover(job: QSearchJob, *, environ: Mapping[str, str] | None = None,
@@ -628,9 +670,24 @@ class IbmRuntime:
             if submission_attempted and self._handed_over(request.target, request.request_id, exc):
                 return None
             return not_run_v2(request, f"{REFUSED_PREFIX}ibm: {type(exc).__name__}")
-        return self._request_body(request, atlas_receipt)
+        return self._final(request, self._request_body(request, atlas_receipt), record)
 
-    def recover_request(self, request: QSearchRequest) -> dict[str, Any] | None:
+    @staticmethod
+    def _final(request: QSearchRequest, body: dict[str, Any] | None,
+               record: dict[str, Any] | None) -> dict[str, Any] | None:
+        """``body``, or None while a live result's provider usage is not final (accounting gate)."""
+        if body is None or request.target not in LIVE_TARGETS or body.get("status") not in ACCOUNTED_STATUSES:
+            return body
+        pending = body["usage"]["usage_pending"]
+        if record is not None:
+            record.update(accounting="pending" if pending else "settled",
+                          provider_job_id=body["hardware"]["provider_job_id"])
+            if not pending:
+                record["quantum_seconds"] = body["usage"]["quantum_seconds"]
+        return None if pending else body
+
+    def recover_request(self, request: QSearchRequest, *,
+                        record: dict[str, Any] | None = None) -> dict[str, Any] | None:
         """The unsigned v2 body for a request a previous process accepted, or None while it is still pending.
 
         Never runs anything: a FakeFez request is NOT_RUN (dry runs are not
@@ -650,7 +707,7 @@ class IbmRuntime:
             return None
         if atlas_receipt is None:
             return None
-        return self._request_body(request, atlas_receipt)
+        return self._final(request, self._request_body(request, atlas_receipt), record)
 
 
 __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DEFAULT_PURPOSE", "DRY_RUN_TARGETS",
@@ -659,5 +716,5 @@ __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DE
            "RESOURCE_ERRORS", "SUBMITTED_PENDING", "IbmRuntime", "NeverSubmitted", "atlas_campaign_submit",
            "atlas_job_recover", "atlas_request_recover", "atlas_request_submit", "atlas_resolve_context",
            "atlas_submitted", "check_device_binding", "default_compile", "live_flags_reason",
-           "prepare_request_identity"]
+           "prepare_request_identity", "with_settled_usage", "ACCOUNTED_STATUSES"]
 
