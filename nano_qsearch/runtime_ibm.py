@@ -457,16 +457,21 @@ class IbmRuntime:
         return fn(target, environ=self._environ, service_factory=self._service_factory)
 
     def _handed_over(self, target: str, request_id: str, exc: BaseException) -> bool:
-        """True when a failed ibm_fez submit had already reached the provider (R3 H1): never seal NOT_RUN then."""
+        """Keep live submissions pending when hand-over is known or cannot be ruled out (R3 H1)."""
         if target not in LIVE_TARGETS:
             return False
-        return type(exc).__name__ == SUBMITTED_PENDING or self._probe(request_id)
+        return type(exc).__name__ == SUBMITTED_PENDING or self._probe(request_id) is not False
 
-    def _probe(self, request_id: str) -> bool:
+    def _probe(self, request_id: str) -> bool | None:
+        """Submission evidence, or None when the ledger cannot be read.
+
+        An unreadable ledger is not evidence that submission never happened.
+        Keep the accepted service row pending so recovery can reconcile it.
+        """
         try:
             return bool(self._submitted_probe(request_id, environ=self._environ))
-        except Exception:  # noqa: BLE001 - no readable ledger: nothing ATLAS could have reserved
-            return False
+        except Exception:  # noqa: BLE001 - unknown outcome; retain it for recovery
+            return None
 
     def _compiled(self, job: QSearchJob, context: Any) -> Any:
         return self._compile(job) if context is None else self._compile(job, backend=context.backend)
@@ -497,24 +502,26 @@ class IbmRuntime:
         if reason is not None:
             return refused_receipt(job, reason)
         started = time.monotonic()
+        submission_attempted = False
         try:
             context = self._context(job.target, default_delegate=self._submit is atlas_campaign_submit)
             compiled = self._compiled(job, context)
             extra: dict[str, Any] = {} if context is None else {"context": context}
             if self._sampler_factory is not None:
                 extra["sampler_factory"] = self._sampler_factory
+            submission_attempted = True
             result = self._submit(job, compiled, purpose=self._purpose, environ=self._environ, **extra)
         except RESOURCE_ERRORS as exc:          # the run did not happen; class name only
-            if self._handed_over(job.target, _child_request_id(job), exc):
+            if submission_attempted and self._handed_over(job.target, _child_request_id(job), exc):
                 return None
             return not_run_receipt(job, f"ibm: {type(exc).__name__}")
         except Exception as exc:  # noqa: BLE001 - a verdict (BLOCKED, authority, audit); class name only
-            if self._handed_over(job.target, _child_request_id(job), exc):
+            if submission_attempted and self._handed_over(job.target, _child_request_id(job), exc):
                 return None
             return refused_receipt(job, f"ibm: {type(exc).__name__}")
         if job.target in LIVE_TARGETS and not (isinstance(result, Mapping) and "pubs" in result):
             durable = _durable(result, ATLAS_JOB_RECEIPT_SCHEMA)
-            if durable is None and self._probe(_child_request_id(job)):
+            if durable is None and self._probe(_child_request_id(job)) is not False:
                 return None                     # a held ledger row: submitted earlier, outcome not known yet
             result = durable if durable is not None else result
         return self._job_body(job, compiled, result, purpose=self._purpose, wall_s=time.monotonic() - started)
@@ -601,6 +608,7 @@ class IbmRuntime:
         if reason is not None:
             return not_run_v2(request, REFUSED_PREFIX + reason)
         record = {} if record is None else record
+        submission_attempted = False
         try:
             context = self._context(request.target, pub_count=request.block_count,
                                     default_delegate=self._request_submit is atlas_request_submit)
@@ -608,15 +616,16 @@ class IbmRuntime:
             started = time.perf_counter()
             compiled = self._compile_all(request.jobs, context)
             record.update(compile_s=round(time.perf_counter() - started, 3), compiled_jobs=len(compiled))
+            submission_attempted = True
             atlas_receipt = self._request_submit(request, compiled, purpose=request.purpose, environ=self._environ,
                                                  context=context, sampler_factory=self._sampler_factory,
                                                  backend_factory=self._backend_factory, max_pubs=max_pubs)
         except RESOURCE_ERRORS as exc:          # the run did not happen; class name only
-            if self._handed_over(request.target, request.request_id, exc):
+            if submission_attempted and self._handed_over(request.target, request.request_id, exc):
                 return None
             return not_run_v2(request, f"ibm: {type(exc).__name__}")
         except Exception as exc:  # noqa: BLE001 - a verdict (BLOCKED, authority, audit); class name only
-            if self._handed_over(request.target, request.request_id, exc):
+            if submission_attempted and self._handed_over(request.target, request.request_id, exc):
                 return None
             return not_run_v2(request, f"{REFUSED_PREFIX}ibm: {type(exc).__name__}")
         return self._request_body(request, atlas_receipt)
@@ -651,3 +660,4 @@ __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DE
            "atlas_job_recover", "atlas_request_recover", "atlas_request_submit", "atlas_resolve_context",
            "atlas_submitted", "check_device_binding", "default_compile", "live_flags_reason",
            "prepare_request_identity"]
+
