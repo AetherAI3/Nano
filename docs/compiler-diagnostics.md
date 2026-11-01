@@ -59,8 +59,9 @@ Optional `expected`, `actual`, and `hint` fields are omitted when unavailable.
 Parser expectations supply them at the raising site; they are never inferred
 by parsing the message. Hints are at most 240 characters. Current punctuation
 hints cite the expected punctuation and the actual source token. Capability
-errors offer no authorization or tier escalation repair. A hint is explanatory
-data, never permission to modify source or bypass a host gate.
+diagnostics do not populate the optional hint field; their existing human
+messages still explain which language tier a construct requires. A hint is
+explanatory data, never permission to modify source or bypass a host gate.
 
 JSON keys are sorted, separators compact, and non-ASCII text escaped for stable
 ASCII bytes. `--verbose` adds nothing to JSON stdout. Read errors and other
