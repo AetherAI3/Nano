@@ -250,7 +250,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Lazy SDK imports live behind prepare; adding this family keeps nano's
     # zero-dependency CLI and the local-only check path dependency-free.
-    from nano_qsearch.quantum_cli import command_quantum
     quantum = subcommands.add_parser("quantum", help="check or prepare local quantum plans as JSON")
     quantum_actions = quantum.add_subparsers(dest="quantum_action", required=True)
     for action in ("check", "prepare"):
@@ -261,12 +260,19 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--expected-digest", help="independently retained expected artifact digest")
         command.add_argument("--artifact", action="store_true", help="check a prepared artifact rather than a request")
         command.add_argument("-o", "--output", type=Path, help="write JSON to this local file")
-        command.set_defaults(handler=command_quantum)
+        command.set_defaults(handler=_command_quantum)
 
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)
 
     return parser
+
+
+def _command_quantum(args: argparse.Namespace, console: Console) -> int:
+    """Import the quantum command only after the user selects its CLI family."""
+    from nano_qsearch.quantum_cli import command_quantum
+
+    return command_quantum(args, console)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
