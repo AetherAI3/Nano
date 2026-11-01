@@ -343,3 +343,36 @@ def test_file_count_and_token_budgets(tmp_path):
     package(root, entry="strategy Agent {" + " every 1m { observe() }" * 2400 + "}")
     with pytest.raises(PackageResourceError, match="token budget exceeded"):
         build(root)
+
+
+def test_wrapped_parser_resource_errors_keep_structured_fields(tmp_path, monkeypatch):
+    from nano.compiler import NanoCompileError
+    from nano.compiler import package as compiler_package
+
+    class ParserResourceError(NanoCompileError):
+        code = "RESOURCE_LIMIT"
+        category = "resource"
+        resource = "syntax nesting"
+        limit = 32
+
+    class BoundedParser:
+        def __init__(self, tokens, limits):
+            assert limits is sentinel
+            raise ParserResourceError("parser ceiling", 2, 3)
+
+    sentinel = object()
+    monkeypatch.setattr(compiler_package._parser_module, "DEFAULT_COMPILER_LIMITS", sentinel, raising=False)
+    monkeypatch.setattr(compiler_package, "_Parser", BoundedParser)
+    with pytest.raises(PackageResourceError) as err:
+        build(package(tmp_path))
+    assert (err.value.path, err.value.line, err.value.column) == ("agent.nano", 2, 3)
+    assert (err.value.code, err.value.category, err.value.resource, err.value.limit) == (
+        "RESOURCE_LIMIT", "resource", "syntax nesting", 32,
+    )
+
+
+def test_package_resource_errors_have_resource_category(tmp_path):
+    entry = "strategy Agent { every 1m { if " + "not " * 40 + "true { observe() } } }"
+    with pytest.raises(PackageResourceError) as err:
+        build(package(tmp_path, entry=entry))
+    assert err.value.category == "resource"

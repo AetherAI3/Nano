@@ -129,8 +129,13 @@ bad arity/types, import cycles and recursive calls identify the relevant source
 path, 1-based line and column. Metadata errors without a concrete token use the
 document start; JSON syntax errors retain the JSON decoder's position.
 `PackageResourceError` is a `PackageError`/`NanoCompileError` with code
-`RESOURCE_LIMIT`, path, line and column; other package diagnostics carry
-`PACKAGE_ERROR`. The common parser/error implementation is unchanged.
+`RESOURCE_LIMIT`, category `resource`, path, line and column; other package
+diagnostics carry `PACKAGE_ERROR` unless wrapping a structured compiler error.
+Wrapped parser/type errors preserve their original code, category, expected/
+actual/hint and resource/limit fields while adding the dependency path.
+The package adapter supplies the bounded parser's default limits when available,
+and retains compatibility with the original parser constructor. The common
+parser/error implementation is unchanged.
 
 ## IR, canonical identity and source maps
 

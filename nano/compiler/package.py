@@ -18,6 +18,7 @@ from .ast import (
 from .codegen import _Lowerer, source_hash
 from .errors import NanoCompileError
 from .lexer import tokenize
+from . import parser as _parser_module
 from .parser import _Parser
 from ..ir.module import COMPILER_VERSION, NanoModule
 from ..ir.schema import KNOWN_EFFECTS
@@ -41,16 +42,28 @@ class PackageError(NanoCompileError):
     """A positioned package diagnostic, including the dependency's relative path."""
 
     code = "PACKAGE_ERROR"
+    category = "syntax"
 
     def __init__(self, message, path, line=1, column=1):
         super().__init__(f"{path}: {message}", line, column)
         self.path = path
+
+    @classmethod
+    def from_error(cls, error, path):
+        """Add dependency provenance without discarding structured diagnostics."""
+        kind = PackageResourceError if getattr(error, "code", None) == "RESOURCE_LIMIT" else cls
+        wrapped = kind(error.message, path, error.line, error.column)
+        for name in ("code", "category", "expected", "actual", "hint", "resource", "limit"):
+            if hasattr(error, name):
+                setattr(wrapped, name, getattr(error, name))
+        return wrapped
 
 
 class PackageResourceError(PackageError):
     """Admission failed before compilation exceeded a fixed resource ceiling."""
 
     code = "RESOURCE_LIMIT"
+    category = "resource"
 
 
 def _digest(data):
@@ -281,7 +294,10 @@ class _Build:
                         self.limit("syntax depth budget exceeded", path, token)
                 elif token.type in {"RPAREN", "RBRACE", "RBRACKET"}:
                     depth -= 1
-            parser = _Parser(tokens)
+            # #64 adds an explicit immutable limits argument. Keep the opt-in
+            # package API usable on both baseline and bounded parser versions.
+            limits = getattr(_parser_module, "DEFAULT_COMPILER_LIMITS", None)
+            parser = _Parser(tokens, limits) if limits is not None else _Parser(tokens)
             imports = []
             while parser._at_keyword("import"):
                 parser._advance()
@@ -337,7 +353,7 @@ class _Build:
         except NanoCompileError as exc:
             if isinstance(exc, PackageError):
                 raise
-            raise PackageError(exc.message, path, exc.line, exc.column) from exc
+            raise PackageError.from_error(exc, path) from exc
 
     def _load(self, path, stack=()):
         if len(stack) > MAX_DEPTH:
@@ -486,7 +502,7 @@ class _Build:
                 except NanoCompileError as exc:
                     if isinstance(exc, PackageError):
                         raise
-                    raise PackageError(exc.message, path, exc.line, exc.column) from exc
+                    raise PackageError.from_error(exc, path) from exc
         strategy = self.units[entry][2]
         try:
             _SignatureChecker(strategy, self.scopes[entry]).run()
@@ -500,7 +516,7 @@ class _Build:
         except NanoCompileError as exc:
             if isinstance(exc, PackageError):
                 raise
-            raise PackageError(exc.message, entry, exc.line, exc.column) from exc
+            raise PackageError.from_error(exc, entry) from exc
         if len(module.nodes) > MAX_IR_NODES:
             self.limit("IR node budget exceeded", entry)
         undeclared = set(module.effects) - set(self.manifest["effects"])
