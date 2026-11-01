@@ -67,6 +67,7 @@ import errno
 import json
 import math
 import os
+import re
 import socket
 import sqlite3
 import sys
@@ -81,6 +82,7 @@ from typing import Any
 from .auth import AUTH_HEADER, WINDOW_S, AuthError, verify_request
 from .canonical import canonical_json
 from .job import JobValidationError, QSearchJob, parse_job
+from .lifecycle import job_state, lifecycle_error
 from .receipt import MIN_KEY_BYTES, not_run_receipt, refused_receipt, seal_receipt
 from .receipt_v2 import not_run_v2, seal_receipt_v2
 from .request import (
@@ -91,6 +93,8 @@ from .store import JobRecord, JobStore, RequestIdConflict
 
 SUBMIT_PATH = "/qsearch/v1/submit"
 REQUEST_PATH = "/qsearch/v2/submit_request"
+REQUEST_STATUS_PREFIX = "/qsearch/v2/requests/"
+_REQUEST_STATUS = re.compile(re.escape(REQUEST_STATUS_PREFIX) + r"(sha256:[0-9a-f]{64})\Z")
 V2_ENV = "NANO_QSEARCH_V2"
 REQUEST_RUNTIME_KIND = "ibm"   # every v2 job is an ibm job (request.parse_request enforces it)
 DEFAULT_BIND = "127.0.0.1:8798"
@@ -214,6 +218,7 @@ class ServiceConfig:
     v2_enabled: bool = False          # NANO_QSEARCH_V2=1: /qsearch/v2/submit_request answers
     v2_max_pubs: int = MAX_BLOCKS     # NANO_QSEARCH_V2_MAX_PUBS: PUBs per v2 request, 1..MAX_BLOCKS_LIMIT
     accounting_window_s: float = DEFAULT_ACCOUNTING_WINDOW_S   # after this, 503 says ACCOUNTING_TIMEOUT
+    queue_deadline_s: float = 3600
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
@@ -227,9 +232,10 @@ class ServiceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
-        window = self.accounting_window_s
-        if isinstance(window, bool) or not isinstance(window, (int, float)) or not (math.isfinite(window) and window > 0):
-            raise ValueError("accounting_window_s must be a positive number of seconds")
+        for name in ("accounting_window_s", "queue_deadline_s"):
+            window = getattr(self, name)
+            if isinstance(window, bool) or not isinstance(window, (int, float)) or not (math.isfinite(window) and window > 0):
+                raise ValueError(f"{name} must be a positive number of seconds")
         if (isinstance(self.v2_max_pubs, bool) or not isinstance(self.v2_max_pubs, int)
                 or not 1 <= self.v2_max_pubs <= MAX_BLOCKS_LIMIT):
             raise ValueError(f"v2_max_pubs must be an int in 1..{MAX_BLOCKS_LIMIT}")
@@ -272,7 +278,8 @@ class ServiceConfig:
                    request_timeout_s=_env_number("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S, float),
                    verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1",
                    v2_max_pubs=max_pubs_from_env(env),
-                   accounting_window_s=_env_number(ACCOUNTING_WINDOW_ENV, DEFAULT_ACCOUNTING_WINDOW_S, float))
+                   accounting_window_s=_env_number(ACCOUNTING_WINDOW_ENV, DEFAULT_ACCOUNTING_WINDOW_S, float),
+                   queue_deadline_s=_env_number("NANO_QSEARCH_QUEUE_DEADLINE_S", 3600, float))
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -283,8 +290,10 @@ def _log(message: str) -> None:
 
 
 class QSearchService:
-    def __init__(self, config: ServiceConfig, *, runtime_factory: RuntimeFactory = build_runtime) -> None:
+    def __init__(self, config: ServiceConfig, *, runtime_factory: RuntimeFactory = build_runtime,
+                 clock: Callable[[], float] = time.time) -> None:
         self.config = config
+        self._clock = clock
         self._dir_lock = _DataDirLock(config.data_dir / LOCK_FILE)      # raises DataDirLocked
         try:
             self.store = JobStore(config.data_dir / STORE_FILE)
@@ -454,6 +463,37 @@ class QSearchService:
         return self._run_once(job)
 
     # --- v2 requests ---------------------------------------------------------------------------
+
+    def status_request(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
+                       now: int | None = None) -> tuple[int, dict[str, Any]]:
+        """Authenticated durable snapshot only; never constructs a runtime or reconciles a ledger."""
+        if not self.config.v2_enabled:
+            return 404, dict(NOT_ENABLED)
+        match = _REQUEST_STATUS.fullmatch(path)
+        if method != "GET" or match is None:
+            return 404, lifecycle_error("NOT_FOUND")
+        if body:
+            return 400, lifecycle_error("EMPTY_BODY_REQUIRED", field="body")
+        refusal = self._authenticate(method, path, body, headers, int(self._clock()) if now is None else now)
+        if refusal is not None:
+            return refusal[0], lifecycle_error("UNAUTHORIZED" if refusal[0] == 401 else "STORE_UNAVAILABLE",
+                                              retryable=refusal[0] == 503)
+        try:
+            row = self.store.get_request(match[1])
+            if row is None:
+                return 404, lifecycle_error("REQUEST_NOT_FOUND", field="request_digest")
+            raw_record = self.store.request_record(row.request_digest)
+            record = json.loads(raw_record) if raw_record else {}
+            receipt = json.loads(row.receipt_json) if row.receipt_json else None
+            if not isinstance(record, dict) or (receipt is not None and not isinstance(receipt, dict)):
+                raise ValueError("invalid persisted snapshot")
+            return 200, job_state(row, record, receipt, now=self._clock(),
+                                  queue_deadline_s=self.config.queue_deadline_s,
+                                  accounting_deadline_s=self.config.accounting_window_s)
+        except (sqlite3.Error, OSError):
+            return 503, lifecycle_error("STORE_UNAVAILABLE", retryable=True)
+        except (ValueError, TypeError):
+            return 503, lifecycle_error("STATE_UNAVAILABLE", retryable=False, next_action="MANUAL_RECONCILIATION")
 
     def _sealed_v2(self, request: QSearchRequest,
                    build: Callable[[], dict[str, Any] | None]) -> dict[str, Any] | None:
@@ -740,9 +780,19 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(status, payload)
 
     def do_GET(self) -> None:  # noqa: N802
-        self._not_found()
+        if _REQUEST_STATUS.fullmatch(self.path):
+            length = self._content_length()
+            if length != 0:
+                self.close_connection = True
+                self._send(400, lifecycle_error("EMPTY_BODY_REQUIRED", field="body"))
+                return
+            status, payload = self.service.status_request("GET", self.path, b"",
+                                                         {AUTH_HEADER: self.headers.get(AUTH_HEADER)})
+            self._send(status, payload)
+        else:
+            self._not_found()
 
-    do_PUT = do_DELETE = do_PATCH = do_GET
+    do_PUT = do_DELETE = do_PATCH = _not_found
 
     def do_HEAD(self) -> None:  # noqa: N802
         self.send_response(404)
