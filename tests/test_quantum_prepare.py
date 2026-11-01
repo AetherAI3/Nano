@@ -16,7 +16,7 @@ from nano import __version__
 from nano.cli.main import main
 from nano_qsearch.canonical import canonical_digest
 from nano_qsearch.prepare import (ARTIFACT_SCHEMA, PINNED_QISKIT, PROFILE_SCHEMA, SNAPSHOT_SCHEMA,
-    PreparationError, _plan_digest, check_request, load_prepared_plans, parse_compile_profile,
+    PreparationError, _plan_digest, atlas_source_digest, atlas_source_manifest, check_request, load_prepared_plans, parse_compile_profile,
     parse_prepared_artifact, parse_target_snapshot, prepare_request, samples_from_pub_result, snapshot_from_backend)
 from qsearch_v2_support import request_body, resign
 
@@ -189,6 +189,75 @@ def test_profile_and_target_bounds_match_the_shared_provenance_wire_limits():
         parse_target_snapshot(target)
     declared["seed"] = 2**53 - 1
     assert parse_compile_profile(declared).to_payload()["seed"] == 2**53 - 1
+
+
+@pytest.fixture
+def atlas_sources(tmp_path, monkeypatch):
+    package = tmp_path / "aether_atlas"
+    root = package / "qcompiler"
+    root.mkdir(parents=True)
+    # If source discovery executes package code, the test fails immediately.
+    (package / "__init__.py").write_text("raise AssertionError('ATLAS initializer must not execute')\n", encoding="utf-8")
+    for name in ("__init__.py", "nuclei.py", "nucleus_program.py", "compiled_plan.py", "nucleus_phase.py", "qaoa_select.py"):
+        (root / name).write_text("import qiskit_ibm_runtime\nraise AssertionError('source discovery must not import')\n", encoding="utf-8")
+    nested = root / "helpers"
+    nested.mkdir()
+    (nested / "angles.py").write_text("ANGLE = 0.5\n", encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    return root
+
+
+def test_atlas_source_pin_covers_transitive_nested_helpers_without_imports(atlas_sources, monkeypatch):
+    before = set(sys.modules)
+    def no_import(*args, **kwargs):
+        pytest.fail("source pinning must not execute package imports")
+    monkeypatch.setattr("nano_qsearch.prepare.importlib.import_module", no_import)
+    manifest = atlas_source_manifest()
+    first = atlas_source_digest()
+    assert manifest["schema"] == "nano.qsearch.atlas-source-manifest.v1"
+    paths = [file["path"] for file in manifest["files"]]
+    assert paths == sorted(paths) and "helpers/angles.py" in paths
+    assert canonical_digest(manifest) == first
+    (atlas_sources / "nucleus_phase.py").write_text("PHASE = 0.25\n", encoding="utf-8")
+    second = atlas_source_digest()
+    assert first != second
+    (atlas_sources / "helpers" / "angles.py").write_text("ANGLE = 0.75\n", encoding="utf-8")
+    assert atlas_source_digest() != second
+    assert not any(name.startswith(("aether_atlas", "qiskit_ibm_runtime")) for name in set(sys.modules) - before)
+
+
+def test_atlas_source_manifest_is_independent_of_file_enumeration_order(atlas_sources, monkeypatch):
+    expected = atlas_source_manifest()
+    original = Path.rglob
+    monkeypatch.setattr(Path, "rglob", lambda path, pattern: iter(reversed(list(original(path, pattern)))))
+    assert atlas_source_manifest() == expected
+    assert atlas_source_digest() == canonical_digest(expected)
+
+
+def test_atlas_source_pin_accepts_one_root_namespace_packages(atlas_sources):
+    (atlas_sources / "__init__.py").unlink()
+    (atlas_sources.parent / "__init__.py").unlink()
+    manifest = atlas_source_manifest()
+    assert "nucleus_phase.py" in [file["path"] for file in manifest["files"]]
+    assert atlas_source_digest() == canonical_digest(manifest)
+
+
+def test_atlas_source_pin_rejects_missing_or_unreadable_source(atlas_sources, monkeypatch):
+    required = atlas_sources / "qaoa_select.py"
+    required.unlink()
+    with pytest.raises(PreparationError) as error:
+        atlas_source_digest()
+    assert error.value.code == "unavailable_dependency"
+    required.write_text("def qaoa_circuit(): pass\n", encoding="utf-8")
+    original = Path.read_bytes
+    def unreadable(path):
+        if path == required:
+            raise OSError("source unavailable")
+        return original(path)
+    monkeypatch.setattr(Path, "read_bytes", unreadable)
+    with pytest.raises(PreparationError) as error:
+        atlas_source_digest()
+    assert error.value.code == "unavailable_dependency"
 
 
 @pytest.mark.parametrize("operation", [{"schema": "nano.quantum.operations.v0", "op": "optimize_qubo"},

@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib
+from importlib.machinery import PathFinder
 import io
 import json
 import math
@@ -30,6 +31,9 @@ ARTIFACT_SCHEMA = "nano.qsearch.prepared-artifact.v1"
 CHECK_SCHEMA = "nano.qsearch.check.v1"
 PINNED_QISKIT = "2.3.1"
 COMPILER_NAME = "nano-qsearch"
+ATLAS_SOURCE_SCHEMA = "nano.qsearch.atlas-source-manifest.v1"
+_REQUIRED_ATLAS_SOURCES = frozenset({"nuclei.py", "nucleus_program.py", "compiled_plan.py",
+                                     "nucleus_phase.py", "qaoa_select.py"})
 OPERATIONS_SCHEMA = "nano.quantum.operations.v1"
 SUPPORTED_OPERATION = "optimize_qubo"
 _COMPILER_KEYS = {"name", "version", "qiskit_version", "qiskit_ibm_runtime_version"}
@@ -313,15 +317,57 @@ def _qiskit() -> Any:
     return module
 
 
-def atlas_source_digest() -> str:
-    """Identify the exact local ATLAS source used for logical construction."""
+def atlas_source_manifest() -> dict[str, Any]:
+    """Hash the complete local qcompiler source tree without executing ATLAS.
+
+    A source-only install is required. Relative paths are part of the versioned
+    identity, so a helper addition/removal or transitive source edit changes it.
+    SDK/package dependencies outside this tree have their own toolchain pins.
+    """
     try:
-        modules = [importlib.import_module("aether_atlas.qcompiler." + name)
-                   for name in ("nuclei", "nucleus_program")]
-        contents = {module.__name__: hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest() for module in modules}
-    except (ImportError, AttributeError, OSError):
+        # Finding a dotted module with importlib.util.find_spec would execute
+        # its parent package. PathFinder resolves only the top-level local
+        # package and never imports ATLAS or its IBM/runtime dependencies.
+        spec = PathFinder.find_spec("aether_atlas")
+        locations = None if spec is None else spec.submodule_search_locations
+        if locations is None or len(locations) != 1:
+            raise OSError("a single local source package is required")
+        package = Path(next(iter(locations))).resolve(strict=True)
+        if spec.origin is not None and Path(spec.origin).resolve(strict=True) != package / "__init__.py":
+            raise OSError("the ATLAS package initializer source is unavailable")
+        # Use a leaf name with an explicit search path. A dotted namespace spec
+        # otherwise consults sys.modules[parent], which would require executing
+        # the very parent initializer this read-only discovery avoids.
+        compiler_spec = PathFinder.find_spec("qcompiler", list(locations))
+        compiler_locations = None if compiler_spec is None else compiler_spec.submodule_search_locations
+        if compiler_locations is None or len(compiler_locations) != 1:
+            raise OSError("a single qcompiler source package is required")
+        root = Path(next(iter(compiler_locations))).resolve(strict=True)
+        if (root != (package / "qcompiler").resolve(strict=True)
+                or (compiler_spec.origin is not None
+                    and Path(compiler_spec.origin).resolve(strict=True) != root / "__init__.py")):
+            raise OSError("qcompiler resolves outside its identified source package")
+        if not root.is_dir():
+            raise OSError("qcompiler source directory is unavailable")
+        sources = sorted(root.rglob("*.py"), key=lambda path: path.relative_to(root).as_posix())
+        relative = {path.relative_to(root).as_posix() for path in sources}
+        if not _REQUIRED_ATLAS_SOURCES <= relative:
+            raise OSError("required compiler module source is unavailable")
+        files = []
+        for path in sources:
+            # A linked helper outside the identified tree is not a local
+            # qcompiler source dependency that this contract can reproduce.
+            path.resolve(strict=True).relative_to(root)
+            files.append({"path": path.relative_to(root).as_posix(),
+                          "sha256": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()})
+    except (ImportError, AttributeError, OSError, TypeError, ValueError, RuntimeError):
         _fail("the pinned optional ATLAS source is unavailable", "unavailable_dependency")
-    return canonical_digest(contents)
+    return {"schema": ATLAS_SOURCE_SCHEMA, "package": "aether_atlas.qcompiler", "files": files}
+
+
+def atlas_source_digest() -> str:
+    """Identity of the versioned complete qcompiler Python-source manifest."""
+    return canonical_digest(atlas_source_manifest())
 
 
 def _request(body: Any) -> QSearchRequest:
@@ -694,7 +740,7 @@ def samples_from_pub_result(pub: Any, *, register: str, width: int, shots: int) 
 
 
 __all__ = ["PROFILE_SCHEMA", "SNAPSHOT_SCHEMA", "ARTIFACT_SCHEMA", "CHECK_SCHEMA", "PINNED_QISKIT",
-           "OPERATIONS_SCHEMA", "SUPPORTED_OPERATION",
+           "OPERATIONS_SCHEMA", "SUPPORTED_OPERATION", "ATLAS_SOURCE_SCHEMA",
            "PreparationError", "CompileProfile", "TargetSnapshot", "PreparedArtifact", "parse_compile_profile",
-           "parse_target_snapshot", "snapshot_from_backend", "atlas_source_digest", "check_request", "prepare_request",
+           "parse_target_snapshot", "snapshot_from_backend", "atlas_source_manifest", "atlas_source_digest", "check_request", "prepare_request",
            "parse_prepared_artifact", "load_prepared_plans", "samples_from_pub_result"]

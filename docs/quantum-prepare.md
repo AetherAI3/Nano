@@ -56,8 +56,16 @@ legacy-request adapter. Their kernels remain deferred to their owning work.
 The compiler declaration is `nano-qsearch`, the installed Nano package version,
 `qiskit_version: "2.3.1"`, and `qiskit_ibm_runtime_version: null`. Normal logical
 construction also requires `atlas_source_digest`, obtained from
-`nano_qsearch.prepare.atlas_source_digest()` for the exact local ATLAS
-`nuclei` and `nucleus_program` source files. An eligible diagonal basis-state
+`nano_qsearch.prepare.atlas_source_digest()` for the entire local
+`aether_atlas.qcompiler` Python source tree, including transitive helpers and
+nested modules. `atlas_source_manifest()` exposes the versioned
+`nano.qsearch.atlas-source-manifest.v1` document: sorted relative POSIX paths
+and SHA-256 hashes of each file's exact bytes. Adding, removing or modifying a
+helper changes the pin. Discovery reads local files without importing ATLAS
+initializers or IBM dependencies; missing required compiler source, unreadable
+files or an ambiguous/source-less package is `unavailable_dependency`. External
+SDK/package dependencies are separate toolchain inputs, not covered by this
+source-tree digest; Qiskit is pinned independently by the profile. An eligible diagonal basis-state
 rewrite can compile with `atlas_source_digest: null` without importing ATLAS.
 
 `nano.qsearch.target-snapshot.v1` contains `name`, `num_qubits`, ordered
