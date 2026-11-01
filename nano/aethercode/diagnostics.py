@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
-from ..compiler import NanoSyntaxError, compile_source
+from ..compiler import NanoSyntaxError, compile_module
 from ..ir.schema import IRValidationError
 
 SEVERITY_ERROR = "error"
@@ -29,7 +29,9 @@ class Diagnostic:
 def diagnostics(source: str) -> Tuple[Diagnostic, ...]:
     """Compile source and report failures as diagnostics; never raises."""
     try:
-        compile_source(source)
+        # Editor validation accepts every supported language version. The
+        # baseline-only compile_source entry point rejects valid v1 programs.
+        compile_module(source)
     except NanoSyntaxError as error:
         return (
             Diagnostic(
