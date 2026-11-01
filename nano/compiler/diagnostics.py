@@ -17,7 +17,7 @@ from ..ir.schema import (
     IRValidationError, ManifestViolation, NANO_IR_VERSION_BASELINE, TierViolation,
 )
 from .codegen import IRVersionError, compile_to_dict, source_hash
-from .errors import NanoCompileError
+from .errors import NanoCompileError, NanoSyntaxError
 from .parser import CompilerLimits, DEFAULT_COMPILER_LIMITS
 
 DIAGNOSTIC_SCHEMA_VERSION = "1.0.0"
@@ -71,7 +71,7 @@ class CompilerDiagnostic:
 
 @dataclass(frozen=True)
 class CompileReport:
-    source_digest: str
+    source_digest: Optional[str]
     success: bool
     diagnostics: Tuple[CompilerDiagnostic, ...]
     ir_version: Optional[str] = None
@@ -113,7 +113,20 @@ def check_report(
     The digest addresses exactly the UTF-8 source text supplied to this call.
     I/O and normalization are adapter responsibilities, not compiler behavior.
     """
-    digest = source_hash(source)
+    try:
+        digest = source_hash(source)
+    except UnicodeEncodeError as error:
+        # Editor strings can contain an unpaired UTF-16 surrogate while being
+        # edited. Such text has no UTF-8 digest; retain its real source location
+        # rather than letting hashing bypass the diagnostic adapter.
+        prefix = source[:error.start]
+        rejection = NanoSyntaxError(
+            "Source text must be encodable as UTF-8 (unpaired Unicode surrogate)",
+            prefix.count("\n") + 1, error.start - prefix.rfind("\n"),
+            expected="Unicode text encodable as UTF-8",
+            actual=f"U+{ord(source[error.start]):04X}",
+        )
+        return CompileReport(None, False, (diagnostic_for_error(rejection),))
     try:
         document = compile_to_dict(source, ir_version=ir_version, limits=limits)
         if document["nanoIrVersion"] == NANO_IR_VERSION_BASELINE:

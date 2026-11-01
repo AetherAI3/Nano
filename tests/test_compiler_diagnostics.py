@@ -153,6 +153,39 @@ def test_source_digest_addresses_compiler_text_and_cli_normalizes_bom_crlf(tmp_p
     assert source_hash(text) != source_hash(BASELINE)
 
 
+@pytest.mark.parametrize("surrogate", ["\ud800", "\udfff"])
+@pytest.mark.parametrize("context", ["// text: {}\n", 'param text = "{}"\n'])
+def test_unpaired_editor_surrogate_is_a_positioned_diagnostic_without_digest(surrogate, context):
+    source = "strategy Check {\n" + context.format("é😀" + surrogate) + "every 1m { observe() }\n}"
+    offset = source.index(surrogate)
+    prefix = source[:offset]
+    report = check_report(source)
+    assert report.success is False and report.source_digest is None
+    diagnostic, = report.diagnostics
+    assert (diagnostic.code, diagnostic.category) == ("SYNTAX_ERROR", "syntax")
+    assert diagnostic.span.start.line == prefix.count("\n") + 1
+    assert diagnostic.span.start.column == offset - prefix.rfind("\n")
+    assert diagnostic.span.end == diagnostic.span.start
+    assert diagnostic.actual == f"U+{ord(surrogate):04X}"
+    editor, = diagnostics(source)
+    assert (editor.line, editor.column, editor.code, editor.message) == (
+        diagnostic.span.start.line, diagnostic.span.start.column,
+        diagnostic.code, diagnostic.message,
+    )
+    assert json.loads(json.dumps(report.to_dict()))["sourceDigest"] is None
+
+
+def test_invalid_utf8_file_bytes_keep_io_error_and_null_source_position(tmp_path):
+    path = tmp_path / "invalid-utf8.nano"
+    path.write_bytes(b"strategy Check { \xed\xa0\x80 }")
+    code, _, errors, envelope = _check([str(path)])
+    result, = envelope["results"]
+    assert code == 3 and "not valid UTF-8" in errors
+    assert result["sourceDigest"] is None
+    assert result["diagnostics"][0]["code"] == "IO_ERROR"
+    assert result["diagnostics"][0]["span"] is None
+
+
 def test_unicode_and_eof_spans_are_exact_point_positions_and_editor_agrees():
     source = 'strategy Check { param note = "é😀" every 1m { if (RSI < 30 { observe() } } }'
     report = check_report(source)

@@ -19,7 +19,7 @@ to the command. Each result contains:
 | Field | Contract |
 | --- | --- |
 | `input` | Input path as displayed by the CLI. |
-| `sourceDigest` | `sha256:` plus the SHA-256 of the UTF-8 source text actually compiled, or `null` if unreadable. |
+| `sourceDigest` | `sha256:` plus the SHA-256 of the UTF-8 source text actually compiled, or `null` if unreadable or not UTF-8 encodable. |
 | `success` | Compilation and the corresponding IR loader both accepted the program. |
 | `diagnostics` | Empty on success; the compiler's first rejection on failure. |
 | `irVersion` | Output IR version on success, otherwise `null`. |
@@ -30,6 +30,11 @@ version domains. `sourceDigest` addresses consumed source, not raw file bytes:
 the CLI strips a UTF-8 BOM and normalizes CRLF/CR newlines while reading, as its
 plain-text reader already does. Direct Python calls hash the supplied string
 exactly. Comments and whitespace participate in that hash.
+An editor/Python string containing an unpaired Unicode surrogate cannot be
+encoded as UTF-8. The report rejects it with a positioned `SYNTAX_ERROR` and
+`sourceDigest: null`; it does not invent a digest or let hashing raise before
+diagnostics. UTF-8 input validation precedes compilation. Invalid UTF-8 file
+bytes remain a CLI read failure (`IO_ERROR`, no source span).
 
 Diagnostics have required `code`, `category`, `severity`, `message`, and `span`.
 The message is human text; automation must branch on codes and fields instead
