@@ -14,7 +14,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from .canonical import canonical_digest, canonical_json, validate_digest
-from .compile_manifest import MAX_JSON_INTEGER, compile_identity, validate_compile_manifest
+from .compile_manifest import (MAX_JSON_INTEGER, compile_identity, normalize_atlas_child_digest,
+                               validate_compile_manifest)
 from .receipt import ENERGY_TOLERANCE, MAX_REASON_CHARS, MIN_KEY_BYTES, ReceiptAuditError, SealError
 from .receipt_v2 import atlas_request_envelope, request_receipt, results_digest
 from .request import QSearchRequest
@@ -195,7 +196,8 @@ def request_receipt_v3(request: QSearchRequest, atlas_receipt: Mapping[str, Any]
     """Create a body only when ATLAS evidence matches the caller-approved compile identity."""
     manifest = validate_compile_manifest(expected_manifest, request=request)
     envelope = atlas_request_envelope(request, atlas_receipt)
-    if envelope["children"] != [pub["atlas_child_digest"] for pub in manifest["pubs"]]:
+    if ([normalize_atlas_child_digest(child) for child in envelope["children"]]
+            != [pub["atlas_child_digest"] for pub in manifest["pubs"]]):
         raise ReceiptAuditError("ATLAS children differ from the expected compile manifest")
     pubs = atlas_receipt.get("pubs")
     if isinstance(pubs, list):

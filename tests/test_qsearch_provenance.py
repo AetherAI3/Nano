@@ -11,7 +11,8 @@ import pytest
 
 from nano_qsearch.canonical import canonical_digest, canonical_json
 from nano_qsearch.compile_manifest import (
-    ManifestValidationError, build_compile_manifest, compile_identity, validate_compile_manifest,
+    ManifestValidationError, build_compile_manifest, compile_identity, normalize_atlas_child_digest,
+    validate_compile_manifest,
 )
 from nano_qsearch.receipt import ReceiptAuditError, SealError
 from nano_qsearch.receipt_v2 import request_receipt, seal_receipt_v2, verify_seal_v2
@@ -97,6 +98,44 @@ def test_original_one_pub_child_substitution_reproduction_is_regression():
         verify_receipt_v3(legacy[0], KEY, expected_manifest=manifest)
     with pytest.raises(SealError):
         verify_seal_v2(first, KEY)
+
+
+def test_actual_atlas_bare_child_hashes_normalize_only_at_manifest_boundary():
+    golden = fixture_document()
+    request = parse_request(golden["request_body"])
+    raw = copy.deepcopy(golden["atlas_receipt"])
+    raw["request"]["envelope"]["children"] = [value[7:] for value in raw["request"]["envelope"]["children"]]
+    for pub in raw["pubs"]:
+        pub["child_sha256"] = pub["child_sha256"][7:]
+    untouched = copy.deepcopy(raw)
+    manifest = manifest_for(request, raw)
+    assert manifest == golden["expected_manifest"]
+    sealed = seal_receipt_v3(request_receipt_v3(request, raw, expected_manifest=manifest, purpose=request.purpose), KEY)
+    assert sealed["compile_identity"] == golden["compile_identity"]
+    assert sealed["atlas_receipt_sha256"] == canonical_digest(untouched)
+    assert sealed["atlas_receipt_sha256"] != golden["pending_receipt"]["atlas_receipt_sha256"]
+    assert raw == untouched
+    verify_receipt_v3(sealed, KEY, expected_manifest=golden["expected_manifest"], expected_request=request)
+    changed = copy.deepcopy(raw)
+    changed["request"]["envelope"]["children"][0] = "e" * 64
+    changed["pubs"][0]["child_sha256"] = "e" * 64
+    with pytest.raises(ReceiptAuditError, match="children"):
+        request_receipt_v3(request, changed, expected_manifest=manifest, purpose=request.purpose)
+
+
+@pytest.mark.parametrize("value", [None, True, 123, "a" * 63, "a" * 65, "A" * 64,
+    "sha256:" + "A" * 64, "sha256:" + "a" * 63, "sha512:" + "a" * 64, "0x" + "a" * 64,
+    " " + "a" * 64, "a" * 64 + "\n"])
+def test_atlas_hash_normalization_rejects_every_other_wire_form(value):
+    with pytest.raises(ManifestValidationError):
+        normalize_atlas_child_digest(value)
+
+
+def test_manifest_documents_require_canonical_prefixed_children():
+    manifest = fixture_document()["expected_manifest"]
+    manifest["pubs"][0]["atlas_child_digest"] = manifest["pubs"][0]["atlas_child_digest"][7:]
+    with pytest.raises(ManifestValidationError):
+        validate_compile_manifest(manifest)
 
 
 @pytest.mark.parametrize("field", ["atlas_child_digest", "compiled_plan_digest", "isa_digest", "layout", "profile", "target", "compiler", "order"])

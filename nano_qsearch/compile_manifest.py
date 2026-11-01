@@ -53,6 +53,20 @@ def _digest(value: Any, field: str) -> None:
         raise ManifestValidationError(str(exc)) from None
 
 
+def normalize_atlas_child_digest(value: Any) -> str:
+    """Translate ATLAS's bare lower-hex wire identity into the manifest digest form.
+
+    Older local contract fixtures already use the prefixed spelling. Accept
+    precisely those two spellings at the ATLAS boundary; manifests themselves
+    always contain the canonical ``sha256:`` spelling. No raw evidence document
+    is rewritten, so its receipt evidence digest remains over its original bytes.
+    """
+    if isinstance(value, str) and len(value) == 64:
+        value = "sha256:" + value
+    _digest(value, "ATLAS child digest")
+    return value
+
+
 def validate_compile_manifest(value: Any, *, request: QSearchRequest | None = None) -> dict[str, Any]:
     """Strictly validate and detach a JSON manifest, optionally checking the frozen request."""
     manifest = _object(value, _KEYS, "manifest")
@@ -149,7 +163,7 @@ def build_compile_manifest(request: QSearchRequest, *, atlas_children: Sequence[
         plan = _object(plan, {"compiled_plan_digest", "isa_digest", "layout"}, "compiled plan")
         pubs.append({"pub_index": index, "job_digest": block.job_digest,
                      "recipients": block.recipients_payload(), "n": block.n, "shots": block.shots,
-                     "seed": block.seed, "atlas_child_digest": child, **plan})
+                     "seed": block.seed, "atlas_child_digest": normalize_atlas_child_digest(child), **plan})
     return validate_compile_manifest({"schema": MANIFEST_SCHEMA, "request_digest": request.request_digest,
         "target": {"name": request.target, "snapshot_digest": target_snapshot_digest,
                    "calibration_digest": calibration_digest},
@@ -157,4 +171,4 @@ def build_compile_manifest(request: QSearchRequest, *, atlas_children: Sequence[
 
 
 __all__ = ["MANIFEST_SCHEMA", "ManifestValidationError", "build_compile_manifest", "compile_identity",
-           "validate_compile_manifest"]
+           "normalize_atlas_child_digest", "validate_compile_manifest"]

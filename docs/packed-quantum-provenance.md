@@ -41,6 +41,12 @@ and unknown fields. Manifest v1 caps PUBs, logical width and recipients per PUB
 at 4096, shots at `2**31 - 1`, and integer fields at `2**53 - 1` for cross-language
 JSON interoperability. Layouts have one unique physical index per logical bit.
 
+ATLAS's child wire hashes are bare lowercase SHA-256 hex. The manifest builder
+and receipt constructor normalize that representation to `sha256:<hex>`;
+manifests themselves admit only the prefixed canonical form. The raw ATLAS
+document is preserved under `atlas_receipt_sha256`. This boundary changes
+neither ATLAS's ASCII-escaped fingerprint algorithm nor any v2 behavior.
+
 ## Issuing and verifying
 
 The issuer calls `request_receipt_v3(request, atlas_receipt,
@@ -116,3 +122,11 @@ The explicit prepare/profile protocol in issue #63 supplies source/profile/targe
 and compiled artifact identities. Its execution adapter must bind actual frozen
 ATLAS children before using this receipt contract; it must never invent missing
 identity evidence or silently recompile under another approval.
+
+ATLAS's actual frozen-child wire digest uses 64 bare lowercase hex characters.
+The boundary accepts that form and the prefixed form used by early local
+fixtures, normalizing both into the manifest's required `sha256:<64 lower hex>`
+form. This normalization never rewrites the ATLAS evidence document:
+`atlas_receipt_sha256` continues to digest the original raw document. Uppercase,
+wrong-length or other algorithm spellings fail closed. A received manifest must
+already use the canonical prefixed form.
