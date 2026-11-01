@@ -21,6 +21,12 @@ def fixture(name):
     return json.loads((FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
 
 
+def test_core_canonical_bytes_match_legacy_wire_golden():
+    from nano.quantum.canonical import canonical_digest as core_digest
+    golden = json.loads((ROOT / "tests/qsearch_fixtures/canonical_golden.json").read_text(encoding="utf-8"))
+    assert core_digest(golden["payload"]) == golden["digest"]
+
+
 @pytest.mark.parametrize("name", ["known-bits", "one-record", "packed-records", "optimize-qubo"])
 def test_frozen_fixture_schema_and_semantic_conformance(name):
     jsonschema = pytest.importorskip("jsonschema")

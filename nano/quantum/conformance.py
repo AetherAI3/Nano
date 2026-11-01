@@ -1,6 +1,6 @@
 """Deterministic fixture generators; no runtime, randomness or external I/O."""
 from .contract import QuantumPlan, build_plan, prepare_bits, sample
-from nano_qsearch.canonical import canonical_digest
+from .canonical import canonical_digest
 
 
 def large_mapping_fixture() -> QuantumPlan:

@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
 
-from nano_qsearch.canonical import canonical_digest, validate_digest
+from .canonical import canonical_digest, validate_digest
 
 SCHEMA = "nano.quantum.operations.v1"
 RESULT_SCHEMA = "nano.quantum.fixture-result.v1"
