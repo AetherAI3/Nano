@@ -181,7 +181,8 @@ def confirmed_zero_receipt(request: QSearchRequest, receipt: Mapping[str, Any]) 
         return False
     proof = usage.get("zero_usage_evidence")
     seal = receipt.get("seal")
-    if (receipt.get("schema") != SCHEMA_V2 or receipt.get("receipt_version") != RECEIPT_VERSION
+    if (receipt.get("schema") != SCHEMA_V2 or type(receipt.get("receipt_version")) is not int
+            or receipt["receipt_version"] != RECEIPT_VERSION
             or receipt.get("status") != "FAILED" or receipt.get("blocks") != []
             or receipt.get("results_digest") != results_digest([])
             or bound.get("request_digest") != request.request_digest or type(bound.get("block_count")) is not int

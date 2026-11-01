@@ -44,6 +44,7 @@ def test_even_an_authenticated_receipt_cannot_relax_proof_identity(field, value)
 
 
 @pytest.mark.parametrize("path,value", [
+    (("receipt_version",), 2.0),
     (("status",), "OK"), (("reason",), "cancelled"), (("blocks",), [{}]),
     (("request", "request_digest"), "sha256:" + "0" * 64), (("request", "block_count"), False),
     (("backend", "kind"), "none"), (("backend", "id"), "ibm_other"), (("backend", "dry_run"), True),
