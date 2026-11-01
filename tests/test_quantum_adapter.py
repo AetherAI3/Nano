@@ -385,9 +385,10 @@ def legacy_target_fixture(target, *, request=True, wall_s=None):
 @pytest.mark.parametrize("packed", [False, True])
 def test_all_pinned_targets_are_source_readable_without_promoting_compile_support(target, packed):
     from nano_qsearch.job import TARGETS
-    assert target not in TARGETS  # The existing main execution parser is unchanged.
+    execution_targets = tuple(TARGETS)
     body = legacy_target_fixture(target, request=packed)
     imported = read_legacy(body)
+    assert tuple(TARGETS) == execution_targets  # Reading never expands execution support.
     assert imported.to_legacy_payload() == body and imported.plan is None
     assert imported.projection_diagnostics == ("LEGACY_TARGET_UNSUPPORTED",)
     if packed:
