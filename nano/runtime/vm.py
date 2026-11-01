@@ -33,6 +33,7 @@ no recorder: see ``ReasoningProvider`` below for the interface a host implements
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -49,6 +50,7 @@ from typing import (
 from ..indicators import evaluate as evaluate_indicator
 from ..indicators.registry import lookup as lookup_indicator
 from ..ir.module import IRNode, NanoModule
+from ..ir.schema import validate_integer_magnitude
 from .effects import Intent, LogEntry
 from .interpreter import MarketFrame, RuntimeError_
 from .risk import ACTUATING_ACTIONS, RiskGate
@@ -63,9 +65,12 @@ Value = Union[Series, float, int, bool, str, None]
 class ReasoningProvider(Protocol):
     """Supplies the result of one `infer` call against a declared signature.
 
-    Implemented by a host (Aether Cloud's reasoning gateway, ATS's llmre) and, in
-    replay, by ``nano.agents.RecordedProvider``. The VM never constructs a
+    Implemented by a host (Aether Cloud's reasoning gateway, ATS's llmre) or a
+    host-owned recorded provider for replay. The VM never constructs a
     provider itself, so a module cannot reach a model the caller did not hand it.
+
+    Results must exactly match declared output names and supported scalar types.
+    Invalid records are absent atomically; see ``docs/reasoning-provider.md``.
     """
 
     def infer(
@@ -167,6 +172,87 @@ def _field_of(cell: Any, name: str) -> Cell:
         value = cell.get(name)
         return value if value is None or isinstance(value, (int, float, bool)) else None
     return None
+
+
+def _infer_output_contract(outputs: Any) -> Optional[str]:
+    """Reject unsupported/malformed output declarations before calling a host."""
+    if not isinstance(outputs, (list, tuple)) or not outputs:
+        return "outputs: invalid_signature"
+    names: set[str] = set()
+    for index, field_spec in enumerate(outputs):
+        path = f"outputs/{index}"
+        if not isinstance(field_spec, Mapping):
+            return f"{path}: invalid_signature"
+        name = field_spec.get("name")
+        if type(name) is not str or not name or name in names:
+            return f"{path}/name: invalid_signature"
+        names.add(name)
+        kind = field_spec.get("type")
+        if type(kind) is not str or kind not in ("int", "float", "bool", "confidence"):
+            return f"{path}/type: unsupported_output_type"
+        if "range" in field_spec:
+            bounds = field_spec["range"]
+            if (
+                kind == "bool"
+                or not isinstance(bounds, (list, tuple))
+                or len(bounds) != 2
+                or any(type(bound) not in (int, float) for bound in bounds)
+                or any(type(bound) is float and not math.isfinite(bound) for bound in bounds)
+                or bounds[0] > bounds[1]
+            ):
+                return f"{path}/range: invalid_signature"
+    return None
+
+
+def _infer_response(result: Any, outputs: Sequence[Mapping[str, Any]]) -> Tuple[Optional[dict], Optional[str]]:
+    """Validate a whole response, without leaking provider values into diagnostics."""
+    if not isinstance(result, Mapping):
+        return None, "response: expected_mapping"
+    names = {field_spec["name"] for field_spec in outputs}
+    try:
+        if len(result) != len(names) or set(result) != names:
+            return None, "response: output_fields_mismatch"
+        accepted = {}
+        for index, field_spec in enumerate(outputs):
+            path = f"outputs/{index}"
+            value = result[field_spec["name"]]
+            kind = field_spec["type"]
+            if kind == "bool":
+                if type(value) is not bool:
+                    return None, f"{path}: expected_bool"
+            elif kind == "int":
+                if type(value) is not int:
+                    return None, f"{path}: expected_int"
+                if validate_integer_magnitude(value) is not None:
+                    return None, f"{path}: integer_out_of_bounds"
+            else:
+                if type(value) not in (int, float):
+                    return None, f"{path}: expected_finite_number"
+                try:
+                    widened = float(value)
+                except OverflowError:
+                    return None, f"{path}: expected_finite_number"
+                if not math.isfinite(widened):
+                    return None, f"{path}: expected_finite_number"
+                if kind == "confidence" and not 0 <= value <= 1:
+                    return None, f"{path}: confidence_out_of_range"
+                # Preserve the admitted value and existing replay bytes. Nano's
+                # type system permits integer widening; no text/bool coercion.
+            bounds = field_spec.get("range")
+            if bounds is not None and not bounds[0] <= value <= bounds[1]:
+                return None, f"{path}: outside_declared_range"
+            accepted[field_spec["name"]] = value
+        return accepted, None
+    except Exception:
+        # An exotic Mapping may fail while reading its keys/values. It is still
+        # an invalid response, not permission to abort unrelated rules.
+        return None, "response: unreadable_mapping"
+
+
+def _infer_detail(signature: str, reason: str) -> str:
+    """Bound diagnostics and escape control characters; never include outputs."""
+    safe_reason = reason.encode("unicode_escape").decode("ascii")
+    return f"{signature!r}: {safe_reason}"[:256]
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +414,17 @@ class _Machine:
             return (None,) * self.length
 
         declared = self._signatures.get(signature, {})
+        outputs = declared.get("outputs")
+        contract_problem = _infer_output_contract(outputs)
+        if contract_problem is not None:
+            self.log.append(
+                LogEntry(
+                    event="infer.invalid",
+                    timestamp=first_timestamp,
+                    detail=_infer_detail(signature, contract_problem),
+                )
+            )
+            return (None,) * self.length
         names = [f["name"] for f in declared.get("inputs", [])]
         operands = [_as_series(v, self.length) for v in self._operands(node)]
 
@@ -337,15 +434,36 @@ class _Machine:
                 name: (operands[position][bar] if position < len(operands) else None)
                 for position, name in enumerate(names)
             }
-            result = self.provider.infer(
-                signature, payload, timestamp=self.frame.timestamps[bar]
-            )
-            out.append(dict(result))
+            try:
+                result = self.provider.infer(
+                    signature, payload, timestamp=self.frame.timestamps[bar]
+                )
+            except Exception as exc:
+                out.append(None)
+                self.log.append(
+                    LogEntry(
+                        event="infer.failed",
+                        timestamp=self.frame.timestamps[bar],
+                        detail=_infer_detail(signature, f"provider_exception:{type(exc).__name__}"),
+                    )
+                )
+                continue
+            accepted, problem = _infer_response(result, outputs)
+            out.append(accepted)
+            if problem is not None:
+                self.log.append(
+                    LogEntry(
+                        event="infer.invalid",
+                        timestamp=self.frame.timestamps[bar],
+                        detail=_infer_detail(signature, problem),
+                    )
+                )
+                continue
             self.log.append(
                 LogEntry(
                     event="infer.called",
                     timestamp=self.frame.timestamps[bar],
-                    detail=f"{signature} -> {sorted(result)}",
+                    detail=f"{signature} -> {sorted(accepted)}",
                 )
             )
         return tuple(out)

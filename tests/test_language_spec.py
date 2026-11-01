@@ -479,15 +479,21 @@ strategy Reasoned {
             return {"confidence": 0.9 if timestamp == 0 else 2.0}
 
     supplied = run_module(module, frame, provider=Provider())
-    # 2.0 is outside the declared range.  The current VM treats ranges as
-    # schema metadata and does not validate provider output against them.
+    # Invalid provider output is absent atomically. The valid bar executes;
+    # the out-of-range bar follows the route's declared escalation fallback.
     assert [(item.target, item.is_agent) for item in supplied.escalations] == [
-        ("host-desk", False)
+        ("host-desk", False),
+        ("Desk", True),
     ]
     assert supplied.intents == ()  # route execute labels do not dispatch intents
     executed = [entry for entry in supplied.log if entry.event == "route.executed"]
-    assert len(executed) == 2
+    assert len(executed) == 1
+    assert executed[0].timestamp == 0
     assert all("approved" in entry.detail for entry in executed)
+    invalid = [entry for entry in supplied.log if entry.event == "infer.invalid"]
+    assert len(invalid) == 1
+    assert invalid[0].timestamp == 60
+    assert "confidence_out_of_range" in invalid[0].detail
 
 
 WARMUP_TEXT = {
