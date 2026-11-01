@@ -74,7 +74,7 @@ jobs:
           wheel = next(Path("dist").glob("*.whl"))
           expected = {
               path.as_posix()
-              for root in (Path("nano/examples"), Path("nano/library"), Path("nano/project"), Path("nano/quantum"))
+              for root in (Path("nano/examples"), Path("nano/library"), Path("nano/project"), Path("nano/quantum"), Path("nano/intent"))
               for path in root.rglob("*")
               if path.suffix in {".nano", ".json"}
           }

@@ -558,22 +558,37 @@ def command_intent(args: Any, console: Console) -> int:
     """Parse, compile, or explain a deterministic natural-language intent."""
 
     try:
+        profile = getattr(args, "profile", "market")
+        catalog_path = getattr(args, "catalog", None)
+        catalog = None
+        if catalog_path is not None:
+            if profile != "quantum":
+                raise ValueError("--catalog requires --profile quantum")
+            try:
+                catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError) as exc:
+                console.warn(f"error: cannot read quantum catalog: {exc}")
+                return EXIT_IO
+        options = {"profile": profile, "quantum_catalog": catalog}
         if args.intent_action == "parse":
             console.say(
                 json.dumps(
-                    parse_intent(args.phrase).to_dict(),
+                    parse_intent(args.phrase, **options).to_dict(),
                     indent=2,
                     ensure_ascii=False,
                 )
             )
             return EXIT_OK
         if args.intent_action == "explain":
-            console.say(explain_intent(args.phrase))
+            console.say(explain_intent(args.phrase, **options))
             return EXIT_OK
 
-        ir = compile_intent(args.phrase)
+        ir = compile_intent(args.phrase, **options)
         if args.json:
-            console.emit(canonical_intent_bytes(ir) + b"\n")
+            if profile == "quantum":
+                console.emit(ir.canonical_bytes() + b"\n")
+            else:
+                console.emit(canonical_intent_bytes(ir) + b"\n")
         else:
             console.say(json.dumps(ir.to_dict(), indent=2, ensure_ascii=False))
         return EXIT_OK

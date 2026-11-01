@@ -232,6 +232,12 @@ def build_parser() -> argparse.ArgumentParser:
     intent_explain.add_argument("phrase", metavar="PHRASE")
     intent_explain.set_defaults(handler=command_intent)
 
+    for command in (intent_parse, intent_compile, intent_explain):
+        command.add_argument("--profile", choices=("market", "quantum"), default="market",
+                             help="explicit command domain; market remains the default")
+        command.add_argument("--catalog", type=Path,
+                             help="caller-supplied quantum resource catalog JSON")
+
     project = subcommands.add_parser("project", help="classify and search PR, commit, and memory records")
     project_actions = project.add_subparsers(dest="project_action", required=True)
     project_parse = project_actions.add_parser("parse", help="compile a read-only project search")
