@@ -65,6 +65,23 @@ def test_real_ledger_zero_transition_seals_failed_and_replays_offline(tmp_path, 
     expected = receipt_v2.ExpectedRequestV2.from_descriptor(body["descriptor"])
     verified = receipt_v2.verify_qsearch_receipt(sealed, key=RECEIPT_KEY, expected=expected)
     assert verified.status == "FAILED" and verified.usage["usage_pending"] is False
+    from bench.qcomms.hw0 import j5, score
+    journal = j5.Journal(tmp_path / "predator-journal.sqlite3")
+    journal.put(expected.request_id, phase="c", idx=0, request_digest=expected.request_digest,
+                status="part_stopped", job_id=sealed["hardware"]["provider_job_id"])
+    first = journal.reconcile_terminal_receipt(sealed, key=RECEIPT_KEY, expected=expected,
+                                               instance_crn="test-instance")
+    restarted = j5.Journal(journal.path)
+    assert restarted.reconcile_terminal_receipt(sealed, key=RECEIPT_KEY, expected=expected,
+                                                instance_crn="test-instance") == first
+    assert json.loads(first["prior_row"])["status"] == "part_stopped"
+    budget = score.Budget()
+    held = budget.add(stage="Q", arm="C", unit=expected.request_id, cap_s=10, pubs=3, settled=None)
+    held.update(request_id=expected.request_id, request_digest=expected.request_digest,
+                provider_job_id=sealed["hardware"]["provider_job_id"], backend_name=expected.target)
+    budget.reconcile_confirmed_zero(held, verified, instance_crn="test-instance")
+    budget.reconcile_confirmed_zero(held, verified, instance_crn="test-instance")
+    assert budget.charged_s == 0 and held["pubs"] == 3
 
 
 @pytest.mark.parametrize("billing_status,charge", [("pending", 0), ("typo", 0), (None, 0), ("complete", 0.8)])
