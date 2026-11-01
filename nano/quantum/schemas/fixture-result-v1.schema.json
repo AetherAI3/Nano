@@ -19,7 +19,7 @@
           "operation_id": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\S(?:.*\\S)?$"
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
           },
           "pub_index": {
             "type": "integer",
@@ -28,7 +28,7 @@
           "register": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^\\S(?:.*\\S)?$"
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
           },
           "bit_order": {
             "const": "msb_first"

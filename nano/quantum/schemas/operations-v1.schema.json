@@ -19,7 +19,7 @@
               "id": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "op": {
                 "const": "prepare_bits"
@@ -29,7 +29,7 @@
                 "items": {
                   "type": "string",
                   "minLength": 1,
-                  "pattern": "^\\S(?:.*\\S)?$"
+                  "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                 },
                 "minItems": 1,
                 "uniqueItems": true
@@ -47,7 +47,7 @@
                     "recipient_id": {
                       "type": "string",
                       "minLength": 1,
-                      "pattern": "^\\S(?:.*\\S)?$"
+                      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                     },
                     "chunk": {
                       "type": "integer",
@@ -63,7 +63,7 @@
                         "reference": {
                           "type": "string",
                           "minLength": 1,
-                          "pattern": "^\\S(?:.*\\S)?$"
+                          "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                         },
                         "digest": {
                           "type": "string",
@@ -145,7 +145,7 @@
               "id": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "op": {
                 "const": "sample"
@@ -153,12 +153,12 @@
               "preparation_id": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "backend": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "shots": {
                 "type": "integer",
@@ -201,7 +201,7 @@
                   "register": {
                     "type": "string",
                     "minLength": 1,
-                    "pattern": "^\\S(?:.*\\S)?$"
+                    "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                   },
                   "width": {
                     "type": "integer",
@@ -238,7 +238,7 @@
               "id": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "op": {
                 "const": "optimize_qubo"
@@ -248,7 +248,7 @@
                 "items": {
                   "type": "string",
                   "minLength": 1,
-                  "pattern": "^\\S(?:.*\\S)?$"
+                  "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                 },
                 "minItems": 1,
                 "uniqueItems": true
@@ -337,7 +337,7 @@
               "backend": {
                 "type": "string",
                 "minLength": 1,
-                "pattern": "^\\S(?:.*\\S)?$"
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
               },
               "shots": {
                 "type": "integer",
@@ -380,7 +380,7 @@
                   "register": {
                     "type": "string",
                     "minLength": 1,
-                    "pattern": "^\\S(?:.*\\S)?$"
+                    "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
                   },
                   "width": {
                     "type": "integer",
