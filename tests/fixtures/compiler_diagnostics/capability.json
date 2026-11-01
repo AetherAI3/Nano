@@ -1,0 +1,35 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "category": "capability",
+          "code": "CAPABILITY_ERROR",
+          "message": "'escalate' requires tier 'nano+', but this module declares tier 'nano' (add `tier nano+` above the strategy)",
+          "severity": "error",
+          "span": {
+            "end": {
+              "column": 29,
+              "line": 1
+            },
+            "start": {
+              "column": 29,
+              "line": 1
+            }
+          }
+        }
+      ],
+      "input": "capability.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:378c9a1298ac54364be5de30f5383d7d4c50ed98e0298ac4b8564e6b5815aac0",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}

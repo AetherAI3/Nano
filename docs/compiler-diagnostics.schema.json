@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AetherAI3/Nano/docs/compiler-diagnostics.schema.json",
+  "title": "Nano check diagnostics envelope v1",
+  "type": "object",
+  "required": ["schemaVersion", "compiler", "success", "results"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "compiler": {
+      "type": "object",
+      "required": ["name", "version", "packageVersion"],
+      "properties": {
+        "name": {"type": "string"},
+        "version": {"type": "string"},
+        "packageVersion": {"type": "string"}
+      }
+    },
+    "success": {"type": "boolean"},
+    "results": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["input", "sourceDigest", "success", "diagnostics", "irVersion"],
+        "properties": {
+          "input": {"type": "string"},
+          "sourceDigest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+          "success": {"type": "boolean"},
+          "diagnostics": {"type": "array", "items": {"$ref": "#/$defs/diagnostic"}},
+          "irVersion": {"type": ["string", "null"]}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "position": {
+      "type": "object", "required": ["line", "column"],
+      "properties": {"line": {"type": "integer", "minimum": 1}, "column": {"type": "integer", "minimum": 1}}
+    },
+    "span": {
+      "type": "object", "required": ["start", "end"],
+      "properties": {"start": {"$ref": "#/$defs/position"}, "end": {"$ref": "#/$defs/position"}}
+    },
+    "diagnostic": {
+      "type": "object", "required": ["code", "category", "severity", "message", "span"],
+      "properties": {
+        "code": {"type": "string"},
+        "category": {"enum": ["syntax", "type", "lookahead", "resource", "capability", "version", "ir", "io"]},
+        "severity": {"const": "error"},
+        "message": {"type": "string"},
+        "span": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/span"}]},
+        "expected": {"type": "string"},
+        "actual": {"type": "string"},
+        "hint": {"type": "string", "maxLength": 240}
+      }
+    }
+  }
+}

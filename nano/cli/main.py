@@ -87,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="report tier, warm-up, and effects for each file",
     )
+    check.add_argument(
+        "--json", dest="json_output", action="store_true",
+        help="emit one versioned JSON diagnostic document for all inputs",
+    )
+    check.add_argument(
+        "--ir-version", default=None, metavar="VERSION",
+        help="check compilation for this IR version; unsupported versions are diagnostics",
+    )
     check.set_defaults(handler=command_check)
 
     compile_command = subcommands.add_parser(

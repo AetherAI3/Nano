@@ -225,14 +225,31 @@ class _Parser:
     def _expect(self, token_type: str, what: str) -> Token:
         token = self._peek()
         if token.type != token_type:
-            raise self._error(f"Expected {what}, got {self._describe(token)}", token)
+            punctuation = {
+                "LPAREN": "(", "RPAREN": ")", "LBRACE": "{", "RBRACE": "}",
+                "LBRACKET": "[", "RBRACKET": "]", "COMMA": ",", "COLON": ":",
+                "ASSIGN": "=", "DOT": ".",
+            }
+            expected = punctuation.get(token_type, what)
+            hint = (
+                f"Check for the missing {expected!r} before this token."
+                if token_type in punctuation else None
+            )
+            raise NanoSyntaxError(
+                f"Expected {what}, got {self._describe(token)}",
+                token.line, token.column, expected=expected,
+                actual="end of input" if token.type == "EOF" else token.value,
+                hint=hint,
+            )
         return self._advance()
 
     def _expect_keyword(self, keyword: str) -> Token:
         token = self._peek()
         if token.type != "IDENT" or token.value != keyword:
-            raise self._error(
-                f"Expected {keyword!r} keyword, got {self._describe(token)}", token
+            raise NanoSyntaxError(
+                f"Expected {keyword!r} keyword, got {self._describe(token)}",
+                token.line, token.column, expected=keyword,
+                actual="end of input" if token.type == "EOF" else token.value,
             )
         return self._advance()
 

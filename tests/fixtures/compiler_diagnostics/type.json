@@ -1,0 +1,35 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "category": "type",
+          "code": "TYPE_ERROR",
+          "message": "Cannot apply '+' to bool and int",
+          "severity": "error",
+          "span": {
+            "end": {
+              "column": 35,
+              "line": 1
+            },
+            "start": {
+              "column": 35,
+              "line": 1
+            }
+          }
+        }
+      ],
+      "input": "type.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:ccdc535903174e1342bcdb93b5ad087563fd55a0b2399b5e48d2f8895d2192b9",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}
