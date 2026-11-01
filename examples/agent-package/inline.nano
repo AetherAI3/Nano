@@ -1,0 +1,9 @@
+strategy AgentTask {
+  input evidence_count: int
+  input evidence_verified: bool
+  input model_tokens: int
+  every 1m {
+    if (evidence_count >= 2 and evidence_verified) and model_tokens >= 100 { execute() }
+    else { pause() }
+  }
+}

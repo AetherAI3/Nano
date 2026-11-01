@@ -4,6 +4,7 @@ Nano is a **beta reference implementation**. This page distinguishes code that i
 
 | Area | Status | Evidence and boundary |
 | --- | --- | --- |
+| Hermetic packages and pure helpers | Minimal scalar subset implemented | Opt-in `nano.compiler.compile_package` verifies explicit local byte pins, checks acyclic pure helpers and emits existing v1 executable IR plus separately versioned build evidence. No discovery/download or host execution. Records/enums/results remain proposed; see [RFC 0066](rfc-0066-hermetic-packages.md). |
 | Intent frontend | Implemented; host execution separate | `nano/intent/` parses bounded human requests into typed, canonical plans with explicit effects, confirmation policy, and receipts. Nano can describe a `data.read` or `llm.call` step but does not execute either one. See [intent-compiler.md](intent-compiler.md). |
 | Project search and semantic annotations | Implemented in Nano; host integration separate | `nano/project/` derives tags with evidence, suggests titles, compiles bounded read-only queries, groups supplied records, and emits compact capsules. The host owns corpus completeness, freshness, GitHub, and APR graph persistence. See [project-intelligence.md](project-intelligence.md). |
 | `.nano` lexer, parser, and canonical code generation | Implemented | `nano/compiler/` parses the v1.0 grammar and produces `StrategyGraph` (baseline IR) or `NanoModule` (v1.0 IR). |

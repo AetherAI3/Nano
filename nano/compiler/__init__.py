@@ -39,6 +39,7 @@ from .errors import LookaheadError, NanoCompileError, NanoSyntaxError, NanoTypeE
 from .lexer import decode_string, tokenize
 from .parser import parse
 from .tokens import Token
+from .package import CompiledPackage, PackageError, PackageResourceError, compile_package
 
 __all__ = [
     "EFFECTS_V0_1_0",
@@ -50,6 +51,10 @@ __all__ = [
     "Token",
     "ast_to_dict",
     "check_source",
+    "CompiledPackage",
+    "PackageError",
+    "PackageResourceError",
+    "compile_package",
     "compile_module",
     "compile_source",
     "compile_to_dict",

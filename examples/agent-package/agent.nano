@@ -1,0 +1,10 @@
+import Task
+strategy AgentTask {
+  input evidence_count: int
+  input evidence_verified: bool
+  input model_tokens: int
+  every 1m {
+    if ready(evidence_count, evidence_verified, model_tokens) { execute() }
+    else { pause() }
+  }
+}
