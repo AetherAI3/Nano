@@ -10,6 +10,7 @@ Taxonomy (v1.0):
      └── NanoSyntaxError        lexing / parsing
           ├── NanoResourceLimitError deterministic source admission limit
           └── NanoTypeError     semantic analysis (types, arity, unknown names)
+               ├── NanoCapabilityError a construct unavailable in the tier
                └── LookaheadError  a read of future data
 
 ``NanoTypeError`` deliberately subclasses ``NanoSyntaxError`` rather than
@@ -27,11 +28,21 @@ from __future__ import annotations
 class NanoCompileError(ValueError):
     """`.nano` source failed to compile. Carries .line, .column, .message."""
 
-    def __init__(self, message: str, line: int, column: int) -> None:
+    code = "SYNTAX_ERROR"
+    category = "syntax"
+
+    def __init__(
+        self, message: str, line: int, column: int, *,
+        expected: str | None = None, actual: str | None = None,
+        hint: str | None = None,
+    ) -> None:
         super().__init__(f"{line}:{column}: {message}")
         self.message = message
         self.line = line
         self.column = column
+        self.expected = expected
+        self.actual = actual
+        self.hint = hint[:240] if hint is not None else None
 
 
 class NanoSyntaxError(NanoCompileError):
@@ -42,6 +53,7 @@ class NanoResourceLimitError(NanoSyntaxError):
     """Source exceeds a deterministic compiler admission budget."""
 
     code = "RESOURCE_LIMIT"
+    category = "resource"
 
     def __init__(self, resource: str, limit: int, line: int, column: int) -> None:
         self.resource = resource
@@ -57,6 +69,16 @@ class NanoResourceLimitError(NanoSyntaxError):
 class NanoTypeError(NanoSyntaxError):
     """Source parses but violates the type system or a semantic rule."""
 
+    code = "TYPE_ERROR"
+    category = "type"
+
+
+class NanoCapabilityError(NanoTypeError):
+    """Source requests a construct unavailable in its declared language tier."""
+
+    code = "CAPABILITY_ERROR"
+    category = "capability"
+
 
 class LookaheadError(NanoTypeError):
     """Source attempts to read data from the future.
@@ -66,3 +88,6 @@ class LookaheadError(NanoTypeError):
     Nano makes it unrepresentable rather than merely detectable — see
     ``nano/types/lookahead.py``.
     """
+
+    code = "LOOKAHEAD_ERROR"
+    category = "lookahead"

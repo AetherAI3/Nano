@@ -35,7 +35,14 @@ from .codegen import (
     required_ir_version,
     source_hash,
 )
-from .errors import LookaheadError, NanoCompileError, NanoResourceLimitError, NanoSyntaxError, NanoTypeError
+from .errors import (
+    LookaheadError, NanoCapabilityError, NanoCompileError, NanoResourceLimitError,
+    NanoSyntaxError, NanoTypeError,
+)
+from .diagnostics import (
+    DIAGNOSTIC_SCHEMA_VERSION, CompileReport, CompilerDiagnostic, SourcePosition,
+    SourceSpan, check_report, diagnostic_for_error,
+)
 from .lexer import decode_string, tokenize
 from .parser import CompilerLimits, DEFAULT_COMPILER_LIMITS, MAX_COMPILER_NESTING, parse
 from .tokens import Token
@@ -44,6 +51,7 @@ __all__ = [
     "EFFECTS_V0_1_0",
     "IRVersionError",
     "LookaheadError",
+    "NanoCapabilityError",
     "NanoCompileError",
     "NanoResourceLimitError",
     "CompilerLimits",
@@ -52,12 +60,19 @@ __all__ = [
     "NanoSyntaxError",
     "NanoTypeError",
     "Token",
+    "DIAGNOSTIC_SCHEMA_VERSION",
+    "CompileReport",
+    "CompilerDiagnostic",
+    "SourcePosition",
+    "SourceSpan",
     "ast_to_dict",
     "check_source",
+    "check_report",
     "compile_module",
     "compile_source",
     "compile_to_dict",
     "decode_string",
+    "diagnostic_for_error",
     "parse",
     "required_ir_version",
     "source_hash",
