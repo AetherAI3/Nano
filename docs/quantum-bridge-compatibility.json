@@ -1,0 +1,152 @@
+{
+  "schema": "nano.quantum.bridge-compatibility-evidence.v1",
+  "status": "source-inspection-only",
+  "repository": "AetherAI3/Nano",
+  "main_sha": "d740bb530262c1c76a2b18c8a8aa47476f8b6b96",
+  "tracked_bridge": {
+    "pull_request": 52,
+    "state_at_inspection": "OPEN",
+    "head_sha": "b6ba6542b2c311d6354948e528bc64f147911178",
+    "head_branch": "claude/qcomms-j6-nano",
+    "base_branch": "claude/qcomms-j2-on-hw0-r3",
+    "base_sha": "998938dde1186d5064fe96fe7b19511f96b77d88",
+    "source_url": "https://github.com/AetherAI3/Nano/tree/b6ba6542b2c311d6354948e528bc64f147911178/nano_qsearch",
+    "stack": [
+      {
+        "pull_request": 49,
+        "head_sha": "64203b2724bc1f514d3831e7338f1a71782b5af7",
+        "base_branch": "main",
+        "role": "packed-v2-request-device-compile-and-live-context"
+      },
+      {
+        "pull_request": 50,
+        "head_sha": "09b22da41015d1276d74dc1b0ed1eebc9d4ecdc0",
+        "base_branch": "main",
+        "role": "independent-default-off-basis-preparation-and-layout-options"
+      },
+      {
+        "pull_request": 51,
+        "head_sha": "998938dde1186d5064fe96fe7b19511f96b77d88",
+        "base_branch": "claude/qcomms-hw0-nano",
+        "role": "integration-of-49-and-50-with-compile-conflict-resolution"
+      },
+      {
+        "pull_request": 52,
+        "head_sha": "b6ba6542b2c311d6354948e528bc64f147911178",
+        "base_branch": "claude/qcomms-j2-on-hw0-r3",
+        "role": "large-packed-requests-one-frozen-target-and-accounting-recovery"
+      }
+    ],
+    "integration_policy": "Track this exact source contract without treating the open stack as merged main. Revalidate against any merged successor before promoting an adapter."
+  },
+  "legacy_job": {
+    "schema": "predator.qsearch.job.v1",
+    "present_on_main": true,
+    "source_path": "nano_qsearch/job.py",
+    "top_level_fields": ["schema", "compiled_search_digest", "variables", "qubo", "compile", "backend", "limits", "audit", "job_digest"],
+    "nested_fields": {
+      "qubo": ["q", "offset", "convention"],
+      "compile": ["variant", "p", "gammas", "betas", "opt_level", "seed", "target", "training"],
+      "backend": ["kind", "chi_max", "shots", "seed"],
+      "limits": ["max_variables", "max_wall_s", "max_qpu_s"],
+      "audit": ["classical_min_energy"]
+    },
+    "invariants": [
+      "Exact key sets are required at the job and nested-object boundaries.",
+      "Variables are a nonempty ordered list of distinct nonempty strings.",
+      "Q is a finite square exactly symmetric matrix in variable order; convention is symmetric_half.",
+      "p is an integer at least one; gammas and betas each contain exactly p finite numbers.",
+      "Integer and numeric admission reject booleans and strings; numeric admission rejects non-finite values.",
+      "job_digest is recomputed over the canonical unsigned job and must match."
+    ],
+    "native_prepare_bits_supported": false,
+    "native_sample_of_preparation_supported": false,
+    "native_optimize_qubo_shape": "Legacy QUBO job with declared compile method, angles, bounds and energy audit."
+  },
+  "legacy_request": {
+    "schema": "predator.qsearch.request.v2",
+    "present_on_main": false,
+    "source_path_at_tracked_bridge": "nano_qsearch/request.py",
+    "body_fields": ["schema", "descriptor", "jobs"],
+    "descriptor_fields": ["schema", "request_id", "target", "purpose", "max_execution_time", "manifest_digest", "batch_index", "batch_digest", "blocks"],
+    "block_fields": ["pub_index", "job_digest", "recipients", "n", "shots", "seed", "classical_min_energy"],
+    "recipient_fields": ["agent_id", "chunk", "slot"],
+    "purposes": ["qsearch", "qcomms"],
+    "targets": ["fake_fez", "ibm_fez", "ibm_kingston", "ibm_marrakesh"],
+    "default_max_pubs": 16,
+    "configurable_max_pubs_range": [1, 4096],
+    "max_pubs_environment_variable": "NANO_QSEARCH_V2_MAX_PUBS",
+    "max_execution_time_range_seconds": [1, 600],
+    "invariants": [
+      "Every job is still predator.qsearch.job.v1 with backend.kind ibm and the descriptor's one target.",
+      "One job is required per block, in block order; pub_index equals the block position.",
+      "Job digest, width, shots, backend seed and classical minimum energy agree with the descriptor block.",
+      "A job digest cannot repeat. An (agent_id, chunk) delivery cannot repeat across the request.",
+      "Recipient slots are strictly increasing within each block.",
+      "A live request's max_execution_time cannot exceed the sum of child limits.max_qpu_s.",
+      "A 1200-PUB request requires an explicit service cap of at least 1200 and sufficient configured HTTP body size."
+    ],
+    "semantic_limit": "purpose=qcomms is a request label. It does not change a child into a packet-preparation operation or prove packet delivery."
+  },
+  "compile_contract": {
+    "compiled_plan_schema": "nano.qsearch.compiled-plan.v1",
+    "main_signature": "compile_program(job: QSearchJob) -> CompiledProgram",
+    "tracked_bridge_signatures": [
+      "compile_program(job: QSearchJob, *, backend=None, options=None, fez=None) -> CompiledProgram",
+      "compile_jobs(jobs, *, backend=None, options=None) -> list[CompiledProgram]"
+    ],
+    "compile_options_fields": ["basis_prep", "layout", "calibration", "calibration_sha256", "layout_backend"],
+    "basis_prep_constraint": "The default-off rewrite recognizes a strictly diagonal QUBO with no zero diagonal entries and prepares its unique minimizing basis state. The legacy job still requires QAOA fields even though the rewrite does not consume the angles.",
+    "target_constraint": "compile_jobs resolves and freezes one target for all children; live-only kingston/marrakesh compile against their resolved live backend, never a fake stand-in.",
+    "provenance": "Compiled-plan identity binds ISA QPY bytes, inspection and compile options/device target metadata when applicable.",
+    "explicit_options_required_for_new_adapter": true,
+    "reason": "options=None reads ambient environment in the legacy bridge; a deterministic proposal adapter must pass its checked profile explicitly."
+  },
+  "legacy_results": {
+    "main_receipt_schema": "predator.qsearch.receipt.v1",
+    "tracked_packed_receipt_schema": "predator.qsearch.receipt.v2",
+    "tracked_receipt_version": 2,
+    "packed_block_fields": ["block_index", "pub_index", "job_digest", "recipients", "n", "shots", "seed", "counts", "counts_digest", "audit"],
+    "packed_audit_fields": ["classical_min_energy", "best_sample_energy", "agree"],
+    "packed_usage_fields": ["quantum_seconds", "usage_pending", "provider_sub_jobs", "provider_metrics"],
+    "bit_order": {
+      "logical_variable_order": "x0_first",
+      "raw_sampler_and_packed_counts": "msb_first",
+      "conversion": "logical bit i is raw display string[-1-i]",
+      "default_register": "meas"
+    },
+    "verdict_boundary": "audit.agree concerns QUBO energy. It is not a packet codec, evidence-bank digest, authentication, recipient-delivery or record-resolution verdict.",
+    "accounting_boundary": "A submitted live job is never reported NOT_RUN merely because its outcome or accounting is pending. The tracked bridge withholds final live receipts until usage is settled; zero usage remains pending.",
+    "typed_result_is_new_wire_receipt": false
+  },
+  "effects": {
+    "proposal_compilation": "No credential access, scheduling, submission, network call or QPU authority.",
+    "local_fixture_simulation": "Classical local computation only; label fixture samples and simulator results explicitly.",
+    "legacy_host_submission": "Host-owned external effect behind the existing GO, LIVE, PACKED, authorization, ledger and provider limits.",
+    "resource_names": "Names and evidence references select resources; they grant no authority.",
+    "prepare_bits_gap": "There is no native prepare_bits or sample(preparation) legacy schema. An adapter must either refuse these operations or use a separately reviewed explicit compatibility mapping; it must not silently fabricate a QUBO in the language IR."
+  },
+  "sdk_requirements": {
+    "source_path": "pyproject.toml",
+    "quantum_extra": {"qiskit": "==2.3.1", "qiskit-aer": "==0.17.2", "numpy": ">=1.26"},
+    "qiskit_ibm_runtime": "Required separately for FakeFez; absent from the quantum extra and not version-pinned by this repository.",
+    "aether_atlas": "Optional external checkout selected by NANO_QSEARCH_ATLAS_PATH; not a mandatory package dependency.",
+    "pinning_gap": "A future FakeFez/Sampler compatibility test must pin the runtime package and ATLAS source revision as well as recording the installed Qiskit/Aer versions."
+  },
+  "recommended_followup_tests": [
+    "A strict builder accepts known bits without QUBO, p, gamma or beta fields and rejects bool-as-int, wrong widths and unknown keys.",
+    "An explicit legacy optimization adapter round-trips valid job.v1 payloads through parse_job and verifies digest identity; malformed fields fail before compile.",
+    "A separately reviewed preparation adapter declares its effect and compatibility mapping; no success claim exists until tested.",
+    "Pinned local ideal-simulator tests prepare asymmetric bit patterns, measure an explicitly named register, and decode both x0_first and msb_first representations exactly.",
+    "Known-bit, one-record and packed-record fixtures pin recipient/chunk/slot/PUB mapping and separately verify evidence digests and packet verdicts.",
+    "A 400-recipient, 1200-PUB fixture preserves every mapping and rejects dropped, reordered, duplicate and wrong-width PUBs before producing verified records.",
+    "No-paid-call tripwires fail any attempt to construct a live runtime service or call provider submission during offline conformance."
+  ],
+  "claims_not_made": [
+    "The open quantum PR stack has merged.",
+    "Native preparation or sampling kernels have shipped in the existing bridge.",
+    "This inspection executed Qiskit, Aer, FakeFez, ATLAS or IBM.",
+    "A seal, energy agreement or evidence pointer alone proves record delivery.",
+    "A model executes on IBM, transports weights, supplies encryption or demonstrates quantum advantage."
+  ]
+}
