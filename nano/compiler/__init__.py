@@ -46,6 +46,7 @@ from .diagnostics import (
 from .lexer import decode_string, tokenize
 from .parser import CompilerLimits, DEFAULT_COMPILER_LIMITS, MAX_COMPILER_NESTING, parse
 from .tokens import Token
+from .package import CompiledPackage, PackageError, PackageResourceError, compile_package
 
 __all__ = [
     "EFFECTS_V0_1_0",
@@ -68,6 +69,10 @@ __all__ = [
     "ast_to_dict",
     "check_source",
     "check_report",
+    "CompiledPackage",
+    "PackageError",
+    "PackageResourceError",
+    "compile_package",
     "compile_module",
     "compile_source",
     "compile_to_dict",

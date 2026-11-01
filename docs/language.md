@@ -15,6 +15,14 @@ orders, or create a reasoning provider.
 Every fenced `nano` program in this document is compiled and loaded by
 `tests/test_language_spec.py`.
 
+Pinned local modules and scalar pure typed helpers are available through the
+separate, opt-in `compile_package(manifest_path, lock_path=...)` API. Ordinary
+single-source compilation keeps its existing grammar. See
+[RFC 0066](rfc-0066-hermetic-packages.md) and the
+[offline agent example](../examples/agent-package/README.md) for the shipped
+subset, source maps, byte pins and fixed expansion limits. Reusable records,
+enums and results are proposals, not accepted syntax.
+
 ## A complete v1 example
 
 ```nano
