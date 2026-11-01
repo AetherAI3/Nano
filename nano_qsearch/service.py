@@ -474,7 +474,7 @@ class QSearchService:
         return job_state(row, self._stored_record(digest),
                          json.loads(row.receipt_json) if row.receipt_json else None, now=self._clock(),
                          queue_deadline_s=self.config.queue_deadline_s,
-                         accounting_deadline_s=self.config.accounting_window_s)
+                         accounting_deadline_s=self.config.accounting_window_s, receipt_key=self.config.receipt_key)
 
     def control_request(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
                         now: int | None = None) -> tuple[int, dict[str, Any]]:
@@ -621,7 +621,7 @@ class QSearchService:
                 raise ValueError("invalid persisted snapshot")
             return 200, job_state(row, record, receipt, now=self._clock(),
                                   queue_deadline_s=self.config.queue_deadline_s,
-                                  accounting_deadline_s=self.config.accounting_window_s)
+                                  accounting_deadline_s=self.config.accounting_window_s, receipt_key=self.config.receipt_key)
         except (sqlite3.Error, OSError):
             return 503, lifecycle_error("STORE_UNAVAILABLE", retryable=True)
         except (ValueError, TypeError):

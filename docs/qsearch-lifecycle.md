@@ -59,10 +59,16 @@ execution cap. Expiry never proves provider termination or final accounting.
 Nano projects explicit `held_qpu_s` (or `held_quantum_seconds`) when supplied by
 the authoritative host record. It does not infer the actual reservation from
 requested circuit limits or the execution cap. Unknown usage remains held;
-missing usage and zero usage do not imply a free execution. Version 1 recognizes
-positive explicitly settled usage. Confirmed-terminal-zero settlement belongs
-to the dedicated accounting work in issue #58 and must carry its own reviewed,
-job-bound evidence.
+missing usage and zero usage do not imply a free execution. Positive explicitly
+settled usage follows the existing contract. When the paired issue #58 receipt
+module supplies its strict `confirmed_zero_receipt` predicate, the host first
+verifies the stored hardware HMAC and exact request identity, then delegates
+proof validation to that predicate. Only that authenticated, job-bound zero
+evidence can project settled zero; missing support or a key, an invalid seal or
+proof, and record-only zero remain held. A confirmed zero cancellation remains
+`CANCELLED` (a provider error remains `FAILED`), including after restart with a
+missing or stale run record. Status projects the authoritative accounting
+transition; it creates no ledger transition or new zero-finality rule.
 
 Lifecycle errors carry a stable `code`, optional `field` path, `retryable`
 boolean and bounded `next_action`. Provider error text, metrics, credentials and
