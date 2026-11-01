@@ -221,6 +221,10 @@ def test_job_completed_before_cancel_records_real_outcome_without_dispatch_event
         assert state["cancellation"]["confirmed"] is False
         assert [event["kind"] for event in svc.store.request_events(request.request_digest)] == ["cancellation_requested"]
         assert provider.cancels == provider.submits == 0
+        assert provider.recovers == 1
+        for _ in range(10):
+            assert _control(svc, path, "cancel", clock)[0] == 200
+        assert provider.recovers == 1  # A no-RPC terminal race still obeys accounting poll bounds.
     finally:
         svc.close()
 

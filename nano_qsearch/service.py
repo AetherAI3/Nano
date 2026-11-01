@@ -524,7 +524,8 @@ class QSearchService:
             record = self._stored_record(digest)
             last_poll = record.get("last_provider_poll_at")
             if (isinstance(last_poll, (int, float)) and self._clock() - last_poll < self.config.poll_interval_s
-                    and (action != "cancel" or "cancellation_dispatched_at" in record)):
+                    and (action != "cancel" or "cancellation_dispatched_at" in record
+                         or state["execution"]["terminal"])):
                 return 200, state
             # Persist the throttle before I/O; restart and failed reads retain the bound.
             record = self.store.merge_request_record(digest, {"last_provider_poll_at": self._clock()})
