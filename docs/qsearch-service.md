@@ -533,6 +533,48 @@ settled usage while `usage.provider_metrics` is the provider's read at job
 completion and may still show 0 there; `record_json` says so (`usage_note`,
 `provider_usage_at_receipt`).
 
+### Confirmed terminal zero (Nano #58)
+
+Zero from the normal pinned SDK (`qiskit-ibm-runtime==0.46.1`, API
+`2025-05-01`) remains pending. That API does not document billing finality.
+ATLAS's separate, read-only metrics adapter selects API `2026-04-15`, whose
+[Jobs metrics contract](https://quantum.cloud.ibm.com/docs/en/api/qiskit-runtime-rest/tags/jobs#tags__jobs__operations__get_job_metrics_jid)
+defines `usage.status` as `pending` or `complete` and reports charged capacity
+in `usage.qpu_charge_time_seconds`. Only an exact `complete` with explicit zero
+charge and matching job, instance, backend and immutable submission evidence can
+close a cancelled/failed reservation. Missing, unreadable or unfamiliar evidence
+keeps the hold. No cancellation or submission is performed by reconciliation.
+
+The authoritative ATLAS transition retains the ledger row and prior attempt,
+receipt and metrics history. Nano seals its `AqrcQSearchZeroUsageEvidenceV1`
+projection under `usage.zero_usage_evidence`, after checking the provider job,
+backend, ATLAS request fingerprint and client request digest. The receipt remains
+`FAILED`, with `reason: "provider: CANCELLED"` (or `ERROR`), empty blocks, zero
+seconds and `usage_pending: false`. Confirmed zero does not claim that no circuit
+executed. The PUB allowance is retained; only the charged seconds reconcile.
+
+The proof has exactly these fields (extra fields require a reviewed schema
+revision): `schema`, `ledger_id`, `request_id`, `request_sha256`,
+`client_request_digest`, `child_sha`, `plan_sha`, `job_id`, `instance`,
+`backend_name`, `job_tags`, `provider_status`, `usage_status`, `evidence_sha256`,
+`checked_at`, `provider_api_version`, and `evidence_source`.
+`provider_api_version` is `2026-04-15`, `evidence_source` is
+`ibm-runtime-job-metrics`, and `usage_status` is `complete`. The packed ATLAS
+request fingerprint is raw SHA256 hex (`request_sha256 == child_sha == plan_sha`);
+client and audit digests use `sha256:<hex>`. `ledger_id` is 32 hex characters.
+The complete provider evidence is retained by ATLAS; the seal carries its digest
+and exact identity projection. This seal authenticates Nano's assertion under
+the host receipt key, rather than creating a provider-signed attestation.
+
+Compatibility is additive: the existing v2 receipt schema and seal domain are
+unchanged, and positive usage keeps its existing representation. Older ATLAS
+pins cannot supply this evidence and keep zero held; Nano's legacy ledger
+fallback remains positive-only. Older Predator verifiers reject settled zero,
+so deploy the coordinated verifier/journal update before consuming these
+receipts. Unknown zero still produces HTTP 503 after restart. Settled replay
+uses the ledger or stored seal without live flags or provider credentials.
+Historical pending seals are retained in the existing reseal history.
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends
