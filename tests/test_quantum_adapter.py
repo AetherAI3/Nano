@@ -360,5 +360,113 @@ def test_legacy_zero_wall_limit_requires_explicit_migration_policy():
     body = fixture("legacy-job-v1")["payload"]
     body["limits"]["max_wall_s"] = 0
     body["job_digest"] = canonical_digest({k: v for k, v in body.items() if k != "job_digest"})
-    with pytest.raises(QuantumValidationError, match="LEGACY_LIMIT"):
+    imported = read_legacy(body)
+    assert imported.plan is None
+    assert imported.projection_diagnostics == ("LEGACY_WALL_POLICY_REQUIRED",)
+    assert imported.to_legacy_payload() == body
+
+
+def legacy_target_fixture(target, *, request=True, wall_s=None):
+    body = fixture("legacy-request-v2" if request else "legacy-job-v1")["payload"]
+    jobs = body["jobs"] if request else [body]
+    if request:
+        body["descriptor"]["target"] = target
+    for index, job in enumerate(jobs):
+        job["compile"]["target"] = target
+        if wall_s is not None:
+            job["limits"]["max_wall_s"] = wall_s
+        job["job_digest"] = canonical_digest({k: v for k, v in job.items() if k != "job_digest"})
+        if request:
+            body["descriptor"]["blocks"][index]["job_digest"] = job["job_digest"]
+    return body
+
+
+@pytest.mark.parametrize("target", ["ibm_kingston", "ibm_marrakesh"])
+@pytest.mark.parametrize("packed", [False, True])
+def test_all_pinned_targets_are_source_readable_without_promoting_compile_support(target, packed):
+    from nano_qsearch.job import TARGETS
+    assert target not in TARGETS  # The existing main execution parser is unchanged.
+    body = legacy_target_fixture(target, request=packed)
+    imported = read_legacy(body)
+    assert imported.to_legacy_payload() == body and imported.plan is None
+    assert imported.projection_diagnostics == ("LEGACY_TARGET_UNSUPPORTED",)
+    if packed:
+        assert imported.metadata["descriptor"]["target"] == target
+        assert len(imported.metadata["descriptor"]["blocks"]) == 3
+        assert imported.metadata["request_digest"] == canonical_digest(body["descriptor"])
+    with pytest.raises(QuantumValidationError, match="TYPE"):
+        lower_local(imported.plan)
+
+
+def test_zero_wall_bounds_are_source_readable_in_packed_requests_without_widening():
+    body = legacy_target_fixture("fake_fez", wall_s=0)
+    imported = read_legacy(body)
+    assert imported.plan is None and imported.projection_diagnostics == ("LEGACY_WALL_POLICY_REQUIRED",)
+    assert imported.to_legacy_payload() == body
+    assert all(job["limits"]["max_wall_s"] == 0 for job in imported.to_legacy_payload()["jobs"])
+    combined = read_legacy(legacy_target_fixture("ibm_kingston", wall_s=0))
+    assert combined.projection_diagnostics == ("LEGACY_TARGET_UNSUPPORTED", "LEGACY_WALL_POLICY_REQUIRED")
+
+
+def test_valid_legacy_negative_seed_is_readable_but_does_not_acquire_new_seed_semantics():
+    body = fixture("legacy-job-v1")["payload"]
+    body["backend"]["seed"] = -7
+    body["job_digest"] = canonical_digest({k: v for k, v in body.items() if k != "job_digest"})
+    imported = read_legacy(body)
+    assert imported.plan is None and imported.projection_diagnostics == ("LEGACY_PROJECTION_TYPE",)
+    assert imported.to_legacy_payload() == body
+
+
+@pytest.mark.parametrize("path,value", [
+    (("compile", "target"), "unknown-device"),
+    (("compile", "p"), True),
+    (("compile", "p"), "1"),
+    (("compile", "gammas"), [True]),
+    (("compile", "betas"), [float("inf")]),
+    (("compile", "opt_level"), True),
+    (("compile", "opt_level"), 4),
+    (("compile", "seed"), False),
+    (("compile", "training"), "train"),
+    (("backend", "shots"), True),
+    (("backend", "seed"), "7"),
+    (("limits", "max_wall_s"), False),
+    (("audit", "classical_min_energy"), float("nan")),
+    (("compiled_search_digest",), "bad-digest"),
+    (("variables",), ["x0", "x0"]),
+    (("qubo", "q"), [[True, 0], [0, 1]]),
+    (("unexpected",), 1),
+    (("compile", "unexpected"), 1),
+])
+def test_pinned_target_source_reader_retains_strict_types_and_exact_fields(path, value):
+    body = legacy_target_fixture("ibm_kingston", request=False)
+    parent = body
+    for key in path[:-1]:
+        parent = parent[key]
+    parent[path[-1]] = value
+    try:
+        body["job_digest"] = canonical_digest({k: v for k, v in body.items() if k != "job_digest"})
+    except ValueError:
+        pass  # Nonfinite fields must fail their group validator, before digest admission.
+    with pytest.raises((QuantumValidationError, JobValidationError)):
+        read_legacy(body)
+
+
+def test_pinned_target_source_reader_checks_original_digest_and_descriptor_binding():
+    body = legacy_target_fixture("ibm_marrakesh", request=False)
+    body["job_digest"] = "sha256:" + "0" * 64
+    with pytest.raises(QuantumValidationError, match="DIGEST"):
+        read_legacy(body)
+    request = legacy_target_fixture("ibm_marrakesh")
+    request["descriptor"]["blocks"][0]["job_digest"] = "sha256:" + "0" * 64
+    with pytest.raises(QuantumValidationError, match="LEGACY_MISMATCH"):
+        read_legacy(request)
+
+
+def test_packed_request_source_seed_must_be_nonnegative_even_when_job_seed_can_be_signed():
+    body = legacy_target_fixture("ibm_kingston")
+    job = body["jobs"][0]
+    job["backend"]["seed"] = -1
+    job["job_digest"] = canonical_digest({k: v for k, v in job.items() if k != "job_digest"})
+    body["descriptor"]["blocks"][0].update(seed=-1, job_digest=job["job_digest"])
+    with pytest.raises(QuantumValidationError, match="LEGACY_MISMATCH"):
         read_legacy(body)

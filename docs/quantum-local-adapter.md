@@ -58,6 +58,12 @@ request descriptor, recipient mapping and compile metadata. It projects legacy
 jobs as optimization operations; `purpose="qcomms"` never silently converts
 them into known-bit preparation. There is no inspected `request.v1` schema.
 
+Source admission and new-plan projection are separate. `LegacyImport` always
+retains an admitted original payload; its `plan` is either a checked
+operations-v1 plan or `None`. Callers must inspect `projection_diagnostics`
+before attempting to lower a projection. Reading a historical record grants
+no execution capability and does not change its target or bounds.
+
 `to_legacy_job` lowers only an admitted `optimize_qubo` through an explicit
 `LegacyCompileProfile` and the current `parse_job` validator. It refuses
 preparations and effect changes. A local operation requires an explicit local
@@ -65,12 +71,23 @@ backend; neither `auto` nor a live target can turn it into hardware work.
 The profile is a compatibility record, not #62/#63's prepared-artifact manifest
 or receipt v3 identity. Those independently owned contracts remain unchanged.
 
-The current main parser does not admit PR52-only `ibm_kingston` or
-`ibm_marrakesh` jobs. Legacy zero-wall-limit records also cannot project into
-operations-v1's positive wall bound. Both fail explicitly; existing legacy
-parsers and original payloads remain unchanged. This adapter does not merge or
-promote the #49/#51/#52 stack. Its pinned fixtures preserve source provenance
-and test valid exact round trips and malformed descriptor rejection.
+The source reader admits PR52-only `ibm_kingston` and `ibm_marrakesh` targets,
+while withholding their new-plan projection with `LEGACY_TARGET_UNSUPPORTED`.
+It validates the pinned compile group without adding targets to the current
+execution parser, substituting a backend, or rewriting a digest. Other unchanged
+field groups reuse the existing strict legacy validators. The source-only
+record remains private and is never passed to the current compiler.
+
+Legacy zero-wall-limit records also remain readable with their exact original
+zero. Their `plan` is `None` with `LEGACY_WALL_POLICY_REQUIRED`; zero is never
+widened to one. Other valid legacy values that the new IR narrows, such as a
+negative backend seed, produce a `LEGACY_PROJECTION_*` diagnostic while source
+admission and exact round trips remain available. An explicit future migration
+policy is required before these records can become new runnable proposals.
+Existing execution parsers and operations-v1 remain unchanged. This adapter
+does not merge or promote the #49/#51/#52 stack. Its pinned fixtures and derived
+target variants test source provenance, exact payload preservation, strict
+field types/digests, and malformed descriptor rejection.
 
 Run `python -m pytest tests/test_quantum_contract.py tests/test_quantum_adapter.py -q`
 after installing `.[dev,quantum]`. All work is local and requires no paid calls.
