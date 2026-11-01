@@ -82,13 +82,13 @@ includes an optional [Qiskit Aer service](docs/qsearch-service.md) for quadratic
 binary optimization (QUBO), with declared job limits and simulation receipts.
 Hosts own data, authorization and external effects.
 
-**Preview — the additions below are not yet merged into main.**
+**Included in this source checkout; native prepare/sample service-wire integration remains incomplete.**
 [Typed operations](https://github.com/AetherAI3/Nano/pull/72) distinguish known-bit
 preparation, sampling and QUBO optimization, with explicit shots, circuit counts
 and QPU-second limits. The local known-bit path builds and measures a circuit
 directly, then checks its samples before producing a structured reply.
 
-Try the [pinned preview](https://github.com/AetherAI3/Nano/tree/676440bbf80de7bc8c878dab7ef78d85f225f3a7)
+Try the [pinned demo checkout](https://github.com/AetherAI3/Nano/tree/676440bbf80de7bc8c878dab7ef78d85f225f3a7)
 in a separate checkout:
 
 ```bash
@@ -105,7 +105,7 @@ Its reply reports 100 samples, `state: verified` and `observed_from: local_ideal
 This is classical simulation on your machine, requiring no model or IBM
 credentials; it demonstrates neither hardware execution nor quantum advantage.
 
-Wider preview work adds [inspectable prepared artifacts](https://github.com/AetherAI3/Nano/pull/80)
+Other included capabilities add [inspectable prepared artifacts](https://github.com/AetherAI3/Nano/pull/80)
 that record compilation choices and provenance. That adapter currently covers
 `optimize_qubo` only; complete prepare/sample artifact and service-wire support
 remains unfinished, and [#61 remains open](https://github.com/AetherAI3/Nano/issues/61).
