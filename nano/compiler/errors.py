@@ -8,6 +8,7 @@ Taxonomy (v1.0):
 
     NanoCompileError            any compile-time failure -- catch this
      └── NanoSyntaxError        lexing / parsing
+          ├── NanoResourceLimitError deterministic source admission limit
           └── NanoTypeError     semantic analysis (types, arity, unknown names)
                └── LookaheadError  a read of future data
 
@@ -35,6 +36,22 @@ class NanoCompileError(ValueError):
 
 class NanoSyntaxError(NanoCompileError):
     """Source is not well-formed: the lexer or parser rejected it."""
+
+
+class NanoResourceLimitError(NanoSyntaxError):
+    """Source exceeds a deterministic compiler admission budget."""
+
+    code = "RESOURCE_LIMIT"
+
+    def __init__(self, resource: str, limit: int, line: int, column: int) -> None:
+        self.resource = resource
+        self.limit = limit
+        super().__init__(
+            f"Compiler {resource} limit ({limit}) exceeded; "
+            "simplify or split the expression or nested conditional",
+            line,
+            column,
+        )
 
 
 class NanoTypeError(NanoSyntaxError):

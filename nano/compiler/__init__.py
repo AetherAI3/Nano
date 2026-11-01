@@ -35,9 +35,9 @@ from .codegen import (
     required_ir_version,
     source_hash,
 )
-from .errors import LookaheadError, NanoCompileError, NanoSyntaxError, NanoTypeError
+from .errors import LookaheadError, NanoCompileError, NanoResourceLimitError, NanoSyntaxError, NanoTypeError
 from .lexer import decode_string, tokenize
-from .parser import parse
+from .parser import CompilerLimits, DEFAULT_COMPILER_LIMITS, MAX_COMPILER_NESTING, parse
 from .tokens import Token
 
 __all__ = [
@@ -45,6 +45,10 @@ __all__ = [
     "IRVersionError",
     "LookaheadError",
     "NanoCompileError",
+    "NanoResourceLimitError",
+    "CompilerLimits",
+    "DEFAULT_COMPILER_LIMITS",
+    "MAX_COMPILER_NESTING",
     "NanoSyntaxError",
     "NanoTypeError",
     "Token",
