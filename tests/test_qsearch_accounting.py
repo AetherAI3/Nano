@@ -2,15 +2,15 @@
 
 A live (non-dry) request whose ATLAS result is DONE / FAILED but whose usage is still pending is
 held ACCEPTED (503 ``ACCOUNTING_PENDING``; ``ACCOUNTING_TIMEOUT`` after the window), nothing is
-resubmitted, and every retrieval drives recovery until the settled usage arrives; then the OK or
-FAILED receipt is sealed once with ``usage_pending`` false. A receipt an older version sealed
+resubmitted, and bounded retrieval drives recovery until the accounting deadline. Explicit
+reconciliation can still obtain final usage afterwards; the OK or FAILED receipt is then sealed
+once with ``usage_pending`` false. A receipt an older version sealed
 while usage was pending is never served as final. Stand-in delegates only (no ATLAS, no IBM);
 the Predator parity test runs when Predator's verifier is importable.
 """
 import json
 import secrets
 import threading
-import time
 
 import pytest
 
@@ -27,6 +27,18 @@ REQUEST_KEY = b"request-key-" + b"1" * 20
 LIVE_ENV = {"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1", "AETHER_AQRC_QSEARCH_PACKED": "1",
             "AETHER_AQRC_AUTHORITY_PATH": __file__}
 PENDING = (503, "ACCOUNTING_PENDING")
+
+
+class Clock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def _advance(svc, seconds=30):
+    svc.test_clock.now += seconds
 
 
 def _code(response):
@@ -46,9 +58,11 @@ class Provider:
         self.submits = self.recovers = 0
         self.gate = threading.Event()
         self.gate.set()
+        self.started = threading.Event()
 
     def submit(self, request, compiled, **kw):
         self.submits += 1
+        self.started.set()
         self.gate.wait()
         if isinstance(self.submit_result, Exception):
             raise self.submit_result
@@ -78,12 +92,17 @@ def _failed(seconds):
     return build
 
 
-def _service(tmp_path, provider, **over):
+def _service(tmp_path, provider, *, clock=None, **over):
+    clock = clock or Clock()
     runtime = IbmRuntime(compile_fn=lambda job: None, environ=dict(LIVE_ENV), context_fn=None,
-                         request_submit_fn=provider.submit, request_recover_fn=provider.recover)
+                         request_submit_fn=provider.submit, request_recover_fn=provider.recover,
+                         request_observe_fn=lambda request, **kw: {
+                             "provider_status": "DONE", "provider_job_id": "fake-job-1"})
     cfg = ServiceConfig(**{"bind": "127.0.0.1:0", "backend": "auto", "data_dir": tmp_path, "receipt_key": RECEIPT_KEY,
                            "request_key": REQUEST_KEY, "v2_enabled": True, **over})
-    return QSearchService(cfg, runtime_factory=lambda kind: runtime)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime, clock=clock)
+    svc.test_clock = clock
+    return svc
 
 
 def _post(svc, body):
@@ -115,6 +134,7 @@ def test_pending_usage_is_held_then_sealed_once_with_the_settled_usage(tmp_path)
         row = svc.store.get_request(digest)
         assert row.state == "ACCEPTED" and row.attempts == 1 and _record(svc, body)["accounting"] == "pending"
         assert _code(_post(svc, body)) == PENDING                                    # recovery: still not final
+        _advance(svc)
         status, receipt = _post(svc, body)
         assert status == 200 and receipt["status"] == "OK" and len(receipt["blocks"]) == 3
         assert receipt["usage"]["quantum_seconds"] == 2.0 and receipt["usage"]["usage_pending"] is False
@@ -133,13 +153,15 @@ def test_pending_usage_is_held_then_sealed_once_with_the_settled_usage(tmp_path)
 def test_settlement_survives_a_restart(tmp_path):
     body = _live()
     provider = Provider(_pending, recoveries=[_pending])
-    svc = _service(tmp_path, provider)
+    clock = Clock()
+    svc = _service(tmp_path, provider, clock=clock)
     assert _code(_post(svc, body)) == PENDING
     svc.close()
-    svc = _service(tmp_path, provider)
+    svc = _service(tmp_path, provider, clock=clock)
     try:
         assert svc.recover() == []                                            # still pending after restart
         provider.recoveries = [_settled(1.5)]
+        _advance(svc)
         assert svc.recover() == [parse_request(body).request_digest]
         status, receipt = _post(svc, body)
         assert status == 200 and receipt["usage"]["quantum_seconds"] == 1.5 and provider.submits == 1
@@ -156,6 +178,7 @@ def test_a_terminal_failure_with_late_usage_is_failed_with_the_settled_usage(tmp
         status, held = _post(svc, body)                                       # FAILED, usage not final
         assert (status, held["code"], held["terminal"], held["provider_status"]) == \
             (503, "ACCOUNTING_PENDING_TERMINAL", True, "ERROR")
+        _advance(svc)
         status, receipt = _post(svc, body)
         assert status == 200 and receipt["status"] == "FAILED" and receipt["blocks"] == []
         assert receipt["usage"]["quantum_seconds"] == 0.7 and receipt["usage"]["usage_pending"] is False
@@ -175,7 +198,7 @@ def test_concurrent_duplicates_of_a_pending_request_submit_once(tmp_path):
         threads = [threading.Thread(target=lambda: results.append(_post(svc, body))) for _ in range(4)]
         for t in threads:
             t.start()
-        time.sleep(0.2)
+        assert provider.started.wait(timeout=3)
         provider.gate.set()
         for t in threads:
             t.join()
@@ -184,17 +207,26 @@ def test_concurrent_duplicates_of_a_pending_request_submit_once(tmp_path):
         svc.close()
 
 
-def test_the_window_bounds_waiting_but_never_seals_or_gives_up(tmp_path):
+def test_the_window_stops_automatic_waiting_until_explicit_reconciliation(tmp_path):
     body = _live()
     provider = Provider(_pending, recoveries=[_pending])
     svc = _service(tmp_path, provider, accounting_window_s=1.0)
     try:
         assert _code(_post(svc, body)) == PENDING
-        time.sleep(1.2)
+        _advance(svc, 1.2)
         assert _code(_post(svc, body)) == (503, "ACCOUNTING_TIMEOUT")
         assert svc.store.get_request(parse_request(body).request_digest).state == "ACCEPTED"
         provider.recoveries = [_settled(3.0)]
-        status, receipt = _post(svc, body)                                    # late accounting still lands
+        for _ in range(3):
+            assert _code(_post(svc, body)) == (503, "ACCOUNTING_TIMEOUT")
+        assert provider.recovers == 0
+        path = "/qsearch/v2/requests/" + parse_request(body).request_digest + "/refresh"
+        headers = {AUTH_HEADER: sign_request(REQUEST_KEY, "POST", path, b"", ts=1001,
+                                             nonce=secrets.token_hex(16))}
+        status, state = svc.control_request("POST", path, b"", headers, now=1001)
+        assert status == 200 and state["accounting"]["status"] == "SETTLED"
+        assert state["usage"]["settled_quantum_seconds"] == 3.0 and provider.recovers == 1
+        status, receipt = _post(svc, body)                                    # settled receipt now replays offline
         assert status == 200 and receipt["usage"]["quantum_seconds"] == 3.0 and provider.submits == 1
     finally:
         svc.close()
@@ -267,6 +299,7 @@ def test_a_receipt_sealed_pending_is_never_served_while_unsettled_or_inconsisten
             receipt["pubs"][0]["raw_samples"] = ["0000"] * len(receipt["pubs"][0]["raw_samples"])
             return receipt
         provider.recoveries = [different]
+        _advance(svc)
         assert _post(svc, body) == (503, {"error": "job not completed", "code": "RESEAL_MISMATCH"})
         assert json.loads(svc.store.get_request(digest).receipt_json) == stale
     finally:
@@ -362,6 +395,7 @@ def test_a_cancelled_job_with_zero_usage_is_held_and_reported_as_terminal(tmp_pa
         assert _post(svc, body) == (503, {"error": "job not completed", "code": "SUBMITTED_PENDING",
                                           "job_id": "fake-job-1"})
         for _ in range(3):
+            _advance(svc)
             assert _post(svc, body) == (503, {"error": "job not completed", "code": "ACCOUNTING_PENDING_TERMINAL",
                                               "job_id": "fake-job-1", "result": "FAILED",
                                               "provider_status": "CANCELLED", "terminal": True,

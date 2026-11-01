@@ -140,6 +140,151 @@ class NeverSubmitted(RuntimeError):
     """Recovery found no ledger row for the request: ATLAS never reserved or submitted it."""
 
 
+class LifecycleAdapterError(RuntimeError):
+    """A credential-free host/provider lifecycle error, suitable for an SDK response."""
+
+    def __init__(self, code: str, *, retryable: bool = False,
+                 next_action: str = "MANUAL_RECONCILIATION", field: str | None = None) -> None:
+        super().__init__(code)
+        self.code, self.retryable, self.next_action, self.field = code, retryable, next_action, field
+
+
+PROVIDER_STATES = frozenset(("INITIALIZING", "QUEUED", "RUNNING", "DONE", "ERROR", "CANCELLED"))
+PROVIDER_TERMINAL = frozenset(("DONE", "ERROR", "CANCELLED"))
+
+
+def _lifecycle_identity(request: QSearchRequest, stored: Mapping[str, Any]) -> None:
+    envelope = (stored.get("request") or {}).get("envelope", {})
+    if (envelope.get("request_id") != request.request_id or envelope.get("target") != request.target
+            or envelope.get("purpose") != request.purpose
+            or envelope.get("client_request_digest") != request.request_digest):
+        raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH", field="request_digest")
+
+
+def _verify_cancel_authority(environ: Mapping[str, str], ledger: Any, row: Mapping[str, Any]) -> None:
+    """Use the host's existing signed plan/protocol authority; this never reserves budget."""
+    try:
+        from aether_atlas.aqrc.campaign import verify_authority
+        token, key, _ = _authority_from_env(environ)
+        body = verify_authority(token, key=key, ledger=ledger, child_sha=row["child_sha"], cap=row["cap"])
+        if body.get("scope") != "plan":
+            raise ValueError("q-search cancellation requires the exact reserved plan authority")
+    except Exception:
+        raise LifecycleAdapterError("CANCELLATION_NOT_AUTHORIZED", field="authority") from None
+
+
+def _atlas_lifecycle_job(request: QSearchRequest, *, environ: Mapping[str, str],
+                         service_factory: Callable[..., Any] | None = None,
+                         authorize_cancel: bool = False) -> tuple[Any, Any, dict[str, Any]]:
+    """Read the existing ATLAS reservation and verify its provider job; never reserve or submit.
+
+    Reuse the pinned ATLAS recovery identity checks, including exact frozen QPY inputs.
+    Missing checks fail closed. Unacknowledged submissions get one bounded tag lookup;
+    zero or multiple matches remain ambiguous and their reservation stays held.
+    """
+    if request.target not in LIVE_TARGETS:
+        raise LifecycleAdapterError("LIFECYCLE_TARGET_UNSUPPORTED", field="target")
+    if live_flags_reason(environ) is not None:
+        raise LifecycleAdapterError("LIVE_CONTEXT_REQUIRED", next_action="MANUAL_RECONCILIATION")
+    ledger = _load_ledger(environ)
+    row = ledger.get(request.request_id)
+    if row is None or not row.get("receipt"):
+        raise LifecycleAdapterError("PROVIDER_SUBMISSION_UNKNOWN", retryable=True, next_action="RECONCILE")
+    stored = json.loads(row["receipt"])
+    _lifecycle_identity(request, stored)
+    if authorize_cancel:
+        _verify_cancel_authority(environ, ledger, row)
+    from aether_atlas.aqrc import campaign_runtime
+    checks = ("_verify_qsearch_recovery_context", "_verify_qsearch_submission", "_verify_qsearch_provider_job")
+    if any(not callable(getattr(campaign_runtime, name, None)) for name in checks):
+        raise LifecycleAdapterError("LIFECYCLE_ADAPTER_UNAVAILABLE")
+    context = atlas_resolve_context(request.target, environ=environ, service_factory=service_factory)
+    if context is None:
+        raise LifecycleAdapterError("LIVE_CONTEXT_REQUIRED")
+    campaign_runtime._verify_qsearch_recovery_context(context, ledger)
+    if stored.get("schema") == ATLAS_REQUEST_RECEIPT_SCHEMA:
+        # A terminal receipt already passed ATLAS's input audit. It still binds the exact job.
+        job_id = row.get("job_id")
+        if not job_id or job_id != stored.get("job_id"):
+            raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH")
+        job = context.service.job(job_id)
+        if (str(job.job_id()) != job_id or job.instance != context.instance
+                or job.backend().name != context.backend_name):
+            raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH")
+    else:
+        envelope, children, tags = campaign_runtime._verify_qsearch_submission(stored, row)
+        if envelope.get("target") != request.target:
+            raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH", field="target")
+        if row.get("job_id"):
+            job = context.service.job(row["job_id"])
+        else:
+            jobs = list(context.service.jobs(instance=context.instance, backend_name=context.backend_name,
+                                             job_tags=tags, limit=2))
+            if len(jobs) != 1:
+                raise LifecycleAdapterError("PROVIDER_SUBMISSION_AMBIGUOUS", retryable=True, next_action="RECONCILE")
+            job = jobs[0]
+        campaign_runtime._verify_qsearch_provider_job(job, tags, children, context,
+                                                       ledger.reserved_at(request.request_id))
+        if row.get("job_id") and str(job.job_id()) != row["job_id"]:
+            raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH")
+    usage = row.get("usage")
+    # #58 owns confirmed-zero accounting. Zero alone, even on a terminal row,
+    # cannot be promoted by this lifecycle adapter.
+    settled = _positive_finite(usage) and row.get("state") in ("done", "completed", "error", "cancelled", "canceled")
+    evidence = {"provider_job_id": str(job.job_id()),
+                "held_qpu_s": 0 if settled else row.get("cap"),
+                "settled_qpu_s": usage if settled else None}
+    return job, ledger, evidence
+
+
+def _lifecycle_status(job: Any) -> str:
+    status = job.status()
+    status = getattr(status, "name", status)
+    if not isinstance(status, str) or status.upper() not in PROVIDER_STATES:
+        raise LifecycleAdapterError("PROVIDER_STATUS_UNKNOWN", retryable=True, next_action="RECONCILE")
+    return status.upper()
+
+
+def atlas_request_observe(request: QSearchRequest, *, environ: Mapping[str, str] | None = None,
+                          service_factory: Callable[..., Any] | None = None) -> Mapping[str, Any]:
+    """One nonblocking provider status read against the existing ATLAS reservation."""
+    job, _, evidence = _atlas_lifecycle_job(request, environ=os.environ if environ is None else environ,
+                                           service_factory=service_factory)
+    return {**evidence, "provider_status": _lifecycle_status(job)}
+
+
+def atlas_request_cancel(request: QSearchRequest, *, environ: Mapping[str, str] | None = None,
+                         service_factory: Callable[..., Any] | None = None,
+                         before_cancel: Callable[[], None] | None = None) -> Mapping[str, Any]:
+    """Request cancellation once, after the host durably fenced the logical attempt.
+
+    A successful cancel RPC is only an acknowledgement. Only a subsequent CANCELLED
+    status confirms cancellation; DONE/ERROR races keep their real execution outcome.
+    No result wait, settlement, budget mutation, or replacement occurs here.
+    """
+    job, _, evidence = _atlas_lifecycle_job(request, environ=os.environ if environ is None else environ,
+                                           service_factory=service_factory, authorize_cancel=True)
+    before = _lifecycle_status(job)
+    evidence.update(provider_status=before, cancel_acknowledged=False)
+    if before not in PROVIDER_TERMINAL:
+        if before_cancel is not None:
+            before_cancel()  # Must commit the dispatch event before I/O; a write failure aborts cancellation.
+        try:
+            job.cancel()
+        except Exception:
+            # A lost acknowledgement may mean cancellation happened. Observe once;
+            # the durable host fence prevents another cancel RPC on replay.
+            evidence["cancel_error_code"] = "CANCEL_ACKNOWLEDGEMENT_UNKNOWN"
+        else:
+            evidence["cancel_acknowledged"] = True
+        try:
+            evidence["provider_status"] = _lifecycle_status(job)
+        except Exception:
+            evidence["cancel_error_code"] = "CANCEL_ACKNOWLEDGEMENT_UNKNOWN"
+    evidence["cancellation_confirmed"] = evidence["provider_status"] == "CANCELLED"
+    return evidence
+
+
 def default_compile(job: QSearchJob, *, backend: Any = None) -> Any:
     from .compile import compile_program
     return compile_program(job, backend=backend)
@@ -388,6 +533,8 @@ def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpos
     environ = environ if environ is not None else os.environ
     live = request.target not in DRY_RUN_TARGETS
     if live:
+        if not _accepts(campaign_runtime.submit_qsearch_request, "wait_for_result"):
+            raise LifecycleAdapterError("LIFECYCLE_ADAPTER_UNAVAILABLE")
         token, key, ledger = _authority_from_env(environ)
         if context is None or not _has_qsearch_stage(ledger):
             raise RuntimeError(_NO_LIVE_CONTEXT)
@@ -405,7 +552,7 @@ def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpos
             check_device_binding(plan, context, live_digest=live_digest)
         result = campaign_runtime.submit_qsearch_request(pairs, prepared, context=context, ledger=ledger,
                                                          authority=token, authority_key=key,
-                                                         sampler_factory=sampler_factory)
+                                                         sampler_factory=sampler_factory, wait_for_result=False)
     receipt = _durable_request_receipt(result)
     if receipt is None:
         raise RuntimeError("BLOCKED: ATLAS returned a held request row, not a receipt")
@@ -505,6 +652,8 @@ class IbmRuntime:
                  context_fn: Any = _AUTO, request_submit_fn: RequestSubmitFn = atlas_request_submit,
                  request_recover_fn: RequestRecoverFn = atlas_request_recover,
                  request_settled_fn: Any = _AUTO,
+                 request_observe_fn: Callable[..., Mapping[str, Any]] = atlas_request_observe,
+                 request_cancel_fn: Callable[..., Mapping[str, Any]] = atlas_request_cancel,
                  job_recover_fn: JobRecoverFn = atlas_job_recover,
                  submitted_probe: SubmittedProbe = atlas_submitted,
                  service_factory: Callable[..., Any] | None = None,
@@ -517,6 +666,8 @@ class IbmRuntime:
         self._context_fn = context_fn
         self._request_submit = request_submit_fn
         self._request_recover = request_recover_fn
+        self._request_observe = request_observe_fn
+        self._request_cancel = request_cancel_fn
         # The ledger-only settled view belongs with ATLAS's own recovery; an injected recovery owns its own.
         self._request_settled = ((atlas_request_settled if request_recover_fn is atlas_request_recover else None)
                                  if request_settled_fn is _AUTO else request_settled_fn)
@@ -529,6 +680,40 @@ class IbmRuntime:
     @property
     def purpose(self) -> str:
         return self._purpose
+
+    def _lifecycle_call(self, fn: Callable[..., Mapping[str, Any]], request: QSearchRequest,
+                        record: dict[str, Any], **kwargs: Any) -> None:
+        try:
+            observation = fn(request, environ=self._environ, service_factory=self._service_factory, **kwargs)
+            if not isinstance(observation, Mapping):
+                raise LifecycleAdapterError("PROVIDER_STATUS_UNKNOWN", retryable=True, next_action="RECONCILE")
+            # Only bounded, credential-free adapter fields enter the durable host projection.
+            for key in ("provider_job_id", "provider_status", "held_qpu_s", "settled_qpu_s",
+                        "cancel_acknowledged", "cancellation_confirmed", "cancel_error_code"):
+                if key in observation:
+                    record[key] = observation[key]
+        except LifecycleAdapterError:
+            raise
+        except ImportError:
+            raise LifecycleAdapterError("LIFECYCLE_ADAPTER_UNAVAILABLE") from None
+        except (ValueError, KeyError, TypeError, AttributeError):
+            raise LifecycleAdapterError("PROVIDER_IDENTITY_MISMATCH") from None
+        except Exception:
+            raise LifecycleAdapterError("PROVIDER_UNAVAILABLE", retryable=True, next_action="RECONCILE") from None
+
+    def observe_request(self, request: QSearchRequest, *, record: dict[str, Any]) -> None:
+        """Explicit host refresh; never called by read-only status and never submits."""
+        self._lifecycle_call(self._request_observe, request, record)
+        if record.get("provider_status") == "CANCELLED":
+            record["cancellation_confirmed"] = True
+
+    def cancel_request(self, request: QSearchRequest, *, record: dict[str, Any],
+                       before_cancel: Callable[[], None] | None = None) -> None:
+        """Host-authorized cancellation; requires the host's already durable request event."""
+        requested = record.get("cancellation_requested_at")
+        if isinstance(requested, bool) or not isinstance(requested, (int, float)) or not math.isfinite(requested):
+            raise LifecycleAdapterError("CANCELLATION_FENCE_REQUIRED")
+        self._lifecycle_call(self._request_cancel, request, record, before_cancel=before_cancel)
 
     def _context(self, target: str, *, default_delegate: bool, pub_count: int = 1) -> Any:
         """The live context for ``target``, or None.
@@ -726,6 +911,9 @@ class IbmRuntime:
         job_id = getattr(exc, "job_id", None)
         if record is not None and isinstance(job_id, str) and job_id:
             record["provider_job_id"] = job_id
+        status = getattr(exc, "provider_status", None)
+        if record is not None and isinstance(status, str) and status in PROVIDER_STATES:
+            record["provider_status"] = status
         return None
 
     @staticmethod
@@ -807,5 +995,6 @@ __all__ = ["ATLAS_JOB_RECEIPT_SCHEMA", "AUTHORITY_ENV", "AUTHORITY_KEY_ENV", "DE
            "atlas_submitted", "check_device_binding", "default_compile", "live_flags_reason",
            "prepare_request_identity", "settled_request_receipt", "with_settled_usage", "ACCOUNTED_STATUSES",
            "atlas_request_settled",
-           "SETTLED_RECEIPT_HELPER"]
+           "SETTLED_RECEIPT_HELPER", "LifecycleAdapterError", "atlas_request_observe", "atlas_request_cancel",
+           "PROVIDER_STATES", "PROVIDER_TERMINAL"]
 

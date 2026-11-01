@@ -1092,7 +1092,7 @@ def test_unparsable_env_numbers_name_the_variable(tmp_path, capsys, monkeypatch,
 
 def test_a_store_failure_in_init_releases_the_data_dir_lock(tmp_path, monkeypatch):
     class BrokenStore:
-        def __init__(self, path):
+        def __init__(self, path, *, clock):
             raise sqlite3.OperationalError("unable to open database file")
 
     monkeypatch.setattr(service_mod, "JobStore", BrokenStore)

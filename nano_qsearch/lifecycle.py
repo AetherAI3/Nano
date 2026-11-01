@@ -11,6 +11,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from .canonical import validate_digest
 from .store import RequestRecord
 
 JOB_STATE_SCHEMA = "nano.qsearch.job-state.v1"
@@ -42,6 +43,13 @@ def _identifier(value: Any) -> str | None:
     return value if isinstance(value, str) and _IDENTIFIER.fullmatch(value) else None
 
 
+def _digest(value: Any) -> str | None:
+    try:
+        return validate_digest(value)
+    except ValueError:
+        return None
+
+
 def lifecycle_error(code: str, *, field: str | None = None, retryable: bool = False,
                     next_action: str = "NONE") -> dict[str, Any]:
     """Stable error metadata; callers pass constant codes and field paths, never exceptions."""
@@ -51,17 +59,54 @@ def lifecycle_error(code: str, *, field: str | None = None, retryable: bool = Fa
             "retryable": retryable, "next_action": next_action}
 
 
+def _sealed_zero_status(row: RequestRecord, request_body: Mapping[str, Any], receipt: Mapping[str, Any],
+                        receipt_key: bytes | None) -> str | None:
+    """Authenticate before delegating zero finality and identity to the #58 predicate.
+
+    Older receipt modules have no predicate and remain held. No mutable run
+    record can substitute for the dedicated, authenticated receipt evidence.
+    """
+    from . import receipt_v2
+    from .request import MAX_BLOCKS_LIMIT, parse_request
+
+    usage = _mapping(receipt.get("usage"))
+    helper = getattr(receipt_v2, "confirmed_zero_receipt", None)
+    if (receipt_key is None or not callable(helper) or usage.get("usage_pending") is not False
+            or _number(usage.get("quantum_seconds")) != 0
+            or _mapping(receipt.get("backend")).get("kind") != receipt_v2.HARDWARE_KIND
+            or not isinstance(receipt.get("seal"), str)
+            or not receipt["seal"].startswith(receipt_v2.HARDWARE_SEAL_PREFIX_V2)):
+        return None
+    try:
+        receipt_v2.verify_seal_v2(receipt, receipt_key)
+        request = parse_request(request_body, max_blocks=MAX_BLOCKS_LIMIT)
+        if request.request_digest != row.request_digest or request.request_id != row.request_id:
+            return None
+        if helper(request, receipt) is not True:
+            return None
+        status = _mapping(usage.get("zero_usage_evidence")).get("provider_status")
+        return status if status in ("CANCELLED", "ERROR") else None
+    except Exception:
+        # Missing support, bad authentication or invalid evidence never frees a hold.
+        return None
+
+
 def job_state(row: RequestRecord, record: Mapping[str, Any], receipt: Mapping[str, Any] | None, *,
-              now: float, queue_deadline_s: float, accounting_deadline_s: float) -> dict[str, Any]:
+              now: float, queue_deadline_s: float, accounting_deadline_s: float,
+              receipt_key: bytes | None = None) -> dict[str, Any]:
     """Project a snapshot without I/O or mutation; all times are host-injected Unix seconds.
 
     A missing held amount stays null. The execution cap is not the reservation.
-    Only a positive, explicitly settled usage value is recognized here; issue
-    #58 owns any future confirmed-terminal-zero accounting transition.
+    Positive settled usage follows the existing contract. Zero additionally
+    requires a hardware HMAC and the dedicated #58 receipt predicate; older
+    pins or snapshots without a receipt key keep the reservation held.
     """
     if _number(now) is None or any(_number(x) is None or x <= 0
                                   for x in (queue_deadline_s, accounting_deadline_s)):
         raise ValueError("now must be finite and nonnegative; deadlines must be finite and positive")
+    accepted_at = _number(row.accepted_at)
+    if accepted_at is None:
+        raise ValueError("accepted_at must be finite and nonnegative")
     receipt = _mapping(receipt)
     try:
         request = _mapping(json.loads(row.request_json))
@@ -77,6 +122,10 @@ def job_state(row: RequestRecord, record: Mapping[str, Any], receipt: Mapping[st
         provider_status = "UNKNOWN"
     provider_job_id = _identifier(record.get("provider_job_id")) or _identifier(hardware.get("provider_job_id"))
     result = receipt.get("status") or record.get("result")
+    zero_status = _sealed_zero_status(row, request, receipt, receipt_key)
+    if zero_status is not None:
+        provider_status = zero_status
+        provider_job_id = _identifier(hardware.get("provider_job_id"))
 
     if receipt.get("status") == "OK":
         execution_status, outcome, terminal = "SUCCEEDED", "SUCCEEDED", True
@@ -104,7 +153,7 @@ def job_state(row: RequestRecord, record: Mapping[str, Any], receipt: Mapping[st
         settled = _number(record.get("quantum_seconds"))
         if settled is None:
             settled = _number(record.get("settled_qpu_s"))
-    settled = settled if settled is not None and settled > 0 else None
+    settled = settled if settled is not None and settled > 0 else (0.0 if zero_status is not None else None)
     dry_run = backend.get("dry_run") is True
     unsubmitted = execution_status == "NOT_RUN"
     if dry_run or unsubmitted:
@@ -119,10 +168,12 @@ def job_state(row: RequestRecord, record: Mapping[str, Any], receipt: Mapping[st
             held = _number(record.get("held_quantum_seconds"))
 
     queue_start = _number(record.get("queue_started_at"))
-    queue_at = (row.accepted_at if queue_start is None else queue_start) + queue_deadline_s
+    queue_at = (accepted_at if queue_start is None else queue_start) + queue_deadline_s
     queue_expired = not terminal and execution_status != "RUNNING" and now >= queue_at
     accounting_start = _number(record.get("accounting_pending_since"))
     accounting_at = None if accounting_start is None else accounting_start + accounting_deadline_s
+    if _number(queue_at) is None or (accounting_at is not None and _number(accounting_at) is None):
+        raise ValueError("deadline must be finite")
     accounting_expired = accounting_status == "PENDING" and accounting_at is not None and now >= accounting_at
     requested_at = _number(record.get("cancellation_requested_at"))
     confirmed_at = _number(record.get("cancellation_confirmed_at"))
@@ -148,6 +199,8 @@ def job_state(row: RequestRecord, record: Mapping[str, Any], receipt: Mapping[st
         "schema": JOB_STATE_SCHEMA,
         "request": {"request_id": row.request_id, "request_digest": row.request_digest,
                     "target": _identifier(descriptor.get("target"))},
+        "lineage": {"replaces_request_digest": _digest(record.get("replaces_request_digest")),
+                    "replacement_request_digest": _digest(record.get("replacement_request_digest"))},
         "state": state,
         "provider": {"job_id": provider_job_id, "status": provider_status},
         "execution": {"status": execution_status, "outcome": outcome, "terminal": terminal},
