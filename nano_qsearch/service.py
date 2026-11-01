@@ -95,6 +95,7 @@ SUBMIT_PATH = "/qsearch/v1/submit"
 REQUEST_PATH = "/qsearch/v2/submit_request"
 REQUEST_STATUS_PREFIX = "/qsearch/v2/requests/"
 _REQUEST_STATUS = re.compile(re.escape(REQUEST_STATUS_PREFIX) + r"(sha256:[0-9a-f]{64})\Z")
+_REQUEST_CONTROL = re.compile(re.escape(REQUEST_STATUS_PREFIX) + r"(sha256:[0-9a-f]{64})/(cancel|refresh|replace)\Z")
 V2_ENV = "NANO_QSEARCH_V2"
 REQUEST_RUNTIME_KIND = "ibm"   # every v2 job is an ibm job (request.parse_request enforces it)
 DEFAULT_BIND = "127.0.0.1:8798"
@@ -219,6 +220,7 @@ class ServiceConfig:
     v2_max_pubs: int = MAX_BLOCKS     # NANO_QSEARCH_V2_MAX_PUBS: PUBs per v2 request, 1..MAX_BLOCKS_LIMIT
     accounting_window_s: float = DEFAULT_ACCOUNTING_WINDOW_S   # after this, 503 says ACCOUNTING_TIMEOUT
     queue_deadline_s: float = 3600
+    poll_interval_s: float = 30
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
@@ -232,7 +234,7 @@ class ServiceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
-        for name in ("accounting_window_s", "queue_deadline_s"):
+        for name in ("accounting_window_s", "queue_deadline_s", "poll_interval_s"):
             window = getattr(self, name)
             if isinstance(window, bool) or not isinstance(window, (int, float)) or not (math.isfinite(window) and window > 0):
                 raise ValueError(f"{name} must be a positive number of seconds")
@@ -279,7 +281,8 @@ class ServiceConfig:
                    verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1",
                    v2_max_pubs=max_pubs_from_env(env),
                    accounting_window_s=_env_number(ACCOUNTING_WINDOW_ENV, DEFAULT_ACCOUNTING_WINDOW_S, float),
-                   queue_deadline_s=_env_number("NANO_QSEARCH_QUEUE_DEADLINE_S", 3600, float))
+                   queue_deadline_s=_env_number("NANO_QSEARCH_QUEUE_DEADLINE_S", 3600, float),
+                   poll_interval_s=_env_number("NANO_QSEARCH_POLL_INTERVAL_S", 30, float))
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -296,7 +299,7 @@ class QSearchService:
         self._clock = clock
         self._dir_lock = _DataDirLock(config.data_dir / LOCK_FILE)      # raises DataDirLocked
         try:
-            self.store = JobStore(config.data_dir / STORE_FILE)
+            self.store = JobStore(config.data_dir / STORE_FILE, clock=clock)
         except BaseException:
             self._dir_lock.release()
             raise
@@ -464,6 +467,134 @@ class QSearchService:
 
     # --- v2 requests ---------------------------------------------------------------------------
 
+    def _state(self, digest: str) -> dict[str, Any]:
+        row = self.store.get_request(digest)
+        if row is None:
+            raise KeyError(digest)
+        return job_state(row, self._stored_record(digest),
+                         json.loads(row.receipt_json) if row.receipt_json else None, now=self._clock(),
+                         queue_deadline_s=self.config.queue_deadline_s,
+                         accounting_deadline_s=self.config.accounting_window_s)
+
+    def control_request(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
+                        now: int | None = None) -> tuple[int, dict[str, Any]]:
+        """Explicit host operation on an existing attempt, serialized with submit/recovery.
+
+        Cancellation is fenced and journaled before external I/O. Lost acknowledgements
+        require observation; they never authorize another submission or cancel RPC.
+        """
+        if not self.config.v2_enabled:
+            return 404, dict(NOT_ENABLED)
+        match = _REQUEST_CONTROL.fullmatch(path)
+        if method != "POST" or match is None:
+            return 404, lifecycle_error("NOT_FOUND")
+        if len(body) > self.config.max_body_bytes:
+            return 413, lifecycle_error("BODY_TOO_LARGE", field="body")
+        digest, action = match.groups()
+        if action != "replace" and body:
+            return 400, lifecycle_error("EMPTY_BODY_REQUIRED", field="body")
+        refusal = self._authenticate(method, path, body, headers, int(self._clock()) if now is None else now)
+        if refusal is not None:
+            return refusal[0], lifecycle_error("UNAUTHORIZED" if refusal[0] == 401 else "STORE_UNAVAILABLE",
+                                              retryable=refusal[0] == 503)
+        flight = "request:" + digest
+        owner = False
+        try:
+            row = self.store.get_request(digest)
+            if row is None:
+                return 404, lifecycle_error("REQUEST_NOT_FOUND", field="request_digest")
+            if action == "cancel":
+                # Must also fence an in-flight submission before waiting for its acknowledgement.
+                self.store.request_event(digest, "cancellation_requested")
+            with self._lock:
+                if flight in self._inflight:
+                    return 409, lifecycle_error("REQUEST_BUSY", retryable=True, next_action="POLL_STATUS")
+                waiter = self._inflight[flight] = threading.Event()
+                owner = True
+            state = self._state(digest)
+            if action == "replace":
+                return self._replace_request(row, state, body)
+            if state["accounting"]["status"] in ("SETTLED", "NOT_APPLICABLE"):
+                return 200, state
+            request = parse_request(json.loads(row.request_json), max_blocks=MAX_BLOCKS_LIMIT)
+            if action == "cancel" and row.attempts == 0:
+                self._complete_request(request, seal_receipt_v2(
+                    not_run_v2(request, "cancelled before submission"), self.config.receipt_key))
+                return 200, self._state(digest)
+            record = self._stored_record(digest)
+            last_poll = record.get("last_provider_poll_at")
+            if (isinstance(last_poll, (int, float)) and self._clock() - last_poll < self.config.poll_interval_s
+                    and (action != "cancel" or "cancellation_dispatched_at" in record)):
+                return 200, state
+            # Persist the throttle before I/O; restart and failed reads retain the bound.
+            record = self.store.merge_request_record(digest, {"last_provider_poll_at": self._clock()})
+            runtime = self._runtime(REQUEST_RUNTIME_KIND)
+            try:
+                if action == "cancel" and "cancellation_dispatched_at" not in record:
+                    def before_cancel() -> None:
+                        # The adapter calls this after authority, identity and
+                        # status checks, immediately before the external RPC.
+                        # Failed preflight must not consume the dispatch claim.
+                        if "cancellation_dispatched_at" in record:
+                            raise RuntimeError("cancellation dispatch already claimed")
+                        record.update(self.store.request_event(digest, "cancellation_dispatched"))
+
+                    runtime.cancel_request(request, record=record, before_cancel=before_cancel)
+                else:
+                    runtime.observe_request(request, record=record)
+                if record.get("provider_status") in ("CANCELLED", "CANCELED"):
+                    self.store.request_event(digest, "cancellation_confirmed")
+                terminal = record.get("provider_status") in ("DONE", "COMPLETED", "ERROR", "FAILED", "CANCELLED", "CANCELED")
+                if terminal:
+                    record.setdefault("accounting_pending_since", self._clock())
+                    # Explicit reconciliation reattaches only this provider job, never replacement.
+                    if row.receipt_json:
+                        self._settle_sealed(request, json.loads(row.receipt_json), record)
+                    else:
+                        unsigned = runtime.recover_request(request, record=record)
+                        if unsigned is not None:
+                            self._complete_request(request, seal_receipt_v2(unsigned, self.config.receipt_key))
+            finally:
+                # This evidence write must succeed; controls cannot silently lose their fence.
+                self.store.merge_request_record(digest, record)
+            return 200, self._state(digest)
+        except RequestIdConflict:
+            return 409, lifecycle_error("REPLACEMENT_CONFLICT", field="request_id")
+        except RequestValidationError:
+            return 400, lifecycle_error("INVALID_REQUEST", field="body")
+        except (sqlite3.Error, OSError):
+            return 503, lifecycle_error("PROVIDER_OR_STORE_UNAVAILABLE", retryable=True, next_action="RECONCILE")
+        except (ValueError, TypeError):
+            return 400, lifecycle_error("INVALID_REQUEST", field="body")
+        except Exception as exc:
+            from .runtime_ibm import LifecycleAdapterError
+            if isinstance(exc, LifecycleAdapterError):
+                return 503, lifecycle_error(exc.code, field=exc.field, retryable=exc.retryable,
+                                           next_action=exc.next_action)
+            return 503, lifecycle_error("LIFECYCLE_UNAVAILABLE", retryable=True, next_action="RECONCILE")
+        finally:
+            if owner:
+                with self._lock:
+                    self._inflight.pop(flight, None)
+                waiter.set()
+
+    def _replace_request(self, row, state: dict[str, Any], body: bytes) -> tuple[int, dict[str, Any]]:
+        if not state["execution"]["terminal"] or state["accounting"]["status"] not in ("SETTLED", "NOT_APPLICABLE"):
+            return 409, lifecycle_error("ORIGINAL_ATTEMPT_UNRECONCILED", next_action="RECONCILE")
+        parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
+        request = parse_request(parsed, max_blocks=self.config.v2_max_pubs)
+        if request.request_id == row.request_id or request.request_digest == row.request_digest:
+            return 409, lifecycle_error("NEW_IDENTITY_REQUIRED", field="descriptor.request_id")
+        if request.target == state["request"]["target"]:
+            return 409, lifecycle_error("NEW_TARGET_REQUIRED", field="descriptor.target")
+        self.store.link_replacement(row.request_digest, request.request_digest, request.request_id, canonical_json(parsed))
+        self.store.request_event(row.request_digest, "replacement_linked")
+        # ATLAS's ordinary target-bound plan compilation/authorization runs for the NEW identity.
+        status, payload = self._run_request_once(request, canonical_json(parsed))
+        if status not in (200, 503):
+            return status, payload
+        return 200, self._state(request.request_digest)
+
     def status_request(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
                        now: int | None = None) -> tuple[int, dict[str, Any]]:
         """Authenticated durable snapshot only; never constructs a runtime or reconciles a ledger."""
@@ -537,10 +668,19 @@ class QSearchService:
         reason = self._request_cap_violation(request)
         if reason is not None:
             return self._sealed_v2(request, lambda: not_run_v2(request, "refused: " + reason))
-        with self._slots:
-            self.store.mark_request_attempt(request.request_digest)
+        queue_at = self._state(request.request_digest)["deadlines"]["queue_at"]
+        if not self._slots.acquire(timeout=min(self.config.poll_interval_s, max(0, queue_at - self._clock()))):
+            return None
+        try:
+            prior = self._stored_record(request.request_digest)
+            if "cancellation_requested_at" in prior or self._state(request.request_digest)["deadlines"]["queue_expired"]:
+                return None
+            if not self.store.claim_request_attempt(request.request_digest, queue_at=queue_at):
+                return None
             return self._sealed_v2(request, lambda: runtime.run_request(
                 request, max_pubs=self.config.v2_max_pubs, record=record))
+        finally:
+            self._slots.release()
 
     def _stored_record(self, request_digest: str) -> dict[str, Any]:
         try:
@@ -560,9 +700,9 @@ class QSearchService:
             return self._stored_record(request.request_digest)
         merged = {**self._stored_record(request.request_digest), **record}
         if merged.get("accounting") == "pending" and "accounting_pending_since" not in merged:
-            merged["accounting_pending_since"] = time.time()
+            merged["accounting_pending_since"] = self._clock()
         try:
-            self.store.set_request_record(request.request_digest, json.dumps(merged, sort_keys=True))
+            merged = self.store.merge_request_record(request.request_digest, merged)
         except Exception as exc:  # noqa: BLE001 - the record is evidence beside the receipt, not the receipt
             _log(f"request {request.request_digest} record not stored: {type(exc).__name__}")
         if record.get("accounting") == "pending":
@@ -587,7 +727,7 @@ class QSearchService:
             return 503, ({**SUBMITTED_PENDING, "job_id": job_id} if isinstance(job_id, str) and job_id
                          else dict(NOT_COMPLETED))
         since = record.get("accounting_pending_since")
-        late = isinstance(since, (int, float)) and time.time() - since > self.config.accounting_window_s
+        late = isinstance(since, (int, float)) and self._clock() - since >= self.config.accounting_window_s
         terminal = record.get("result") == "FAILED"
         if record.get("accounting_blocker") == "needs_live_context":
             base = ACCOUNTING_NEEDS_LIVE_CONTEXT
@@ -658,13 +798,24 @@ class QSearchService:
             if owner:
                 waiter = self._inflight[flight] = threading.Event()
         if not owner:
-            waiter.wait()
+            waiter.wait(timeout=self.config.poll_interval_s)
             stored = self._stored_request(request.request_digest)
             if stored is not None and not self._sealed_pending(stored[1]):
                 return stored
             return self._pending(self._stored_record(request.request_digest))
         run_record: dict[str, Any] = {}
         try:
+            existing = self.store.get_request(request.request_digest)
+            if existing is not None and (recovering or existing.attempts > 0):
+                prior = self._stored_record(request.request_digest)
+                state = self._state(request.request_digest)
+                if ("cancellation_requested_at" in prior or state["deadlines"]["queue_expired"]
+                        or state["deadlines"]["accounting_expired"]):
+                    return self._pending(prior)
+                last_poll = prior.get("last_provider_poll_at")
+                if isinstance(last_poll, (int, float)) and self._clock() - last_poll < self.config.poll_interval_s:
+                    return self._pending(prior)
+                self.store.merge_request_record(request.request_digest, {"last_provider_poll_at": self._clock()})
             if stored is not None:                 # sealed while usage was pending: settle, never serve as final
                 return self._settle_sealed(request, stored[1], run_record)
             row = self.store.begin_request(request.request_digest, request.request_id, body_json)
@@ -754,26 +905,32 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, dict(NOT_FOUND))
 
     def do_POST(self) -> None:  # noqa: N802 - http.server API
-        if self.path == REQUEST_PATH and not self.service.config.v2_enabled:
+        if (self.path == REQUEST_PATH or _REQUEST_CONTROL.fullmatch(self.path)) and not self.service.config.v2_enabled:
             length = self._content_length()
             if 0 < length <= self.service.config.max_body_bytes:
                 self.rfile.read(length)  # drain, so closing the socket does not reset the client mid-response
             self._send(404, dict(NOT_ENABLED))
             return
-        if self.path not in (SUBMIT_PATH, REQUEST_PATH):
+        if self.path not in (SUBMIT_PATH, REQUEST_PATH) and not _REQUEST_CONTROL.fullmatch(self.path):
             self._not_found()
             return
         length = self._content_length()
         if length < 0:
-            self._send(400, {"error": "bad content length"})
+            payload = (lifecycle_error("INVALID_CONTENT_LENGTH", field="headers.Content-Length")
+                       if _REQUEST_CONTROL.fullmatch(self.path) else {"error": "bad content length"})
+            self._send(400, payload)
             return
         if length > self.service.config.max_body_bytes:
             # Never read an oversized body. A client still sending it may see the connection reset.
-            self._send(413, {"error": "body too large"})
+            payload = (lifecycle_error("BODY_TOO_LARGE", field="body")
+                       if _REQUEST_CONTROL.fullmatch(self.path) else {"error": "body too large"})
+            self._send(413, payload)
             return
         body = self.rfile.read(length)
         headers = {AUTH_HEADER: self.headers.get(AUTH_HEADER)}
-        if self.path == REQUEST_PATH:
+        if _REQUEST_CONTROL.fullmatch(self.path):
+            status, payload = self.service.control_request("POST", self.path, body, headers)
+        elif self.path == REQUEST_PATH:
             status, payload = self.service.submit_request("POST", REQUEST_PATH, body, headers)
         else:
             status, payload = self.service.submit("POST", SUBMIT_PATH, body, headers)

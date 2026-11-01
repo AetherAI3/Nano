@@ -54,10 +54,11 @@ def _config(tmp_path, **over):
     return ServiceConfig(**{**base, **over})
 
 
-def _service(tmp_path, delegate, **over):
+def _service(tmp_path, delegate, *, clock=None, **over):
     runtime = IbmRuntime(compile_fn=lambda job: None, request_submit_fn=delegate.submit,
                          request_recover_fn=delegate.recover, environ={})
-    return QSearchService(_config(tmp_path, **over), runtime_factory=lambda kind: runtime)
+    options = {} if clock is None else {"clock": clock}
+    return QSearchService(_config(tmp_path, **over), runtime_factory=lambda kind: runtime, **options)
 
 
 def _bytes(body):
@@ -207,20 +208,25 @@ def _seed_pending(tmp_path, body, attempts):
 
 
 def test_restart_reattaches_a_submitted_request_and_never_resubmits(tmp_path):
+    from test_qsearch_lifecycle_service import Clock
+
     body = request_body(3, target="ibm_fez")
     request = _seed_pending(tmp_path, body, attempts=1)
     delegate = Delegate()
-    svc = _service(tmp_path, delegate)
+    clock = Clock()
+    svc = _service(tmp_path, delegate, clock=clock)
     try:
         assert svc.recover() == []                                           # provider job not done yet
         assert svc.store.get_request(request.request_digest).state == "ACCEPTED"
         assert _post(svc, _bytes(body)) == (503, {"error": "job not completed"})
+        assert delegate.recovers == 1                                       # same instant is throttled
         delegate.recovered = atlas_request_receipt(request, usage=4.0)
+        clock.now += svc.config.poll_interval_s
         assert svc.recover() == [request.request_digest]
         status, receipt = _post(svc, _bytes(body))
         assert status == 200 and receipt["status"] == "OK" and receipt["usage"]["quantum_seconds"] == 4.0
         verify_seal_v2(receipt, RECEIPT_KEY)
-        assert delegate.submits == 0 and delegate.recovers == 3
+        assert delegate.submits == 0 and delegate.recovers == 2
     finally:
         svc.close()
 

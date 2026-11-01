@@ -1,6 +1,7 @@
 """Offline state-contract coverage: no provider, ledger, wall clock or credentials."""
 import copy
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -141,3 +142,24 @@ def test_error_metadata_has_stable_next_action_and_optional_field():
     with pytest.raises(ValueError):
         lifecycle_error("ERROR", next_action="SUBMIT_REPLACEMENT")
     assert project()["next_action"] in NEXT_ACTIONS
+
+
+@pytest.mark.parametrize("accepted_at", [float("nan"), float("inf"), -1, True])
+def test_corrupt_persisted_acceptance_time_fails_before_http_serialization(accepted_at):
+    with pytest.raises(ValueError):
+        project(request_row=replace(row(), accepted_at=accepted_at))
+
+
+def test_lineage_exposes_only_valid_linked_digests():
+    parent, child = "sha256:" + "a" * 64, "sha256:" + "b" * 64
+    state = project({"replaces_request_digest": parent, "replacement_request_digest": child})
+    assert state["lineage"] == {"replaces_request_digest": parent, "replacement_request_digest": child}
+    state = project({"replaces_request_digest": "credential-secret", "replacement_request_digest": "sha256:bad"})
+    assert state["lineage"] == {"replaces_request_digest": None, "replacement_request_digest": None}
+    assert "credential-secret" not in json.dumps(state)
+
+
+def test_finite_inputs_with_overflowed_deadline_fail_before_http_serialization():
+    with pytest.raises(ValueError):
+        job_state(replace(row(), accepted_at=1e308), {}, None, now=1,
+                  queue_deadline_s=1e308, accounting_deadline_s=900)
