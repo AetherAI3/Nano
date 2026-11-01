@@ -23,6 +23,19 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  quantum-local:
+    name: Quantum local conformance (Qiskit 2.3.1)
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned local simulator dependencies
+        run: pip install -e ".[dev,quantum]"
+      - name: Verify typed operations and actual local circuit round trips
+        run: pytest tests/test_quantum_contract.py tests/test_quantum_adapter.py -q
+
   contribution-shape:
     # The test suite proves a library entry compiles to its pinned IR. It says
     # nothing about the IR file's house formatting or the comment header every
