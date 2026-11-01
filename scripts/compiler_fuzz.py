@@ -10,10 +10,12 @@ edited.  A loopstate JSON document is written even when no defects are found.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import inspect
 import json
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -77,6 +79,128 @@ def _parse_hash_seeds(raw: str) -> tuple[str, ...]:
     return seeds
 
 
+def _resource_boundary_cases(seed: int, limit: int) -> list[dict[str, Any]]:
+    """Generate exact, one-over and bounded adversarial grammar fixtures."""
+    cases: list[dict[str, Any]] = []
+
+    def add(family: str, depth: int, body: str, *, statements: bool = False):
+        if not statements:
+            body = f"let bounded = {body}"
+        cases.append({
+            "id": f"{family}-{depth}", "family": family,
+            "source": f"strategy ResourceFuzz {{ {body} }}",
+            "overBudget": depth > limit,
+        })
+
+    for depth in (limit, limit + 1, limit * 4):
+        add("parentheses", depth, "(" * depth + "true" + ")" * depth)
+        add("not", depth, "not " * depth + "true")
+        add("negation", depth, "- " * depth + "1")
+        add("boolean-and", depth, " and ".join(["true"] * (depth + 1)))
+        add("boolean-or", depth, " or ".join(["false"] * (depth + 1)))
+        add("conditionals", depth,
+            "every 1m { " + "if true { " * depth + "observe() "
+            + "} " * depth + "}", statements=True)
+
+    generator = random.Random(seed ^ 0x64)
+    for index in range(12):
+        total = limit + index % 2
+        if_depth = generator.randint(1, min(8, limit - 1))
+        grouping = total - if_depth
+        unary = generator.randint(0, limit)
+        condition = "(" * grouping + "not " * unary + "true" + ")" * grouping
+        body = ("every 1m { " + "if true { " * (if_depth - 1)
+                + f"if {condition} {{ observe() }} " + "} " * (if_depth - 1) + "}")
+        cases.append({
+            "id": f"mixed-{index}", "family": "mixed",
+            "source": f"strategy ResourceFuzz {{ {body} }}",
+            "overBudget": bool(index % 2),
+        })
+    return cases
+
+
+def audit_resource_boundaries(seed: int) -> dict[str, Any]:
+    """Retain unexpected exceptions, including RecursionError, as fuzz defects."""
+    from nano.aethercode import diagnostics
+    from nano.compiler import (
+        MAX_COMPILER_NESTING, NanoResourceLimitError, check_source,
+        compile_module, compile_source, compile_to_dict, parse,
+    )
+
+    cases = _resource_boundary_cases(seed, MAX_COMPILER_NESTING)
+    defects: list[dict[str, Any]] = []
+    observations: list[Any] = []
+    checks = 0
+
+    def defect(case: dict[str, Any], adapter: str, observed: str) -> None:
+        defects.append({
+            "id": f"G5-resource-{case['id']}-{adapter}",
+            "property": "compiler-resource-boundary", "severity": "high",
+            "owning_subsystem": "compiler.parser / compiler.errors",
+            "case_id": case["id"], "minimal_reproducer": case["source"],
+            "observed": observed,
+            "suggested_minimal_fix": (
+                "Enforce the documented nesting boundary before recursive descent "
+                "or AST construction, retaining the offending source position."
+            ),
+        })
+
+    for case in cases:
+        expected_error = None
+        adapters = (parse, check_source, compile_to_dict, compile_module)
+        if case["overBudget"]:
+            adapters += (compile_source,)
+        for frontend in adapters:
+            checks += 1
+            try:
+                result = frontend(case["source"])
+            except NanoResourceLimitError as error:
+                signature = (error.code, error.line, error.column, error.message)
+                observations.append((case["id"], frontend.__name__, signature))
+                lines = case["source"].splitlines()
+                positioned = (1 <= error.line <= len(lines)
+                              and 1 <= error.column <= len(lines[error.line - 1]))
+                if not case["overBudget"] or error.code != "RESOURCE_LIMIT" or not positioned:
+                    defect(case, frontend.__name__, repr(signature))
+                elif expected_error is not None and signature != expected_error:
+                    defect(case, frontend.__name__, f"inconsistent diagnostic {signature!r}")
+                expected_error = signature
+            except Exception as error:
+                defect(case, frontend.__name__, f"{type(error).__name__}: {error}")
+            else:
+                if case["overBudget"]:
+                    defect(case, frontend.__name__, "over-budget program was admitted")
+                elif frontend is compile_to_dict:
+                    observations.append((case["id"], "ir", result))
+
+        # The current editor baseline adapter must agree on parser rejections;
+        # admitted v1 programs use the full compiler entrypoints above.
+        if case["overBudget"]:
+            checks += 1
+            try:
+                reported = diagnostics(case["source"])
+                actual = [(item.line, item.column, item.message) for item in reported]
+                expected = [] if expected_error is None else [expected_error[1:]]
+                if actual != expected:
+                    defect(case, "diagnostics", f"editor disagrees: {actual!r}")
+                observations.append((case["id"], "diagnostics", actual))
+            except Exception as error:
+                defect(case, "diagnostics", f"{type(error).__name__}: {error}")
+
+    def digest(value: Any) -> str:
+        canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    return {
+        "limit": MAX_COMPILER_NESTING, "cases": len(cases),
+        "admittedCases": sum(not case["overBudget"] for case in cases),
+        "rejectedCases": sum(case["overBudget"] for case in cases),
+        "checks": checks, "families": sorted({case["family"] for case in cases}),
+        "corpusDigest": digest(cases), "semanticDigest": digest(observations),
+        "defects": defects,
+    }
+
+
 def _worker(seed: int, cases: int) -> int:
     from nano.fuzzing import run_campaign
 
@@ -84,9 +208,10 @@ def _worker(seed: int, cases: int) -> int:
     payload = {
         "pythonHashSeed": os.environ.get("PYTHONHASHSEED"),
         "campaign": result.to_dict(),
+        "resourceBoundaries": audit_resource_boundaries(seed),
     }
     print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
-    return 1 if result.defects else 0
+    return 1 if result.defects or payload["resourceBoundaries"]["defects"] else 0
 
 
 def _safe_extract(archive_bytes: bytes, destination: Path) -> None:
@@ -180,6 +305,8 @@ def _cross_seed_defect(
         worker["pythonHashSeed"]: {
             "corpusDigest": worker["campaign"]["corpusDigest"],
             "semanticDigest": worker["campaign"]["semanticDigest"],
+            "resourceCorpusDigest": worker["resourceBoundaries"]["corpusDigest"],
+            "resourceSemanticDigest": worker["resourceBoundaries"]["semanticDigest"],
         }
         for worker in workers
     }
@@ -221,12 +348,14 @@ def _target_result(
         (
             worker["campaign"]["corpusDigest"],
             worker["campaign"]["semanticDigest"],
+            worker["resourceBoundaries"]["corpusDigest"],
+            worker["resourceBoundaries"]["semanticDigest"],
         )
         for worker in workers
     }
     defects: dict[str, dict[str, Any]] = {}
     for worker in workers:
-        for defect in worker["campaign"]["defects"]:
+        for defect in worker["campaign"]["defects"] + worker["resourceBoundaries"]["defects"]:
             defects.setdefault(defect["id"], defect)
     if len(pairs) != 1:
         cross_seed = _cross_seed_defect(

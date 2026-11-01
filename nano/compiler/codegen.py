@@ -70,7 +70,7 @@ from .ast import (
     Unary,
 )
 from .legacy import baseline_shape
-from .parser import parse
+from .parser import CompilerLimits, DEFAULT_COMPILER_LIMITS, parse
 
 # Every v0.1.0 strategy declares exactly this manifest, in this order. It is a
 # constant rather than derived because the baseline contract fixed it: a v0.1.0
@@ -520,9 +520,9 @@ def source_hash(source: str) -> str:
     return "sha256:" + hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
-def check_source(source: str) -> TypedProgram:
+def check_source(source: str, *, limits: CompilerLimits = DEFAULT_COMPILER_LIMITS) -> TypedProgram:
     """Parse and type-check `.nano` source. Raises on the first fault."""
-    return check(parse(source))
+    return check(parse(source, limits=limits))
 
 
 def ast_to_dict(strategy: StrategyAst) -> dict:
@@ -534,14 +534,14 @@ def ast_to_dict(strategy: StrategyAst) -> dict:
     return _baseline_dict(check(strategy))
 
 
-def compile_module(source: str) -> NanoModule:
+def compile_module(source: str, *, limits: CompilerLimits = DEFAULT_COMPILER_LIMITS) -> NanoModule:
     """Compile `.nano` source to a validated v1.0 module.
 
     Always succeeds for any program the checker accepts, including baseline ones
     — the module is the executable form, so this is what runtimes and the CLI
     use.
     """
-    program = check_source(source)
+    program = check_source(source, limits=limits)
     module = _Lowerer(program).run(source_hash=source_hash(source))
     # Round-trip through the loader so the emitted document is held to exactly
     # the contract an external one would be. A compiler that trusts its own
@@ -549,17 +549,20 @@ def compile_module(source: str) -> NanoModule:
     return NanoModule.from_dict(module.to_dict())
 
 
-def compile_source(source: str) -> StrategyGraph:
+def compile_source(source: str, *, limits: CompilerLimits = DEFAULT_COMPILER_LIMITS) -> StrategyGraph:
     """Compile `.nano` source to a validated baseline StrategyGraph.
 
     Raises ``IRVersionError`` when the program uses v1.0 constructs; use
     ``compile_module`` for those, or ``compile_to_dict`` to get whichever
     document shape fits.
     """
-    return StrategyGraph.from_dict(_baseline_dict(check_source(source)))
+    return StrategyGraph.from_dict(_baseline_dict(check_source(source, limits=limits)))
 
 
-def compile_to_dict(source: str, *, ir_version: Optional[str] = None) -> dict:
+def compile_to_dict(
+    source: str, *, ir_version: Optional[str] = None,
+    limits: CompilerLimits = DEFAULT_COMPILER_LIMITS,
+) -> dict:
     """Compile `.nano` source to the canonical Nano IR dict.
 
     With no `ir_version`, emits the lowest version that can express the program:
@@ -572,7 +575,7 @@ def compile_to_dict(source: str, *, ir_version: Optional[str] = None) -> dict:
             f"(expected one of {', '.join(SUPPORTED_IR_VERSIONS)})"
         )
 
-    program = check_source(source)
+    program = check_source(source, limits=limits)
     target = ir_version or required_ir_version(program)
 
     if target == NANO_IR_VERSION_BASELINE:

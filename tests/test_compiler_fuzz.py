@@ -39,6 +39,47 @@ from nano.ir.schema import IRValidationError, ManifestViolation
 from nano.runtime.vm import run_module
 
 
+def _load_driver():
+    script = Path(__file__).resolve().parent.parent / "scripts" / "compiler_fuzz.py"
+    spec = importlib.util.spec_from_file_location("nano_resource_fuzz_driver", script)
+    assert spec is not None and spec.loader is not None
+    driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(driver)
+    return driver
+
+
+def test_generated_resource_boundaries_cover_exact_over_and_mixed_depths():
+    driver = _load_driver()
+    first = driver.audit_resource_boundaries(seed=0x64)
+    second = driver.audit_resource_boundaries(seed=0x64)
+    assert first == second
+    assert first["cases"] == 30
+    assert first["admittedCases"] == 12
+    assert first["rejectedCases"] == 18
+    assert first["checks"] == 156
+    assert first["families"] == [
+        "boolean-and", "boolean-or", "conditionals", "mixed", "negation",
+        "not", "parentheses",
+    ]
+    assert first["defects"] == []
+
+
+def test_resource_fuzz_retains_stack_exceptions_and_source_reproducers(monkeypatch):
+    import nano.compiler
+
+    def fail_parse(_source):
+        raise RecursionError("injected parser stack exhaustion")
+
+    monkeypatch.setattr(nano.compiler, "parse", fail_parse)
+    audit = _load_driver().audit_resource_boundaries(seed=0x64)
+    failures = [item for item in audit["defects"] if "RecursionError" in item["observed"]]
+    assert len(failures) == audit["cases"]
+    assert all(item["minimal_reproducer"].startswith("strategy ResourceFuzz {")
+               for item in failures)
+    assert all(item["observed"] == "RecursionError: injected parser stack exhaustion"
+               for item in failures)
+
+
 def test_catalog_corpus_exercises_contribution_controls_and_both_ir_versions():
     audit = audit_catalog_corpus()
 
@@ -253,6 +294,12 @@ def test_hash_seed_driver_always_writes_a_deterministic_loopstate(tmp_path):
         worker["campaign"]["coverage"] for worker in state["targets"][0]["workers"]
     ]
     assert worker_coverages[1:] == worker_coverages[:-1]
+    resource_audits = [
+        worker["resourceBoundaries"] for worker in state["targets"][0]["workers"]
+    ]
+    assert resource_audits[1:] == resource_audits[:-1]
+    assert resource_audits[0]["cases"] == 30
+    assert resource_audits[0]["defects"] == []
 
 
 def test_hash_seed_driver_is_fetchless_when_origin_main_is_absent(tmp_path):

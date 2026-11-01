@@ -57,6 +57,8 @@ Comparisons do not chain: `a < b < c` is rejected rather than silently parsed as
 from __future__ import annotations
 
 import math
+from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 from .ast import (
@@ -92,7 +94,7 @@ from .ast import (
     Unary,
 )
 from ..ir.schema import CONDITION_OPERATORS, MAX_CANONICAL_INTEGER_DIGITS
-from .errors import NanoSyntaxError, NanoTypeError
+from .errors import NanoResourceLimitError, NanoSyntaxError, NanoTypeError
 from .lexer import decode_string, tokenize
 from .tokens import Token
 
@@ -119,14 +121,81 @@ _MEMBER_KEYWORDS = (
     "every",
 )
 
+# A tested ceiling, not a value inferred from Python's mutable recursion limit.
+# Hosts may tighten admission, but cannot raise it past this supported ceiling.
+MAX_COMPILER_NESTING = 32
+
+
+@dataclass(frozen=True)
+class CompilerLimits:
+    """Source admission limits. Leaves have expression depth zero.
+
+    ``max_nesting`` bounds both active recursive syntax scopes (if bodies,
+    grouping, call arguments, index offsets) and expression operator depth.
+    Source bytes, total tokens, and emitted node count are not budgeted here.
+    """
+
+    max_nesting: int = MAX_COMPILER_NESTING
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.max_nesting) is not int
+            or not 1 <= self.max_nesting <= MAX_COMPILER_NESTING
+        ):
+            raise ValueError(
+                f"max_nesting must be an integer in 1..{MAX_COMPILER_NESTING}"
+            )
+
+
+DEFAULT_COMPILER_LIMITS = CompilerLimits()
+
 
 class _Parser:
-    def __init__(self, tokens: Tuple[Token, ...]) -> None:
+    def __init__(self, tokens: Tuple[Token, ...], limits: CompilerLimits) -> None:
         self._tokens = tokens
         self._pos = 0
+        self._limits = limits
+        self._nesting = 0
+        self._expr_depths: dict[int, int] = {}
         # Set when a `>=` token had to be split into `>` (closing a type) plus a
         # leftover `=`. See _close_type_bracket.
         self._pending: Optional[Token] = None
+
+    def _limit_error(
+        self, line: int, column: int, resource: str
+    ) -> NanoResourceLimitError:
+        return NanoResourceLimitError(resource, self._limits.max_nesting, line, column)
+
+    @contextmanager
+    def _nested(self, token: Token):
+        if self._nesting >= self._limits.max_nesting:
+            raise self._limit_error(token.line, token.column, "syntax nesting")
+        self._nesting += 1
+        try:
+            yield
+        finally:
+            self._nesting -= 1
+
+    def _expr(self, expr: Expr) -> Expr:
+        """Bound tree depth as nodes are built, including iterative chains."""
+        children: Tuple[Expr, ...] = ()
+        if isinstance(expr, Unary):
+            children = (expr.operand,)
+        elif isinstance(expr, Binary):
+            children = (expr.left, expr.right)
+        elif isinstance(expr, Call):
+            children = expr.args
+        elif isinstance(expr, Index):
+            children = (expr.target, expr.offset)
+        elif isinstance(expr, Member):
+            children = (expr.target,)
+        depth = 1 + max(
+            (self._expr_depths.get(id(child), 0) for child in children), default=0
+        )
+        if depth > self._limits.max_nesting:
+            raise self._limit_error(expr.line, expr.column, "expression depth")
+        self._expr_depths[id(expr)] = depth
+        return expr
 
     # -- token plumbing ----------------------------------------------------
 
@@ -571,6 +640,10 @@ class _Parser:
 
     def _parse_if(self) -> IfStmt:
         keyword = self._expect_keyword("if")
+        with self._nested(keyword):
+            return self._parse_if_body(keyword)
+
+    def _parse_if_body(self, keyword: Token) -> IfStmt:
         when = self._parse_expr()
         self._expect("LBRACE", "'{'")
         then = self._parse_block_statements("'if'")
@@ -692,9 +765,9 @@ class _Parser:
         while self._at_keyword("or"):
             token = self._advance()
             right = self._parse_and()
-            left = Binary(
+            left = self._expr(Binary(
                 line=token.line, column=token.column, op="or", left=left, right=right
-            )
+            ))
         return left
 
     def _parse_and(self) -> Expr:
@@ -702,21 +775,27 @@ class _Parser:
         while self._at_keyword("and"):
             token = self._advance()
             right = self._parse_not()
-            left = Binary(
+            left = self._expr(Binary(
                 line=token.line, column=token.column, op="and", left=left, right=right
-            )
+            ))
         return left
 
     def _parse_not(self) -> Expr:
-        if self._at_keyword("not"):
+        operators: List[Token] = []
+        while self._at_keyword("not"):
             token = self._advance()
-            return Unary(
+            operators.append(token)
+            if len(operators) > self._limits.max_nesting:
+                raise self._limit_error(token.line, token.column, "expression depth")
+        expr = self._parse_comparison()
+        for token in reversed(operators):
+            expr = self._expr(Unary(
                 line=token.line,
                 column=token.column,
                 op="not",
-                operand=self._parse_not(),
-            )
-        return self._parse_comparison()
+                operand=expr,
+            ))
+        return expr
 
     def _parse_comparison(self) -> Expr:
         left = self._parse_additive()
@@ -736,13 +815,13 @@ class _Parser:
 
         operator = self._advance()
         right = self._parse_additive()
-        result = Binary(
+        result = self._expr(Binary(
             line=operator.line,
             column=operator.column,
             op=operator.value,
             left=left,
             right=right,
-        )
+        ))
 
         if self._at_op(*_COMPARISON_OPS):
             chained = self._peek()
@@ -758,13 +837,13 @@ class _Parser:
         while self._at_op(*_ADDITIVE_OPS):
             operator = self._advance()
             right = self._parse_multiplicative()
-            left = Binary(
+            left = self._expr(Binary(
                 line=operator.line,
                 column=operator.column,
                 op=operator.value,
                 left=left,
                 right=right,
-            )
+            ))
         return left
 
     def _parse_multiplicative(self) -> Expr:
@@ -772,25 +851,31 @@ class _Parser:
         while self._at_op(*_MULTIPLICATIVE_OPS):
             operator = self._advance()
             right = self._parse_unary()
-            left = Binary(
+            left = self._expr(Binary(
                 line=operator.line,
                 column=operator.column,
                 op=operator.value,
                 left=left,
                 right=right,
-            )
+            ))
         return left
 
     def _parse_unary(self) -> Expr:
-        if self._at_op("-"):
+        operators: List[Token] = []
+        while self._at_op("-"):
             token = self._advance()
-            return Unary(
+            operators.append(token)
+            if len(operators) > self._limits.max_nesting:
+                raise self._limit_error(token.line, token.column, "expression depth")
+        expr = self._parse_postfix()
+        for token in reversed(operators):
+            expr = self._expr(Unary(
                 line=token.line,
                 column=token.column,
                 op="-",
-                operand=self._parse_unary(),
-            )
-        return self._parse_postfix()
+                operand=expr,
+            ))
+        return expr
 
     def _parse_postfix(self) -> Expr:
         expr = self._parse_primary()
@@ -798,21 +883,22 @@ class _Parser:
             token = self._peek()
             if token.type == "LBRACKET":
                 self._advance()
-                offset = self._parse_expr()
-                self._expect("RBRACKET", "']'")
-                expr = Index(
+                with self._nested(token):
+                    offset = self._parse_expr()
+                    self._expect("RBRACKET", "']'")
+                expr = self._expr(Index(
                     line=token.line, column=token.column, target=expr, offset=offset
-                )
+                ))
                 continue
             if token.type == "DOT":
                 self._advance()
                 field = self._expect("IDENT", "field name")
-                expr = Member(
+                expr = self._expr(Member(
                     line=token.line,
                     column=token.column,
                     target=expr,
                     field_name=field.value,
-                )
+                ))
                 continue
             return expr
 
@@ -842,8 +928,9 @@ class _Parser:
             return DurationLit(line=token.line, column=token.column, text=token.value)
         if token.type == "LPAREN":
             self._advance()
-            inner = self._parse_expr()
-            self._expect("RPAREN", "')'")
+            with self._nested(token):
+                inner = self._parse_expr()
+                self._expect("RPAREN", "')'")
             return inner
         if token.type == "IDENT":
             if token.value in ("true", "false"):
@@ -854,20 +941,21 @@ class _Parser:
             self._advance()
             if self._peek().type != "LPAREN":
                 return Name(line=token.line, column=token.column, name=token.value)
-            self._advance()
+            opening = self._advance()
             args: List[Expr] = []
-            if self._peek().type != "RPAREN":
-                args.append(self._parse_expr())
-                while self._peek().type == "COMMA":
-                    self._advance()
+            with self._nested(opening):
+                if self._peek().type != "RPAREN":
                     args.append(self._parse_expr())
-            self._expect("RPAREN", "')'")
-            return Call(
+                    while self._peek().type == "COMMA":
+                        self._advance()
+                        args.append(self._parse_expr())
+                self._expect("RPAREN", "')'")
+            return self._expr(Call(
                 line=token.line,
                 column=token.column,
                 callee=token.value,
                 args=tuple(args),
-            )
+            ))
 
         raise self._error(f"Expected an expression, got {self._describe(token)}", token)
 
@@ -902,9 +990,11 @@ class _Parser:
         return -value if negative else value
 
 
-def parse(source: str) -> StrategyAst:
+def parse(source: str, *, limits: CompilerLimits = DEFAULT_COMPILER_LIMITS) -> StrategyAst:
     """Parse `.nano` source into an immutable, well-formed AST."""
-    return _Parser(tokenize(source)).parse_program()
+    if not isinstance(limits, CompilerLimits):
+        raise TypeError("limits must be CompilerLimits")
+    return _Parser(tokenize(source), limits).parse_program()
 
 
 __all__ = [
@@ -924,5 +1014,8 @@ __all__ = [
     "SigFieldAst",
     "SignatureAst",
     "StrategyAst",
+    "CompilerLimits",
+    "DEFAULT_COMPILER_LIMITS",
+    "MAX_COMPILER_NESTING",
     "parse",
 ]
