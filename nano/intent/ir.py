@@ -59,6 +59,16 @@ def _sequence(value: Any, path: str) -> Sequence[Any]:
     return value
 
 
+def _confidence(value: Any) -> float:
+    """Admit JSON numbers without coercing booleans or model-produced text."""
+    _require(type(value) in (int, float), "/confidence must be a number, not a coerced value")
+    # Check before conversion: arbitrarily large integers must fail as an
+    # IntentValidationError rather than overflowing float(). This also rejects
+    # non-finite floats without accepting Python's bool-as-int relationship.
+    _require(0 <= value <= 1, "/confidence must be finite and between 0 and 1")
+    return float(value)
+
+
 def _keys(value: Mapping[str, Any], required: set[str], path: str) -> None:
     actual = set(value)
     missing = required - actual
@@ -99,7 +109,7 @@ class IntentEntity:
     def from_dict(cls, value: Mapping[str, Any], path: str) -> "IntentEntity":
         _keys(value, {"kind", "raw", "canonical", "span"}, path)
         span = _sequence(value["span"], f"{path}/span")
-        return cls(str(value["kind"]), value["raw"], value["canonical"], tuple(span))  # type: ignore[arg-type]
+        return cls(value["kind"], value["raw"], value["canonical"], tuple(span))  # type: ignore[arg-type]
 
 
 @dataclass(frozen=True)
@@ -441,7 +451,7 @@ class IntentIR:
             source_hash=root["sourceHash"],
             normalized=root["normalized"],
             form=root["form"],
-            confidence=float(root["confidence"]),
+            confidence=_confidence(root["confidence"]),
             entities=entities,
             operation=root["operation"],
             response=ResponsePlan(response_doc["mode"], response_doc["budgetClass"]),
