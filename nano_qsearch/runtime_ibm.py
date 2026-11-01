@@ -68,8 +68,10 @@ later recovery drives ATLAS ``recover_qsearch_submission``'s accounting read;
 the stored ATLAS receipt is completed with the ledger's settled usage (ATLAS
 ``qsearch_receipt_with_settled_usage``, else the row's settled usage; same
 provider job only), and only then is the OK or FAILED body returned, with
-``usage_pending`` false. Zero or missing usage is never final. FakeFez dry runs
-and v1 receipts (which carry no usage) are unchanged.
+``usage_pending`` false. Missing usage and unknown zero remain held. An ATLAS
+confirmed-terminal-zero transition can complete a FAILED receipt at zero only
+with its versioned, request-bound evidence projection (see receipt_v2).
+FakeFez dry runs and v1 receipts (which carry no usage) are unchanged.
 """
 from __future__ import annotations
 
