@@ -575,6 +575,16 @@ receipts. Unknown zero still produces HTTP 503 after restart. Settled replay
 uses the ledger or stored seal without live flags or provider credentials.
 Historical pending seals are retained in the existing reseal history.
 
+Consumers that already authenticated a stored v2 hardware receipt can use the
+pure `receipt_v2.confirmed_zero_receipt(request, receipt)` predicate to recognize
+this exact zero-proof projection. It reuses the same strict identity/schema
+checks as ATLAS receipt conversion and checks the failed hardware outcome against
+the original parsed request. Call `verify_seal_v2(receipt, receipt_key)` first:
+the predicate has no HMAC key and does not authenticate a MAC. Mutable run-record
+flags or an unauthenticated receipt cannot authorize a zero settlement. The #59
+lifecycle bridge must retain that authentication gate and conservative behavior
+when this predicate is absent.
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends

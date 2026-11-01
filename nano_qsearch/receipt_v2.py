@@ -134,6 +134,73 @@ def _finite_nonnegative(value: Any) -> float | None:
     return out if math.isfinite(out) and out >= 0 else None
 
 
+def _zero_evidence_identity(request: QSearchRequest, proof: Any, *, job_id: Any,
+                            backend_name: Any, tags: Any) -> bool:
+    """The single strict identity/schema predicate for the ATLAS and sealed projections."""
+    if not isinstance(proof, Mapping) or set(proof) != ZERO_USAGE_KEYS:
+        return False
+    def hex64(value: Any) -> bool:
+        return isinstance(value, str) and len(value) == 64 and set(value) <= _HEX
+    evidence_digest = proof.get("evidence_sha256")
+    fingerprint = proof.get("request_sha256")
+    return (proof.get("schema") == ZERO_USAGE_EVIDENCE_SCHEMA
+            and proof.get("provider_api_version") == ZERO_USAGE_API_VERSION
+            and proof.get("evidence_source") == "ibm-runtime-job-metrics"
+            and proof.get("usage_status") == "complete"
+            and proof.get("provider_status") in ("CANCELLED", "ERROR")
+            and proof.get("request_id") == request.request_id
+            and proof.get("client_request_digest") == request.request_digest
+            and hex64(fingerprint) and proof.get("child_sha") == fingerprint == proof.get("plan_sha")
+            and proof.get("job_id") == job_id and isinstance(job_id, str) and bool(job_id)
+            and proof.get("backend_name") == request.target == backend_name
+            and isinstance(proof.get("instance"), str) and bool(proof["instance"].strip())
+            and isinstance(proof.get("ledger_id"), str) and len(proof["ledger_id"]) == 32
+            and set(proof["ledger_id"]) <= _HEX
+            and isinstance(evidence_digest, str) and evidence_digest.startswith("sha256:")
+            and hex64(evidence_digest[7:])
+            and isinstance(proof.get("checked_at"), str) and bool(proof["checked_at"].strip())
+            and isinstance(tags, list) and proof.get("job_tags") == tags
+            and 1 <= len(tags) <= MAX_JOB_TAGS
+            and all(isinstance(t, str) and 0 < len(t) <= MAX_TAG_CHARS for t in tags)
+            and f"atlas-qsearch-req-{request.request_id}" in tags
+            and f"atlas-ledger-{proof['ledger_id'][:16]}" in tags)
+
+
+def confirmed_zero_receipt(request: QSearchRequest, receipt: Mapping[str, Any]) -> bool:
+    """Recognize confirmed zero in an already authenticated Nano v2 receipt.
+
+    Pure identity/shape validation: callers MUST first authenticate the hardware
+    HMAC with ``verify_seal_v2(receipt, key)``. This function has no key and cannot
+    authenticate a MAC. The sealed assertion originates in ATLAS's transition;
+    neither a zero amount nor a marker in a mutable run record supplies authority.
+    """
+    if not isinstance(request, QSearchRequest) or not isinstance(receipt, Mapping):
+        return False
+    usage, hardware, backend, bound = (receipt.get(name) for name in ("usage", "hardware", "backend", "request"))
+    if not all(isinstance(value, Mapping) for value in (usage, hardware, backend, bound)):
+        return False
+    proof = usage.get("zero_usage_evidence")
+    seal = receipt.get("seal")
+    if (receipt.get("schema") != SCHEMA_V2 or receipt.get("receipt_version") != RECEIPT_VERSION
+            or receipt.get("status") != "FAILED" or receipt.get("blocks") != []
+            or receipt.get("results_digest") != results_digest([])
+            or bound.get("request_digest") != request.request_digest or type(bound.get("block_count")) is not int
+            or bound["block_count"] != 0 or backend.get("kind") != HARDWARE_KIND
+            or backend.get("id") != request.target or backend.get("dry_run") is not False
+            or hardware.get("dry_run") is not False or request.target in DRY_RUN_TARGETS
+            or hardware.get("purpose") != request.purpose
+            or type(hardware.get("max_execution_time")) is not int
+            or hardware["max_execution_time"] != request.max_execution_time
+            or usage.get("usage_pending") is not False or _finite_nonnegative(usage.get("quantum_seconds")) != 0
+            or not isinstance(seal, str) or not seal.startswith(HARDWARE_SEAL_PREFIX_V2)
+            or len(seal[len(HARDWARE_SEAL_PREFIX_V2):]) != 64
+            or set(seal[len(HARDWARE_SEAL_PREFIX_V2):]) - _HEX):
+        return False
+    return (_zero_evidence_identity(request, proof, job_id=hardware.get("provider_job_id"),
+                                    backend_name=hardware.get("backend_name"), tags=hardware.get("job_tags"))
+            and receipt.get("reason") == "provider: " + proof["provider_status"])
+
+
 def confirmed_zero_evidence(request: QSearchRequest, atlas_receipt: Mapping[str, Any]) -> dict[str, Any] | None:
     """Validate ATLAS's authoritative zero transition, never infer finality from a zero.
 
@@ -144,46 +211,25 @@ def confirmed_zero_evidence(request: QSearchRequest, atlas_receipt: Mapping[str,
     proof = atlas_receipt.get("zero_usage_evidence")
     frozen = atlas_receipt.get("request")
     envelope = frozen.get("envelope") if isinstance(frozen, Mapping) else None
-    if not isinstance(proof, Mapping) or set(proof) != ZERO_USAGE_KEYS or not isinstance(envelope, Mapping):
+    if not isinstance(envelope, Mapping) or not _zero_evidence_identity(
+            request, proof, job_id=atlas_receipt.get("job_id"), backend_name=atlas_receipt.get("backend_name"),
+            tags=atlas_receipt.get("job_tags")):
         return None
-    def hex64(value: Any) -> bool:
-        return isinstance(value, str) and len(value) == 64 and set(value) <= _HEX
     try:
         # ATLAS's fingerprint uses the stdlib's ASCII escaping, which is part of
         # its existing request contract (distinct from the client wire encoding).
         fingerprint = hashlib.sha256(json.dumps(dict(envelope), sort_keys=True, separators=(",", ":"),
                                                 allow_nan=False).encode("utf-8")).hexdigest()
-        evidence_digest = proof.get("evidence_sha256")
-        tags = proof.get("job_tags")
         valid = (atlas_receipt.get("status") == "FAILED" and atlas_receipt.get("dry_run") is False
                  and atlas_receipt.get("accounting_outcome") == "cancelled_no_usage"
                  and atlas_receipt.get("usage_final_status") == "complete"
                  and atlas_receipt.get("usage_pending") is False
                  and _finite_nonnegative(atlas_receipt.get("provider_final_usage_seconds")) == 0
-                 and proof.get("schema") == ZERO_USAGE_EVIDENCE_SCHEMA
-                 and proof.get("provider_api_version") == ZERO_USAGE_API_VERSION
-                 and proof.get("evidence_source") == "ibm-runtime-job-metrics"
-                 and proof.get("usage_status") == "complete"
-                 and proof.get("provider_status") in ("CANCELLED", "ERROR")
                  and proof.get("provider_status") == atlas_receipt.get("provider_status")
                  and proof.get("request_id") == request.request_id == envelope.get("request_id")
                  and proof.get("client_request_digest") == request.request_digest == envelope.get("client_request_digest")
                  and proof.get("request_sha256") == fingerprint == frozen.get("request_sha256")
-                 and proof.get("child_sha") == fingerprint == proof.get("plan_sha")
-                 and proof.get("job_id") == atlas_receipt.get("job_id")
-                 and isinstance(proof.get("job_id"), str) and bool(proof["job_id"])
-                 and proof.get("backend_name") == request.target == atlas_receipt.get("backend_name")
-                 and isinstance(proof.get("instance"), str) and bool(proof["instance"].strip())
-                 and isinstance(proof.get("ledger_id"), str) and len(proof["ledger_id"]) == 32
-                 and set(proof["ledger_id"]) <= _HEX
-                 and isinstance(evidence_digest, str) and evidence_digest.startswith("sha256:")
-                 and hex64(evidence_digest[7:])
-                 and isinstance(proof.get("checked_at"), str) and bool(proof["checked_at"])
-                 and isinstance(tags, list) and tags == atlas_receipt.get("job_tags")
-                 and 1 <= len(tags) <= MAX_JOB_TAGS
-                 and all(isinstance(t, str) and 0 < len(t) <= MAX_TAG_CHARS for t in tags)
-                 and envelope.get("recovery_tag") in tags
-                 and f"atlas-ledger-{proof['ledger_id'][:16]}" in tags)
+                 and envelope.get("recovery_tag") == f"atlas-qsearch-req-{request.request_id}")
         return dict(proof) if valid else None
     except (KeyError, TypeError, ValueError, RecursionError):
         return None
@@ -352,4 +398,5 @@ def request_receipt(request: QSearchRequest, atlas_receipt: Mapping[str, Any], *
 __all__ = ["ATLAS_REQUEST_RECEIPT_SCHEMA", "BIT_ORDER", "DOMAIN_V2", "HARDWARE_DOMAIN_V2", "HARDWARE_SEAL_PREFIX_V2",
            "DEFAULT_REGISTER", "RECEIPT_VERSION", "SCHEMA_V2", "SEAL_PREFIX_V2", "atlas_request_envelope", "failed_v2",
            "not_run_v2", "provider_failure_reason", "request_receipt", "results_digest", "seal_receipt_v2",
+           "confirmed_zero_receipt",
            "verify_seal_v2"]
