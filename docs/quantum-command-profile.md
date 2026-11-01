@@ -43,7 +43,9 @@ Check/compile may explicitly select `using evidence bank NAME`; this remains a
 reference, not evidence content. Simulation requires positive integer shots and
 circuits, and zero QPU seconds on a local backend. Submission preparation
 requires a hardware backend and positive QPU seconds. Positive fractional QPU
-seconds stay exact in the proposal; the integer-bound operations-v1 bridge
+seconds that survive JSON numeric serialization without losing source precision
+stay exact in the proposal; precision-losing values produce `INVALID_BOUNDS`
+with no steps. The integer-bound operations-v1 bridge
 requires an explicit later host admission decision, never silent rounding.
 No submission is performed by this profile or the local command adapter.
 

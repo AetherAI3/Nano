@@ -300,7 +300,7 @@ def _bounds(source: str, match: re.Match[str]) -> tuple[dict[str, Any], list[Qua
             return {}, [], "INVALID_BOUNDS"
         # Integral spellings share identity, including 0.0 QPU seconds.
         value = int(number) if number == number.to_integral_value() else float(number)
-        if isinstance(value, float) and (not math.isfinite(value) or (value == 0 and number != 0)):
+        if isinstance(value, float) and (not math.isfinite(value) or Decimal(str(value)) != number):
             return {}, [], "INVALID_BOUNDS"
         values[kind] = value
         span = (start + quantity.start(), start + quantity.end())

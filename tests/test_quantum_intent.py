@@ -315,3 +315,12 @@ def test_unpaired_surrogate_has_typed_public_and_cli_diagnostics(tmp_path, capsy
     assert main(["intent", "compile", "check plan \ud800", "--profile", "quantum", "--catalog", str(path)]) == 1
     captured = capsys.readouterr()
     assert not captured.out and "invalid Unicode" in captured.err and "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("amount", ["0.10000000000000000001", "2.5000000000000000001", "10000000000000000.5"])
+def test_quantum_budget_never_silently_rounds_a_source_quantity(amount):
+    source = f"prepare submission quantum plan demo-plan on ibm-fez with 100 shots 1 circuit {amount} qpu seconds"
+    ir = compile_quantum(source, catalog=catalog())
+    assert [d.code for d in ir.diagnostics] == ["INVALID_BOUNDS"]
+    assert not ir.steps and not ir.effects
+    assert validate_quantum_document(ir.to_dict(), catalog=catalog()).to_dict() == ir.to_dict()
