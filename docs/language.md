@@ -416,8 +416,10 @@ A bare agent has no role. A role is metadata, not authority: declaring
 
 A signature declares named typed inputs and at least one typed output. Field
 names are unique across both sides. Optional ranges must have lower bound no
-greater than upper bound. Today those ranges travel as schema metadata; the VM
-does not validate a provider's returned values against them.
+greater than upper bound. Before returned values can affect evaluation, the VM
+checks the complete output record against its declared names, supported scalar
+types and inclusive ranges. Input ranges remain declarations for the host;
+this check does not add runtime input-range enforcement.
 
 `infer(Signature, ...)` must match the declared input count and assignable scalar
 types. It returns an internal record whose declared outputs are read with member
@@ -425,6 +427,16 @@ syntax, such as `verdict.confidence`. The VM calls the host-injected provider
 once per bar. With no provider it logs `infer.skipped` once and makes every
 result cell absent. A live provider may be nondeterministic; replay requires the
 host to inject a recorded or otherwise deterministic provider.
+
+Malformed outputs log `infer.invalid`; provider exceptions log `infer.failed`
+without their message text. Both make that bar's whole inference record absent:
+dependent conditions emit no intent, while a route may take its declared
+fallback escalation. Unrelated rules still run. Supported outputs are `int`,
+`float`, `bool` and `confidence`; booleans are not numeric values and numeric
+outputs must be finite. Text, duration and series outputs receive an explicit
+unsupported-type diagnostic before a provider is called. See the
+[reasoning-provider response contract](reasoning-provider.md) for exact types,
+field rules and replay semantics.
 
 A route has a name, an execute label, a boolean guard, and exactly one fallback
 escalation. The optional word `when` does not change meaning. Routes are not
