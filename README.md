@@ -26,7 +26,7 @@ straight into an editor.
 
 > **Write the rule in plain text. Replay any decision. Keep final authority in your application.**
 
-Nano is a small, Python-embeddable language for transparent threshold rules. You write the rule; Nano compiles it into validated IR, evaluates it against numbers your system supplies, and returns proposed `Intent` values with an ordered run log of every step it took to get there. It does not call an exchange, API, or other external system.
+Nano is a small, Python-embeddable language for transparent threshold rules. You write the rule; Nano compiles it into validated IR, evaluates it against numbers your system supplies, and returns proposed `Intent` values with an ordered run log of every step it took to get there. The core does not call an exchange, API, or other external system.
 
 ```nano
 strategy MaxDrawdownBreaker {
@@ -51,7 +51,7 @@ nano intent compile "when is spy earnings" --json
 
 The package has zero required dependencies and includes the compiler, runtime,
 CLI, 55-strategy conformance library, 40 deterministic indicators, Intent
-frontend, and project-search fixtures. Nano does not fetch market data or take
+frontend, and project-search fixtures. The core does not fetch market data or take
 actions: hosts supply observations and retain final authority.
 
 ### Why that matters when money is on the line
@@ -74,6 +74,55 @@ changing the strategy language or calling a model. Try
 `nano intent compile "when is spy earnings" --json`; see the
 [Intent compiler architecture](https://github.com/AetherAI3/Nano/blob/main/docs/intent-compiler.md) for the separate AST,
 IR `0.1.0`, catalogs, effects, consent policy, and canonical fixtures.
+
+## Nano + Qiskit
+
+Nano keeps quantum work outside its dependency-free rule engine. Main already
+includes an optional [Qiskit Aer service](docs/qsearch-service.md) for quadratic
+binary optimization (QUBO), with declared job limits and simulation receipts.
+Hosts own data, authorization and external effects.
+
+**Preview — the additions below are not yet merged into main.**
+[Typed operations](https://github.com/AetherAI3/Nano/pull/72) distinguish known-bit
+preparation, sampling and QUBO optimization, with explicit shots, circuit counts
+and QPU-second limits. The local known-bit path builds and measures a circuit
+directly, then checks its samples before producing a structured reply.
+
+Try the [pinned preview](https://github.com/AetherAI3/Nano/tree/676440bbf80de7bc8c878dab7ef78d85f225f3a7)
+in a separate checkout:
+
+```bash
+git clone https://github.com/AetherAI3/Nano.git Nano-quantum-preview
+cd Nano-quantum-preview
+git checkout --detach 676440bbf80de7bc8c878dab7ef78d85f225f3a7
+python -m pip install -e ".[quantum]"
+python examples/quantum_command_demo.py
+```
+
+The demo interprets
+`simulate quantum plan demo-plan on local with 100 shots 1 circuit 0 qpu seconds`.
+Its reply reports 100 samples, `state: verified` and `observed_from: local_ideal`.
+This is classical simulation on your machine, requiring no model or IBM
+credentials; it demonstrates neither hardware execution nor quantum advantage.
+
+Wider preview work adds [inspectable prepared artifacts](https://github.com/AetherAI3/Nano/pull/80)
+that record compilation choices and provenance. That adapter currently covers
+`optimize_qubo` only; complete prepare/sample artifact and service-wire support
+remains unfinished, and [#61 remains open](https://github.com/AetherAI3/Nano/issues/61).
+[JSON diagnostics](https://github.com/AetherAI3/Nano/pull/79) point to source
+errors, while [nesting limits](https://github.com/AetherAI3/Nano/pull/73) reject
+excessively deep compiler input without promising global time or memory bounds.
+[Pinned local pure scalar helpers](https://github.com/AetherAI3/Nano/pull/76)
+let projects share small deterministic calculations.
+[Job and cancellation visibility](https://github.com/AetherAI3/Nano/pull/78),
+with separate [accounting updates](https://github.com/AetherAI3/Nano/pull/75),
+distinguishes queued work, cancellation requests and settled usage.
+
+For an application, the intended workflow is straightforward: inspect a proposal,
+review its circuit and declared budget, run an allowed local experiment, and
+read the result alongside its evidence. The host still decides what may run and
+keeps credentials, scheduling and approvals. Simulation checks, delivery
+verification and final usage accounting remain separate pieces of evidence.
 
 ## Quick start
 
@@ -171,7 +220,7 @@ Nano owns parsing, IR validation, and deterministic reference evaluation. The ho
 | Named numeric signal series and AND-only threshold conditions | Policy, approvals, persistence, and external effects |
 | Proposed `buy`, `sell`, `execute`, `pause`, and `observe` intents | API calls, exchange execution, and any action with consequences |
 
-v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. It still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](https://github.com/AetherAI3/Nano/blob/main/docs/status.md) separates implemented behavior from experimental work and future ideas.
+v1.0 adds static typing with `series<T>`, look-ahead protection, arithmetic and `or`/`not`, `param`/`input`/`let` declarations, computed indicators, and a CLI. The core still has no LLM runtime, live data feed, or action executor — a reasoning provider is a protocol the host implements. [`docs/status.md`](https://github.com/AetherAI3/Nano/blob/main/docs/status.md) separates implemented behavior from experimental work and future ideas.
 
 ## Deterministic watchdogs and compliance controls
 
