@@ -565,7 +565,11 @@ IR version, accepted by the loader, and given current runtime semantics.
 
 Lexer, parser, and checker failures are `NanoCompileError` subclasses carrying
 1-based line and column positions. The principal specializations are
-`NanoSyntaxError`, `NanoTypeError`, and `LookaheadError`. Serialized-document
+`NanoSyntaxError`, `NanoTypeError`, `LookaheadError`, and
+`NanoResourceLimitError`. Source parsing admits at most 32 active recursive
+syntax scopes and expression operator depth 32; trusted hosts may lower this
+ceiling. See [compiler limits](compiler-limits.md) for counting rules, explicit
+configuration, unbounded resources, and measured boundary fixtures. Serialized-document
 failures are `IRValidationError`, `ManifestViolation`, or `TierViolation`.
 Runtime failures, such as a required frame signal being absent, are separate
 from source or IR validation failures.
