@@ -17,6 +17,7 @@ from nano_qsearch.request import parse_request
 from nano_qsearch.runtime_ibm import JOB_NEVER_SUBMITTED, RECOVERY_NOT_RUN, IbmRuntime, NeverSubmitted
 from nano_qsearch.service import REQUEST_PATH, SUBMIT_PATH, QSearchService, ServiceConfig
 from qsearch_v2_support import MINIMUM_DISPLAY, atlas_request_receipt, job_body, request_body
+from test_qsearch_lifecycle_service import Clock
 from test_qsearch_v2_runtime import _plan, atlas  # noqa: F401  - the fake-ATLAS fixture
 
 RECEIPT_KEY = b"receipt-key-" + b"0" * 20
@@ -140,14 +141,24 @@ def test_service_keeps_a_handed_over_request_accepted_then_seals_failed_from_rec
     body = request_body(3, target="ibm_fez")
     request = parse_request(body)
     recovered = []
+    submissions, recoveries = [], []
+    clock = Clock()
+
+    def submit(req, *args, **kwargs):
+        submissions.append(req.request_digest)
+        raise QSearchSubmittedPending("req-hw0", "job-1")
+
+    def recover(req, **kwargs):
+        recoveries.append(req.request_digest)
+        return recovered.pop() if recovered else None
+
     runtime = IbmRuntime(environ={"AETHER_AQRC_HW_GO": "1", "AETHER_AQRC_QSEARCH_LIVE": "1",
                                   "AETHER_AQRC_QSEARCH_PACKED": "1", "AETHER_AQRC_AUTHORITY_PATH": __file__},
                          compile_fn=lambda job: None, context_fn=None,
-                         request_submit_fn=_raise(QSearchSubmittedPending("req-hw0", "job-1")),
-                         request_recover_fn=lambda req, **k: recovered.pop() if recovered else None)
+                         request_submit_fn=submit, request_recover_fn=recover)
     cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=tmp_path, receipt_key=RECEIPT_KEY,
                         request_key=REQUEST_KEY, v2_enabled=True)
-    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime)
+    svc = QSearchService(cfg, runtime_factory=lambda kind: runtime, clock=clock)
     raw = json.dumps(body, sort_keys=True).encode("utf-8")
 
     def post(nonce):
@@ -159,8 +170,13 @@ def test_service_keeps_a_handed_over_request_accepted_then_seals_failed_from_rec
         assert row.state == "ACCEPTED" and row.attempts == 1
         assert post("a2" * 16)[0] == 503                                    # still running at the provider
         recovered.append(_failed_atlas_receipt(request))
-        status, receipt = post("a3" * 16)
+        assert post("a3" * 16)[0] == 503                                    # same instant stays throttled
+        assert len(recovered) == 1 and recoveries == [request.request_digest]
+        clock.now += cfg.poll_interval_s
+        status, receipt = post("a4" * 16)
         assert status == 200 and receipt["status"] == "FAILED" and receipt["blocks"] == []
+        assert submissions == [request.request_digest] and recoveries == [request.request_digest] * 2
+        assert svc.store.get_request(request.request_digest).attempts == 1
         verify_seal_v2(receipt, RECEIPT_KEY)
     finally:
         svc.close()

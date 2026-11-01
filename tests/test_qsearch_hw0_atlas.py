@@ -172,13 +172,13 @@ def _request_identity(body, ledger, provider):
     return prepared["request_sha256"]
 
 
-def _service(tmp_path, environ, provider, *, v2=True):
+def _service(tmp_path, environ, provider, *, v2=True, clock=time.time):
     def factory(kind):
         return IbmRuntime(environ=environ, service_factory=provider.service_factory,
                           sampler_factory=provider.sampler_factory)
     cfg = ServiceConfig(bind="127.0.0.1:0", backend="auto", data_dir=tmp_path / "nano", receipt_key=RECEIPT_KEY,
                         request_key=REQUEST_KEY, v2_enabled=v2)
-    return QSearchService(cfg, runtime_factory=factory)
+    return QSearchService(cfg, runtime_factory=factory, clock=clock)
 
 
 def _post(svc, body, nonce):
@@ -230,7 +230,8 @@ def test_zero_usage_is_held_until_atlas_settles_it_then_sealed_once(tmp_path, mo
     Nano answers 503 and seals only after ATLAS's accounting read settles the row."""
     provider = Provider(usage=0)
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
-    svc = _service(tmp_path, environ, provider)
+    clock = [1000.0]
+    svc = _service(tmp_path, environ, provider, clock=lambda: clock[0])
     try:
         status, held = _post(svc, body, "b1" * 16)
         assert (status, held["code"], held["job_id"], held["provider_status"]) == \
@@ -239,6 +240,7 @@ def test_zero_usage_is_held_until_atlas_settles_it_then_sealed_once(tmp_path, mo
         assert row["usage"] is None and row["state"] == "awaiting_accounting" and row["cap"] == 10
         assert _post(svc, body, "b2" * 16)[0] == 503                          # provider still reports 0
         provider.jobs[0]._usage = 2.0                                        # the provider's accounting lands
+        clock[0] += svc.config.poll_interval_s                              # bounded reconciliation polling
         status, receipt = _post(svc, body, "b3" * 16)
         assert status == 200 and receipt["status"] == "OK" and len(receipt["blocks"]) == 3
         assert receipt["usage"]["quantum_seconds"] == 2.0 and receipt["usage"]["usage_pending"] is False
@@ -423,12 +425,14 @@ def test_provider_error_is_pending_then_failed_never_not_run(tmp_path, monkeypat
 def test_an_ambiguous_submission_stays_pending_until_released(tmp_path, monkeypatch):
     provider = Provider(run_error=ConnectionError("socket closed mid-request"))
     body, ledger, environ = _packed_setup(tmp_path, monkeypatch, provider)
-    svc = _service(tmp_path, environ, provider)
+    clock = [1000.0]
+    svc = _service(tmp_path, environ, provider, clock=lambda: clock[0])
     try:
         assert _post(svc, body, "1a" * 16)[0] == 503
         assert ledger.get("req-p")["state"] == "ambiguous_submission"
         assert svc.recover() == [] and _post(svc, body, "1b" * 16)[0] == 503      # no job found by tag yet
         ledger.release_unsubmitted("req-p", reason="operator: zero-match tag lookup after grace")
+        clock[0] += svc.config.poll_interval_s
         assert svc.recover() == [parse_request(body).request_digest]
         status, receipt = _post(svc, body, "1c" * 16)
         assert receipt["status"] == "NOT_RUN" and receipt["reason"] == "recovery: request was never submitted"

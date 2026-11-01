@@ -9,6 +9,7 @@ from nano_qsearch.request import parse_request
 from nano_qsearch.runtime_ibm import IbmRuntime
 from nano_qsearch.service import REQUEST_PATH, SUBMIT_PATH, QSearchService, ServiceConfig
 from qsearch_v2_support import atlas_request_receipt, job_body, request_body
+from test_qsearch_lifecycle_service import Clock
 from test_qsearch_r3 import RECEIPT_KEY, REQUEST_KEY, _atlas_job_receipt, _raise
 from test_qsearch_v2_runtime import _plan
 
@@ -80,15 +81,19 @@ def test_service_retains_unknown_submission_and_recovers_once_after_restart(tmp_
     submissions = []
     plan = _plan()
     ready = {"value": False}
+    recoveries = []
+    clock = Clock()
 
     def submit(*args, **kwargs):
         submissions.append("accepted-by-provider")
         raise TimeoutError("response lost after provider acceptance")
 
     def recover_request(request, **kwargs):
+        recoveries.append("request")
         return atlas_request_receipt(request, usage=2.0) if ready["value"] else None
 
     def recover_job(job, **kwargs):
+        recoveries.append("job")
         result = _atlas_job_receipt(job, plan.compiled_plan_digest) if ready["value"] else None
         return result, None
 
@@ -99,7 +104,7 @@ def test_service_retains_unknown_submission_and_recovers_once_after_restart(tmp_
         request_recover_fn=recover_request, job_recover_fn=recover_job)
     config = ServiceConfig(bind="127.0.0.1:0", backend="ibm", data_dir=tmp_path,
                            receipt_key=RECEIPT_KEY, request_key=REQUEST_KEY, v2_enabled=True)
-    service = QSearchService(config, runtime_factory=lambda kind: runtime)
+    service = QSearchService(config, runtime_factory=lambda kind: runtime, clock=clock)
 
     def post(svc, nonce):
         headers = {AUTH_HEADER: sign_request(REQUEST_KEY, "POST", path, raw, ts=1000, nonce=nonce)}
@@ -116,11 +121,16 @@ def test_service_retains_unknown_submission_and_recovers_once_after_restart(tmp_
     finally:
         service.close()
 
-    restarted = QSearchService(config, runtime_factory=lambda kind: runtime)
+    restarted = QSearchService(config, runtime_factory=lambda kind: runtime, clock=clock)
     try:
         assert restarted.recover() == []
         assert row(restarted).state == "ACCEPTED"
         ready["value"] = True
+        if packed:
+            reads = len(recoveries)
+            assert restarted.recover() == []                              # durable throttle survives restart
+            assert len(recoveries) == reads and submissions == ["accepted-by-provider"]
+            clock.now += config.poll_interval_s
         assert restarted.recover() == [digest]
         status, receipt = post(restarted, "d3" * 16)
         assert status == 200 and receipt["status"] == "OK"

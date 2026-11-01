@@ -769,7 +769,7 @@ class QSearchService:
         old_json = self.store.get_request(request.request_digest).receipt_json
         self.store.reseal_request(request.request_digest, old_json, json.dumps(sealed, sort_keys=True, allow_nan=False))
         history = list(self._stored_record(request.request_digest).get("reseals", []))
-        history.append({"at": time.time(), "reason": "accounting settled", "previous_seal": stored.get("seal"),
+        history.append({"at": self._clock(), "reason": "accounting settled", "previous_seal": stored.get("seal"),
                         "previous_usage": stored.get("usage")})
         self._keep_record(request, {**record, "reseals": history})
         return 200, sealed
@@ -843,7 +843,7 @@ class QSearchService:
             return 404, dict(NOT_ENABLED)
         if len(body) > self.config.max_body_bytes:
             return 413, {"error": "body too large"}
-        now = int(time.time()) if now is None else now
+        now = int(self._clock()) if now is None else now
         refusal = self._authenticate(method, path, body, headers, now)
         if refusal is not None:
             return refusal

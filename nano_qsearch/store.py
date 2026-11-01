@@ -352,7 +352,7 @@ class JobStore:
         with self._lock:
             cur = self._db.execute("UPDATE requests SET receipt_json=?, completed_at=? WHERE request_digest=? "
                                    "AND state='DONE' AND receipt_json=?",
-                                   (new_receipt_json, time.time(), request_digest, old_receipt_json))
+                                   (new_receipt_json, self._clock(), request_digest, old_receipt_json))
             if cur.rowcount != 1:
                 raise ValueError("stored receipt changed or is not DONE; nothing re-sealed")
 
@@ -367,7 +367,7 @@ class JobStore:
         with self._lock:
             cur = self._db.execute("UPDATE requests SET state='DONE', receipt_json=?, completed_at=? "
                                    "WHERE request_digest=? AND state='ACCEPTED'",
-                                   (receipt_json, time.time(), request_digest))
+                                   (receipt_json, self._clock(), request_digest))
             if cur.rowcount == 1:
                 return
             if self._request_row(request_digest) is None:

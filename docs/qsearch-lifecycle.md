@@ -98,12 +98,23 @@ cancel RPC or dispatch event. Once dispatch is claimed, an ambiguous failure
 requires observation and cannot authorize another cancel RPC.
 
 The default adapter reuses ATLAS's existing reservation and frozen request/plan
-identity checks. Cancellation also verifies the host's existing signed authority
-for that plan and cap. Nano creates no second spending ledger. Missing live
+identity checks. Cancellation verifies current signed, exact-plan authority using
+ATLAS `verify_authority`: the host key, ledger binding, plan scope, reserved plan
+identity, cap and expiry must all pass before the provider RPC. Authenticated host
+cancellation and the existing `AETHER_AQRC_HW_GO`/`AETHER_AQRC_QSEARCH_LIVE` gates
+are still required. Nano creates no second spending ledger. Missing live
 context, authority or identity checks fail closed, with stable error metadata.
 Predator remains the owner of its campaign journal and budget admission; it can
 consume the independent execution/accounting fields without treating a cancelled
 computation as success or releasing unknown usage.
+
+Live v2 submission requires an ATLAS adapter supporting the additive
+`wait_for_result=False` option. Nano passes that option explicitly; an older
+adapter fails closed before provider submission. Queued/running jobs hand over
+their durable provider identity and status without waiting in `result()`.
+Terminal result collection and accounting use the existing ATLAS paths. Legacy
+ATLAS callers retain their previous default behavior unless they opt out of
+waiting. This dependency changes no reservation cap, authority or receipt schema.
 
 `NANO_QSEARCH_QUEUE_DEADLINE_S` defaults to 3600 seconds;
 `NANO_QSEARCH_ACCOUNTING_WINDOW_S` defaults to 900 seconds;
