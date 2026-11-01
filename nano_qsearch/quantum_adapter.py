@@ -20,11 +20,15 @@ from nano.quantum import (RESULT_SCHEMA, OptimizeQubo, Packet, PrepareBits, Quan
                           QuantumValidationError, Sample, build_plan, check_evidence_bank,
                           checked_plan, optimize_qubo, parse_plan, parse_result)
 from .canonical import canonical_digest, canonical_json, validate_digest
+from . import job as _legacy_fields
 from .job import JOB_SCHEMA, QSearchJob, parse_job
 
 QISKIT_VERSION = "2.3.1"
 BRIDGE_SOURCE_SHA = "b6ba6542b2c311d6354948e528bc64f147911178"
 REQUEST_SCHEMA = "predator.qsearch.request.v2"
+# Source-admission enum from BRIDGE_SOURCE_SHA, not a live compile capability.
+_PINNED_JOB_TARGETS = ("heron_heavy_hex", "fake_fez", "ibm_fez", "ibm_kingston", "ibm_marrakesh")
+_PROJECTION_UNSUPPORTED_TARGETS = ("ibm_kingston", "ibm_marrakesh")
 
 
 def _fail(code: str, message: str) -> None:
@@ -336,9 +340,10 @@ def to_legacy_job(plan: QuantumPlan, operation_id: str, profile: LegacyCompilePr
 
 @dataclass(frozen=True)
 class LegacyImport:
-    plan: QuantumPlan
+    plan: QuantumPlan | None
     source_payload: Mapping[str, Any]
     metadata: Mapping[str, Any]
+    projection_diagnostics: tuple[str, ...] = ()
 
     def to_legacy_payload(self) -> dict[str, Any]:
         return _thaw(self.source_payload)
@@ -354,9 +359,76 @@ def _int(value: Any, minimum: int = 0) -> bool:
     return type(value) is int and value >= minimum
 
 
-def _legacy_operation(job: QSearchJob, index: int, total: int) -> dict[str, Any]:
+@dataclass(frozen=True)
+class _LegacyJobSource:
+    """Validated source data only; never supplied to the current compiler."""
+    variables: tuple[str, ...]
+    q: tuple[tuple[float, ...], ...]
+    offset: float
+    variant: str
+    p: int
+    gammas: tuple[float, ...]
+    betas: tuple[float, ...]
+    target: str
+    backend_kind: str
+    shots: int
+    backend_seed: int
+    max_wall_s: int
+    max_qpu_s: int
+    classical_min_energy: float
+    job_digest: str
+
+    @property
+    def n(self) -> int:
+        return len(self.variables)
+
+
+def _read_pinned_job(body: Any) -> _LegacyJobSource:
+    """Admit the exact pinned job grammar without changing an execution parser.
+
+    Unchanged field groups reuse main's strict validators. Only the compile
+    group is repeated here because its declared-target enum gained two names
+    at the pinned source revision. No target stand-in or digest rewrite occurs.
+    """
+    body = _exact(body, {"schema", "compiled_search_digest", "variables", "qubo", "compile",
+                         "backend", "limits", "audit", "job_digest"}, "job")
+    if body["schema"] != JOB_SCHEMA:
+        _fail("LEGACY_SCHEMA", "legacy job schema differs from the pinned bridge")
+    try:
+        validate_digest(body["compiled_search_digest"], field="compiled_search_digest")
+    except ValueError:
+        _fail("DIGEST", "legacy compiled-search digest is invalid")
+    variables = _legacy_fields._parse_variables(body)
+    q, offset = _legacy_fields._parse_qubo(body, len(variables))
+    comp = _exact(body["compile"], {"variant", "p", "gammas", "betas", "opt_level", "seed", "target", "training"},
+                  "compile")
+    variant = _legacy_fields._choice(comp["variant"], _legacy_fields.VARIANTS, "COMPILE", "compile.variant")
+    p = _legacy_fields._int(comp["p"], "COMPILE", "compile.p", minimum=1)
+    gammas = _legacy_fields._angles(comp["gammas"], p, "compile.gammas")
+    betas = _legacy_fields._angles(comp["betas"], p, "compile.betas")
+    opt_level = _legacy_fields._int(comp["opt_level"], "COMPILE", "compile.opt_level", minimum=0)
+    if opt_level > 3:
+        _fail("COMPILE", "legacy compile.opt_level must be in 0..3")
+    _legacy_fields._int(comp["seed"], "COMPILE", "compile.seed", minimum=None)
+    target = _legacy_fields._choice(comp["target"], _PINNED_JOB_TARGETS, "COMPILE", "compile.target")
+    if comp["training"] != "none":
+        _fail("COMPILE", "legacy compile.training must be none")
+    kind, _, shots, seed = _legacy_fields._parse_backend(body)
+    _, max_wall_s, max_qpu_s = _legacy_fields._parse_limits(body, len(variables))
+    floor = _legacy_fields._parse_audit(body)
+    try:
+        digest = canonical_digest({k: v for k, v in body.items() if k != "job_digest"})
+    except (ValueError, UnicodeError):
+        _fail("DIGEST", "legacy job does not have a canonical digest")
+    if body["job_digest"] != digest:
+        _fail("DIGEST", "legacy job digest differs from its original payload")
+    return _LegacyJobSource(variables, q, offset, variant, p, gammas, betas, target,
+                            kind, shots, seed, max_wall_s, max_qpu_s, floor, digest)
+
+
+def _legacy_operation(job: _LegacyJobSource, index: int, total: int) -> dict[str, Any]:
     if job.max_wall_s == 0:
-        _fail("LEGACY_LIMIT", "legacy zero wall-time semantics require an explicit migration policy")
+        _fail("LEGACY_WALL_POLICY_REQUIRED", "legacy zero wall-time semantics require an explicit migration policy")
     return optimize_qubo(job.variables, [list(row) for row in job.q], offset=job.offset,
         variant=job.variant, p=job.p, gammas=job.gammas, betas=job.betas,
         classical_min_energy=job.classical_min_energy, shots=job.shots, max_circuits=total,
@@ -364,19 +436,38 @@ def _legacy_operation(job: QSearchJob, index: int, total: int) -> dict[str, Any]
         operation_id=f"legacy-optimize-{index}", backend=job.target, seed=job.backend_seed, pub_index=index)
 
 
+def _project_legacy(jobs: list[_LegacyJobSource]) -> tuple[QuantumPlan | None, tuple[str, ...]]:
+    """Projection is optional and never widens a source limit or target policy."""
+    diagnostics = []
+    if any(job.target in _PROJECTION_UNSUPPORTED_TARGETS for job in jobs):
+        diagnostics.append("LEGACY_TARGET_UNSUPPORTED")
+    if any(job.max_wall_s == 0 for job in jobs):
+        diagnostics.append("LEGACY_WALL_POLICY_REQUIRED")
+    if diagnostics:
+        return None, tuple(diagnostics)
+    try:
+        return build_plan([_legacy_operation(job, i, len(jobs)) for i, job in enumerate(jobs)]), ()
+    except QuantumValidationError as exc:
+        # A valid legacy seed/name can be narrower in operations-v1. Preserve
+        # the admitted source without pretending it acquired a runnable plan.
+        return None, (f"LEGACY_PROJECTION_{exc.code}",)
+
+
 def read_legacy(body: Any, *, max_pubs: int = 16) -> LegacyImport:
     """Read job.v1 or the pinned request.v2 without submitting or changing them.
 
     All original fields are retained in source_payload and request metadata.
-    The semantic optimization projection does not pretend to be a lossless new
-    compile profile. Current-main unsupported target names fail explicitly.
+    Source admission covers all pinned targets and legacy zero wall bounds.
+    A checked new-IR plan is optional: projection_diagnostics explains why a
+    source record cannot project without a separately reviewed migration policy.
     """
     if not isinstance(body, Mapping):
         _fail("LEGACY_SCHEMA", "legacy document must be an object")
     if body.get("schema") == JOB_SCHEMA:
-        job = parse_job(body)
-        return LegacyImport(build_plan([_legacy_operation(job, 0, 1)]), _freeze(copy.deepcopy(body)),
-                            _freeze({"schema": JOB_SCHEMA, "job_digests": [job.job_digest]}))
+        job = _read_pinned_job(body)
+        plan, diagnostics = _project_legacy([job])
+        return LegacyImport(plan, _freeze(copy.deepcopy(body)),
+                            _freeze({"schema": JOB_SCHEMA, "job_digests": [job.job_digest]}), diagnostics)
     if body.get("schema") != REQUEST_SCHEMA:
         _fail("LEGACY_SCHEMA", "expected predator.qsearch.job.v1 or predator.qsearch.request.v2")
     if not _int(max_pubs, 1) or max_pubs > 4096:
@@ -404,11 +495,11 @@ def read_legacy(body: Any, *, max_pubs: int = 16) -> LegacyImport:
     jobs, digests, deliveries = [], set(), set()
     for index, (block, raw_job) in enumerate(zip(blocks, body["jobs"])):
         _exact(block, {"pub_index", "job_digest", "recipients", "n", "shots", "seed", "classical_min_energy"}, "block")
-        job = parse_job(raw_job)
+        job = _read_pinned_job(raw_job)
         if (not _int(block["pub_index"]) or block["pub_index"] != index or job.job_digest in digests
                 or job.job_digest != block["job_digest"] or type(block["n"]) is not int or job.n != block["n"]
                 or type(block["shots"]) is not int or job.shots != block["shots"]
-                or type(block["seed"]) is not int or job.backend_seed != block["seed"]
+                or not _int(block["seed"]) or job.backend_seed != block["seed"]
                 or type(block["classical_min_energy"]) not in (int, float)
                 or job.classical_min_energy != block["classical_min_energy"]
                 or job.backend_kind != "ibm" or job.target != desc["target"]):
@@ -432,10 +523,10 @@ def read_legacy(body: Any, *, max_pubs: int = 16) -> LegacyImport:
         jobs.append(job)
     if desc["target"] != "fake_fez" and desc["max_execution_time"] > sum(j.max_qpu_s for j in jobs):
         _fail("LIMITS", "legacy execution bound exceeds child QPU-second allowances")
-    plan = build_plan([_legacy_operation(job, i, len(jobs)) for i, job in enumerate(jobs)])
+    plan, diagnostics = _project_legacy(jobs)
     return LegacyImport(plan, _freeze(copy.deepcopy(body)), _freeze({"schema": REQUEST_SCHEMA,
         "bridge_source_sha": BRIDGE_SOURCE_SHA, "request_digest": canonical_digest(desc),
-        "descriptor": copy.deepcopy(desc), "job_digests": [j.job_digest for j in jobs]}))
+        "descriptor": copy.deepcopy(desc), "job_digests": [j.job_digest for j in jobs]}), diagnostics)
 
 
 def _local_worker() -> None:
