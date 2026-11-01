@@ -67,6 +67,7 @@ include = ["nano*"]
 # The source/IR conformance and strategy corpora live alongside the package.
 # Ship them deliberately so installed distributions retain the documented assets.
 [tool.setuptools.package-data]
+nano_qsearch = ["schemas/*.json"]
 nano = [
   "examples/*.nano",
   "examples/*.json",

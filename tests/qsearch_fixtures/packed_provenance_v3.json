@@ -1,0 +1,660 @@
+{
+  "contract": "nano-predator.packed-provenance-golden.v1",
+  "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "request_body": {
+    "schema": "predator.qsearch.request.v2",
+    "jobs": [
+      {
+        "schema": "predator.qsearch.job.v1",
+        "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+        "variables": [
+          "c0",
+          "c1",
+          "c2",
+          "c3"
+        ],
+        "qubo": {
+          "q": [
+            [
+              -1.0,
+              0.45,
+              0.35,
+              0.0
+            ],
+            [
+              0.45,
+              -0.8,
+              0.25,
+              0.0
+            ],
+            [
+              0.35,
+              0.25,
+              -0.6,
+              -0.15
+            ],
+            [
+              0.0,
+              0.0,
+              -0.15,
+              -0.4
+            ]
+          ],
+          "offset": 0.0,
+          "convention": "symmetric_half"
+        },
+        "compile": {
+          "variant": "auto",
+          "p": 1,
+          "gammas": [
+            0.4
+          ],
+          "betas": [
+            0.4
+          ],
+          "opt_level": 3,
+          "seed": 11,
+          "target": "ibm_fez",
+          "training": "none"
+        },
+        "backend": {
+          "kind": "ibm",
+          "chi_max": 64,
+          "shots": 8,
+          "seed": 7
+        },
+        "limits": {
+          "max_variables": 40,
+          "max_wall_s": 120,
+          "max_qpu_s": 5
+        },
+        "audit": {
+          "classical_min_energy": -1.6
+        },
+        "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0"
+      },
+      {
+        "schema": "predator.qsearch.job.v1",
+        "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+        "variables": [
+          "c0",
+          "c1",
+          "c2"
+        ],
+        "qubo": {
+          "q": [
+            [
+              -1.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.5,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              -0.5
+            ]
+          ],
+          "offset": 0.0,
+          "convention": "symmetric_half"
+        },
+        "compile": {
+          "variant": "auto",
+          "p": 1,
+          "gammas": [
+            0.4
+          ],
+          "betas": [
+            0.4
+          ],
+          "opt_level": 3,
+          "seed": 11,
+          "target": "ibm_fez",
+          "training": "none"
+        },
+        "backend": {
+          "kind": "ibm",
+          "chi_max": 64,
+          "shots": 5,
+          "seed": 8
+        },
+        "limits": {
+          "max_variables": 40,
+          "max_wall_s": 120,
+          "max_qpu_s": 5
+        },
+        "audit": {
+          "classical_min_energy": -1.5
+        },
+        "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927"
+      }
+    ],
+    "descriptor": {
+      "schema": "predator.qsearch.request.v2",
+      "request_id": "req-hw0",
+      "target": "ibm_fez",
+      "purpose": "qcomms",
+      "max_execution_time": 10,
+      "manifest_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "batch_index": 0,
+      "batch_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "blocks": [
+        {
+          "pub_index": 0,
+          "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 0,
+              "slot": 0
+            }
+          ],
+          "n": 4,
+          "shots": 8,
+          "seed": 7,
+          "classical_min_energy": -1.6
+        },
+        {
+          "pub_index": 1,
+          "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 1,
+              "slot": 0
+            }
+          ],
+          "n": 3,
+          "shots": 5,
+          "seed": 8,
+          "classical_min_energy": -1.5
+        }
+      ]
+    }
+  },
+  "atlas_receipt": {
+    "schema": "AqrcQSearchRequestReceiptV1",
+    "request": {
+      "envelope": {
+        "schema": "AqrcQSearchRequestV1",
+        "request_id": "req-hw0",
+        "purpose": "qcomms",
+        "target": "ibm_fez",
+        "children": [
+          "sha256:000000000000000000000000000000000000000000000000000000000000000a",
+          "sha256:000000000000000000000000000000000000000000000000000000000000000b"
+        ],
+        "shots": [
+          8,
+          5
+        ],
+        "pub_count": 2,
+        "max_execution_time": 10,
+        "recovery_tag": "atlas-qsearch-req-req-hw0"
+      },
+      "request_sha256": "x"
+    },
+    "purpose": "qcomms",
+    "target": "ibm_fez",
+    "backend_name": "ibm_fez",
+    "dry_run": false,
+    "job_id": "fake-job-1",
+    "status": "DONE",
+    "pub_count": 2,
+    "max_execution_time": 10,
+    "job_tags": [
+      "atlas-qsearch-req-req-hw0"
+    ],
+    "pubs": [
+      {
+        "pub_index": 0,
+        "register": "meas",
+        "bit_order": "msb_first",
+        "shots": 8,
+        "raw_samples": [
+          "1101",
+          "1101",
+          "1101",
+          "1101",
+          "1101",
+          "1101",
+          "1101",
+          "0000"
+        ],
+        "child_sha256": "sha256:000000000000000000000000000000000000000000000000000000000000000a"
+      },
+      {
+        "pub_index": 1,
+        "register": "meas",
+        "bit_order": "msb_first",
+        "shots": 5,
+        "raw_samples": [
+          "101",
+          "101",
+          "101",
+          "101",
+          "000"
+        ],
+        "child_sha256": "sha256:000000000000000000000000000000000000000000000000000000000000000b"
+      }
+    ],
+    "provider_final_usage_seconds": null,
+    "usage_pending": true,
+    "provider_metrics": {
+      "usage": {
+        "quantum_seconds": null
+      }
+    }
+  },
+  "expected_manifest": {
+    "compiler": {
+      "name": "nano-qsearch",
+      "qiskit_ibm_runtime_version": "0.43.1",
+      "qiskit_version": "2.3.1",
+      "version": "1.1.0"
+    },
+    "profile": {
+      "digest": "sha256:2f9a3c318f15fea16b9a26ddae7e907d5b3a78a3524bdb113999b8df204d147f",
+      "id": "fixture-default",
+      "schema": "nano.qsearch.compile-profile.v1"
+    },
+    "pubs": [
+      {
+        "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000a",
+        "compiled_plan_digest": "sha256:0358a090dc27fd71606b52f7408600a2c58e40e3b2cc6a6deff27cefff3e270b",
+        "isa_digest": "sha256:cfd7e40b5839b0f49098937309f103c8ff2c47fa6c795eabc33d92431c4dcf3f",
+        "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+        "layout": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "n": 4,
+        "pub_index": 0,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 0,
+            "slot": 0
+          }
+        ],
+        "seed": 7,
+        "shots": 8
+      },
+      {
+        "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000b",
+        "compiled_plan_digest": "sha256:4c8d160f557bad43dc6f9f118ee0a5ce4ea9bd11b125287e4ab962350bd73cae",
+        "isa_digest": "sha256:669bbac3f5dd68b8cf8bd9677917c1f71f8634e49857e104e4ed76b06b800d4d",
+        "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+        "layout": [
+          0,
+          1,
+          2
+        ],
+        "n": 3,
+        "pub_index": 1,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 1,
+            "slot": 0
+          }
+        ],
+        "seed": 8,
+        "shots": 5
+      }
+    ],
+    "request_digest": "sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0",
+    "schema": "nano.qsearch.compile-manifest.v1",
+    "target": {
+      "calibration_digest": null,
+      "name": "ibm_fez",
+      "snapshot_digest": "sha256:c143e842706c58598e8f65c3ffe7e23fb841b0b71e5f087e7b4bf6cbc5700ad6"
+    }
+  },
+  "canonical_manifest": "{\"compiler\":{\"name\":\"nano-qsearch\",\"qiskit_ibm_runtime_version\":\"0.43.1\",\"qiskit_version\":\"2.3.1\",\"version\":\"1.1.0\"},\"profile\":{\"digest\":\"sha256:2f9a3c318f15fea16b9a26ddae7e907d5b3a78a3524bdb113999b8df204d147f\",\"id\":\"fixture-default\",\"schema\":\"nano.qsearch.compile-profile.v1\"},\"pubs\":[{\"atlas_child_digest\":\"sha256:000000000000000000000000000000000000000000000000000000000000000a\",\"compiled_plan_digest\":\"sha256:0358a090dc27fd71606b52f7408600a2c58e40e3b2cc6a6deff27cefff3e270b\",\"isa_digest\":\"sha256:cfd7e40b5839b0f49098937309f103c8ff2c47fa6c795eabc33d92431c4dcf3f\",\"job_digest\":\"sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0\",\"layout\":[0,1,2,3],\"n\":4,\"pub_index\":0,\"recipients\":[{\"agent_id\":\"agent-007\",\"chunk\":0,\"slot\":0}],\"seed\":7,\"shots\":8},{\"atlas_child_digest\":\"sha256:000000000000000000000000000000000000000000000000000000000000000b\",\"compiled_plan_digest\":\"sha256:4c8d160f557bad43dc6f9f118ee0a5ce4ea9bd11b125287e4ab962350bd73cae\",\"isa_digest\":\"sha256:669bbac3f5dd68b8cf8bd9677917c1f71f8634e49857e104e4ed76b06b800d4d\",\"job_digest\":\"sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927\",\"layout\":[0,1,2],\"n\":3,\"pub_index\":1,\"recipients\":[{\"agent_id\":\"agent-007\",\"chunk\":1,\"slot\":0}],\"seed\":8,\"shots\":5}],\"request_digest\":\"sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0\",\"schema\":\"nano.qsearch.compile-manifest.v1\",\"target\":{\"calibration_digest\":null,\"name\":\"ibm_fez\",\"snapshot_digest\":\"sha256:c143e842706c58598e8f65c3ffe7e23fb841b0b71e5f087e7b4bf6cbc5700ad6\"}}",
+  "compile_identity": "sha256:4aec9474aab0240554358e4ad8e54dccf413746e2257a95e6a2f80ac758bc044",
+  "pending_receipt": {
+    "accounting_history": [],
+    "accounting_revision": 0,
+    "atlas_receipt_sha256": "sha256:21a491faca8235b3116ebed135beda791ba4b85ef0f1e25060b66514b261ae20",
+    "backend": {
+      "dry_run": false,
+      "id": "ibm_fez",
+      "kind": "ibm"
+    },
+    "blocks": [
+      {
+        "audit": {
+          "agree": true,
+          "best_sample_energy": -1.6,
+          "classical_min_energy": -1.6
+        },
+        "block_index": 0,
+        "counts": {
+          "0000": 1,
+          "1101": 7
+        },
+        "counts_digest": "sha256:aac4e13fafbce2e15ef671883d270a1964e255ebc68e7d4065528d0eccffb2c3",
+        "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+        "n": 4,
+        "pub_index": 0,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 0,
+            "slot": 0
+          }
+        ],
+        "seed": 7,
+        "shots": 8
+      },
+      {
+        "audit": {
+          "agree": true,
+          "best_sample_energy": -1.5,
+          "classical_min_energy": -1.5
+        },
+        "block_index": 1,
+        "counts": {
+          "000": 1,
+          "101": 4
+        },
+        "counts_digest": "sha256:0e6e437752a6c8019a5199f5a3cec40b3df2d04930fd0e595f9f696018fa97e6",
+        "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+        "n": 3,
+        "pub_index": 1,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 1,
+            "slot": 0
+          }
+        ],
+        "seed": 8,
+        "shots": 5
+      }
+    ],
+    "compile_identity": "sha256:4aec9474aab0240554358e4ad8e54dccf413746e2257a95e6a2f80ac758bc044",
+    "compile_manifest": {
+      "compiler": {
+        "name": "nano-qsearch",
+        "qiskit_ibm_runtime_version": "0.43.1",
+        "qiskit_version": "2.3.1",
+        "version": "1.1.0"
+      },
+      "profile": {
+        "digest": "sha256:2f9a3c318f15fea16b9a26ddae7e907d5b3a78a3524bdb113999b8df204d147f",
+        "id": "fixture-default",
+        "schema": "nano.qsearch.compile-profile.v1"
+      },
+      "pubs": [
+        {
+          "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000a",
+          "compiled_plan_digest": "sha256:0358a090dc27fd71606b52f7408600a2c58e40e3b2cc6a6deff27cefff3e270b",
+          "isa_digest": "sha256:cfd7e40b5839b0f49098937309f103c8ff2c47fa6c795eabc33d92431c4dcf3f",
+          "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+          "layout": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "n": 4,
+          "pub_index": 0,
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 0,
+              "slot": 0
+            }
+          ],
+          "seed": 7,
+          "shots": 8
+        },
+        {
+          "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000b",
+          "compiled_plan_digest": "sha256:4c8d160f557bad43dc6f9f118ee0a5ce4ea9bd11b125287e4ab962350bd73cae",
+          "isa_digest": "sha256:669bbac3f5dd68b8cf8bd9677917c1f71f8634e49857e104e4ed76b06b800d4d",
+          "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+          "layout": [
+            0,
+            1,
+            2
+          ],
+          "n": 3,
+          "pub_index": 1,
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 1,
+              "slot": 0
+            }
+          ],
+          "seed": 8,
+          "shots": 5
+        }
+      ],
+      "request_digest": "sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0",
+      "schema": "nano.qsearch.compile-manifest.v1",
+      "target": {
+        "calibration_digest": null,
+        "name": "ibm_fez",
+        "snapshot_digest": "sha256:c143e842706c58598e8f65c3ffe7e23fb841b0b71e5f087e7b4bf6cbc5700ad6"
+      }
+    },
+    "hardware": {
+      "backend_name": "ibm_fez",
+      "bit_order": "msb_first",
+      "dry_run": false,
+      "job_tags": [
+        "atlas-qsearch-req-req-hw0"
+      ],
+      "max_execution_time": 10,
+      "provider_job_id": "fake-job-1",
+      "purpose": "qcomms",
+      "register": "meas"
+    },
+    "receipt_version": 3,
+    "request": {
+      "block_count": 2,
+      "request_digest": "sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0"
+    },
+    "results_digest": "sha256:bcab1c9e2d72e0b512a6e9dfa43d0c2ae6d3c5c4be36bcadd58ea56a567492c2",
+    "schema": "predator.qsearch.receipt.v3",
+    "status": "OK",
+    "usage": {
+      "provider_metrics": {
+        "usage": {
+          "quantum_seconds": null
+        }
+      },
+      "provider_sub_jobs": null,
+      "quantum_seconds": null,
+      "usage_pending": true
+    },
+    "seal": "hmac-sha256+hardware-v3:e343ac2fdc195202007fc7767000d3e1c5e623bffd5066b9935d45815a0a2d5a"
+  },
+  "settled_receipt": {
+    "accounting_history": [
+      {
+        "atlas_receipt_sha256": "sha256:21a491faca8235b3116ebed135beda791ba4b85ef0f1e25060b66514b261ae20",
+        "receipt_digest": "sha256:df274c5f1a3fbf8aff50676b73860a2a7374b864f0f67adc7f1140683a881e0d",
+        "seal": "hmac-sha256+hardware-v3:e343ac2fdc195202007fc7767000d3e1c5e623bffd5066b9935d45815a0a2d5a",
+        "usage": {
+          "provider_metrics": {
+            "usage": {
+              "quantum_seconds": null
+            }
+          },
+          "provider_sub_jobs": null,
+          "quantum_seconds": null,
+          "usage_pending": true
+        }
+      }
+    ],
+    "accounting_revision": 1,
+    "atlas_receipt_sha256": "sha256:4e26dcf4190b1c0af498b7bd0d769bdd294fbeb85031fa156459c2844910e9c8",
+    "backend": {
+      "dry_run": false,
+      "id": "ibm_fez",
+      "kind": "ibm"
+    },
+    "blocks": [
+      {
+        "audit": {
+          "agree": true,
+          "best_sample_energy": -1.6,
+          "classical_min_energy": -1.6
+        },
+        "block_index": 0,
+        "counts": {
+          "0000": 1,
+          "1101": 7
+        },
+        "counts_digest": "sha256:aac4e13fafbce2e15ef671883d270a1964e255ebc68e7d4065528d0eccffb2c3",
+        "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+        "n": 4,
+        "pub_index": 0,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 0,
+            "slot": 0
+          }
+        ],
+        "seed": 7,
+        "shots": 8
+      },
+      {
+        "audit": {
+          "agree": true,
+          "best_sample_energy": -1.5,
+          "classical_min_energy": -1.5
+        },
+        "block_index": 1,
+        "counts": {
+          "000": 1,
+          "101": 4
+        },
+        "counts_digest": "sha256:0e6e437752a6c8019a5199f5a3cec40b3df2d04930fd0e595f9f696018fa97e6",
+        "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+        "n": 3,
+        "pub_index": 1,
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 1,
+            "slot": 0
+          }
+        ],
+        "seed": 8,
+        "shots": 5
+      }
+    ],
+    "compile_identity": "sha256:4aec9474aab0240554358e4ad8e54dccf413746e2257a95e6a2f80ac758bc044",
+    "compile_manifest": {
+      "compiler": {
+        "name": "nano-qsearch",
+        "qiskit_ibm_runtime_version": "0.43.1",
+        "qiskit_version": "2.3.1",
+        "version": "1.1.0"
+      },
+      "profile": {
+        "digest": "sha256:2f9a3c318f15fea16b9a26ddae7e907d5b3a78a3524bdb113999b8df204d147f",
+        "id": "fixture-default",
+        "schema": "nano.qsearch.compile-profile.v1"
+      },
+      "pubs": [
+        {
+          "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000a",
+          "compiled_plan_digest": "sha256:0358a090dc27fd71606b52f7408600a2c58e40e3b2cc6a6deff27cefff3e270b",
+          "isa_digest": "sha256:cfd7e40b5839b0f49098937309f103c8ff2c47fa6c795eabc33d92431c4dcf3f",
+          "job_digest": "sha256:127eddb5da84363852525d387faa6388b25cb61edff0316501c42f5f27f274b0",
+          "layout": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "n": 4,
+          "pub_index": 0,
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 0,
+              "slot": 0
+            }
+          ],
+          "seed": 7,
+          "shots": 8
+        },
+        {
+          "atlas_child_digest": "sha256:000000000000000000000000000000000000000000000000000000000000000b",
+          "compiled_plan_digest": "sha256:4c8d160f557bad43dc6f9f118ee0a5ce4ea9bd11b125287e4ab962350bd73cae",
+          "isa_digest": "sha256:669bbac3f5dd68b8cf8bd9677917c1f71f8634e49857e104e4ed76b06b800d4d",
+          "job_digest": "sha256:95587b44936d1bafe589e8badd0eb191961e48b896ee062b8bb7a68fc8f97927",
+          "layout": [
+            0,
+            1,
+            2
+          ],
+          "n": 3,
+          "pub_index": 1,
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 1,
+              "slot": 0
+            }
+          ],
+          "seed": 8,
+          "shots": 5
+        }
+      ],
+      "request_digest": "sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0",
+      "schema": "nano.qsearch.compile-manifest.v1",
+      "target": {
+        "calibration_digest": null,
+        "name": "ibm_fez",
+        "snapshot_digest": "sha256:c143e842706c58598e8f65c3ffe7e23fb841b0b71e5f087e7b4bf6cbc5700ad6"
+      }
+    },
+    "hardware": {
+      "backend_name": "ibm_fez",
+      "bit_order": "msb_first",
+      "dry_run": false,
+      "job_tags": [
+        "atlas-qsearch-req-req-hw0"
+      ],
+      "max_execution_time": 10,
+      "provider_job_id": "fake-job-1",
+      "purpose": "qcomms",
+      "register": "meas"
+    },
+    "receipt_version": 3,
+    "request": {
+      "block_count": 2,
+      "request_digest": "sha256:0ac0dd58cb5abeb0ecc03ce14aaf764cec0362319650643fd92026ef449442d0"
+    },
+    "results_digest": "sha256:bcab1c9e2d72e0b512a6e9dfa43d0c2ae6d3c5c4be36bcadd58ea56a567492c2",
+    "schema": "predator.qsearch.receipt.v3",
+    "status": "OK",
+    "usage": {
+      "provider_metrics": {
+        "usage": {
+          "quantum_seconds": 1.25
+        }
+      },
+      "provider_sub_jobs": 1,
+      "quantum_seconds": 1.25,
+      "usage_pending": false
+    },
+    "seal": "hmac-sha256+hardware-v3:18c9f4c6c8a3cd8459f8b3117eaa9f7f959a2231ff90796e1b78d222a3d0e893"
+  }
+}
