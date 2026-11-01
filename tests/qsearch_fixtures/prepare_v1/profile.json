@@ -1,0 +1,19 @@
+{
+  "schema": "nano.qsearch.compile-profile.v1",
+  "id": "offline-basis-v1",
+  "operation": {
+    "schema": "nano.quantum.operations.v1",
+    "op": "optimize_qubo"
+  },
+  "basis_prep": true,
+  "layout": "none",
+  "seed": 11,
+  "optimization_level": 3,
+  "atlas_source_digest": null,
+  "compiler": {
+    "name": "nano-qsearch",
+    "version": "1.1.0",
+    "qiskit_version": "2.3.1",
+    "qiskit_ibm_runtime_version": null
+  }
+}

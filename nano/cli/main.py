@@ -254,10 +254,31 @@ def build_parser() -> argparse.ArgumentParser:
     project_search.add_argument("--offset", type=int, default=0)
     project_search.set_defaults(handler=command_project)
 
+    # Lazy SDK imports live behind prepare; adding this family keeps nano's
+    # zero-dependency CLI and the local-only check path dependency-free.
+    quantum = subcommands.add_parser("quantum", help="check or prepare local quantum plans as JSON")
+    quantum_actions = quantum.add_subparsers(dest="quantum_action", required=True)
+    for action in ("check", "prepare"):
+        command = quantum_actions.add_parser(action, help=f"{action} a local quantum request")
+        command.add_argument("file", type=Path, metavar="FILE")
+        command.add_argument("--profile", type=Path, help="explicit versioned compile profile JSON")
+        command.add_argument("--target-snapshot", type=Path, help="pinned local target snapshot JSON")
+        command.add_argument("--expected-digest", help="independently retained expected artifact digest")
+        command.add_argument("--artifact", action="store_true", help="check a prepared artifact rather than a request")
+        command.add_argument("-o", "--output", type=Path, help="write JSON to this local file")
+        command.set_defaults(handler=_command_quantum)
+
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)
 
     return parser
+
+
+def _command_quantum(args: argparse.Namespace, console: Console) -> int:
+    """Import the quantum command only after the user selects its CLI family."""
+    from nano_qsearch.quantum_cli import command_quantum
+
+    return command_quantum(args, console)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

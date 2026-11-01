@@ -514,7 +514,8 @@ def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpos
                          environ: Mapping[str, str] | None = None, context: Any = None,
                          sampler_factory: Callable[..., Any] | None = None,
                          backend_factory: Callable[..., Any] | None = None,
-                         max_pubs: int | None = None) -> Mapping[str, Any]:
+                         max_pubs: int | None = None,
+                         prepared_identity: Any = None) -> Mapping[str, Any]:
     """One ATLAS request over every job of ``request``: one ``sampler.run`` with N PUBs.
 
     Each compiled job becomes a frozen child (``prepare_qsearch_child``), the
@@ -541,7 +542,12 @@ def atlas_request_submit(request: QSearchRequest, compiled: list[Any], *, purpos
         ledger_cap = getattr(campaign_runtime, "qsearch_max_request_pubs", None)
         if ledger_cap is not None:
             max_pubs = ledger_cap(ledger)
-    pairs, prepared = prepare_request_identity(request, compiled, purpose=purpose, max_pubs=max_pubs)
+    if prepared_identity is None:
+        pairs, prepared = prepare_request_identity(request, compiled, purpose=purpose, max_pubs=max_pubs)
+    else:
+        pairs, prepared = prepared_identity
+        if len(pairs) != request.block_count or (max_pubs is not None and len(pairs) > max_pubs):
+            raise ValueError("frozen request exceeds the current permitted PUB cap")
     if not live:
         result = campaign_runtime.run_qsearch_request_dry(pairs, prepared, sampler_factory=sampler_factory,
                                                           backend_factory=backend_factory)
@@ -871,6 +877,14 @@ class IbmRuntime:
             from .compile import compile_jobs
             return compile_jobs(jobs, backend=None if context is None else context.backend)
         return [self._compiled(job, context) for job in jobs]
+
+    def run_prepared_request(self, artifact: Any, *, expected_artifact_digest: str,
+                             current_snapshot: Any = None, max_pubs: int | None = None,
+                             record: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        """Explicit opt-in adapter for an approved offline artifact; existing routes stay v2."""
+        from .prepared_runtime import run_prepared_request
+        return run_prepared_request(self, artifact, expected_artifact_digest=expected_artifact_digest,
+                                    current_snapshot=current_snapshot, max_pubs=max_pubs, record=record)
 
     def run_request(self, request: QSearchRequest, *, max_pubs: int | None = None,
                     record: dict[str, Any] | None = None) -> dict[str, Any] | None:
