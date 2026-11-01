@@ -1,0 +1,1008 @@
+{
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.command.v1"
+    },
+    "profile": {
+      "const": "quantum"
+    },
+    "operation_schema": {
+      "const": "nano.quantum.operations.v1"
+    },
+    "source": {
+      "type": "string",
+      "maxLength": 4096
+    },
+    "source_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "operation": {
+      "enum": [
+        null,
+        "check",
+        "compile",
+        "simulate",
+        "prepare_submission",
+        "inspect_status",
+        "explain_receipt"
+      ]
+    },
+    "args": {
+      "type": "object"
+    },
+    "quantities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "shots",
+              "circuits",
+              "qpu_seconds"
+            ]
+          },
+          "value": {
+            "type": "number",
+            "minimum": 0
+          },
+          "unit": {
+            "enum": [
+              "shot",
+              "circuit",
+              "qpu_second"
+            ]
+          },
+          "raw": {
+            "type": "string",
+            "minLength": 1
+          },
+          "span": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "kind",
+          "value",
+          "unit",
+          "raw",
+          "span"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "shots"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "shot"
+                },
+                "value": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "circuits"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "circuit"
+                },
+                "value": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "qpu_seconds"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "unit": {
+                  "const": "qpu_second"
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          }
+        ]
+      },
+      "maxItems": 3
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "plan",
+              "backend",
+              "evidence_bank",
+              "job",
+              "receipt"
+            ]
+          },
+          "raw": {
+            "type": "string",
+            "minLength": 1
+          },
+          "canonical": {
+            "type": "string",
+            "minLength": 1
+          },
+          "span": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "required": [
+          "kind",
+          "raw",
+          "canonical",
+          "span"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 5
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "maxItems": 1
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "local_compile",
+          "read_supplied_state",
+          "pure",
+          "proposal_only",
+          "local_simulation"
+        ]
+      },
+      "maxItems": 1
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "enum": [
+              "MISSING_CATALOG",
+              "NEGATED_COMMAND",
+              "AMBIGUOUS_COMMAND",
+              "MISSING_BOUNDS",
+              "INVALID_BOUNDS",
+              "UNKNOWN_REFERENCE",
+              "MISSING_REFERENCE",
+              "UNSUPPORTED_COMMAND"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "span": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4096
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "check",
+                "compile",
+                "simulate",
+                "inspect",
+                "explain",
+                "prepare"
+              ]
+            },
+            "maxItems": 3,
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "span",
+          "suggestions"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 1
+    },
+    "catalog_snapshot": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "quantum-catalog/1"
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "operation_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "operation_kind": {
+                  "enum": [
+                    "prepare_bits",
+                    "sample",
+                    "optimize_qubo"
+                  ]
+                },
+                "admitted_preparation_ref": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "max_shots": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                },
+                "max_circuits": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                },
+                "operation_digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "operation_ref",
+                "operation_kind",
+                "admitted_preparation_ref",
+                "max_shots",
+                "max_circuits"
+              ],
+              "additionalProperties": false
+            },
+            "backend": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "enum": [
+                    "local",
+                    "hardware"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "bank": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "digest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                },
+                "schema_version": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "digest",
+                "schema_version"
+              ],
+              "additionalProperties": false
+            },
+            "job": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "plan_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "enum": [
+                    "proposed",
+                    "compiled",
+                    "queued",
+                    "cancelled",
+                    "accounting-pending",
+                    "verified",
+                    "failed"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "plan_id",
+                "state"
+              ],
+              "additionalProperties": false
+            },
+            "receipt": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "plan_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "job_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "state": {
+                  "enum": [
+                    "proposed",
+                    "compiled",
+                    "queued",
+                    "cancelled",
+                    "accounting-pending",
+                    "verified",
+                    "failed"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "plan_id",
+                "job_id",
+                "state"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "resources"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema",
+    "profile",
+    "operation_schema",
+    "source",
+    "source_hash",
+    "plan_digest",
+    "operation",
+    "args",
+    "quantities",
+    "entities",
+    "steps",
+    "effects",
+    "diagnostics",
+    "catalog_snapshot"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.command.v1.json",
+  "title": "Nano explicit quantum command proposals v1",
+  "description": "Structural conformance only. validate_quantum_document re-admits the original source against the caller catalog and compares every typed field. Commands confer no execution authority.",
+  "oneOf": [
+    {
+      "properties": {
+        "operation": {
+          "const": "check"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_bank_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "plan_id"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "pure"
+              },
+              "capability": {
+                "const": "quantum.check"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence_bank_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "plan_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "pure"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "compile"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "backend": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_bank_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "plan_id",
+            "backend"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "local_compile"
+              },
+              "capability": {
+                "const": "quantum.compile"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "backend": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "evidence_bank_ref": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "backend"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "local_compile"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "simulate"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "backend": {
+              "type": "string",
+              "minLength": 1
+            },
+            "shots": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "circuits": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "qpu_seconds": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "plan_id",
+            "backend",
+            "shots",
+            "circuits",
+            "qpu_seconds"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "local_simulation"
+              },
+              "capability": {
+                "const": "quantum.simulate"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "backend": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "shots": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "circuits": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "qpu_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "backend",
+                  "shots",
+                  "circuits",
+                  "qpu_seconds"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "local_simulation"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "prepare_submission"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "plan_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "backend": {
+              "type": "string",
+              "minLength": 1
+            },
+            "shots": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "circuits": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000000000
+            },
+            "qpu_seconds": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "plan_id",
+            "backend",
+            "shots",
+            "circuits",
+            "qpu_seconds"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "proposal_only"
+              },
+              "capability": {
+                "const": "quantum.prepare_submission"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "plan_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "backend": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "shots": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "circuits": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "qpu_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "plan_id",
+                  "backend",
+                  "shots",
+                  "circuits",
+                  "qpu_seconds"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "proposal_only"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "minItems": 3,
+          "maxItems": 3
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "inspect_status"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "job_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "job_id"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "read_supplied_state"
+              },
+              "capability": {
+                "const": "quantum.inspect_status"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "job_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "job_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "read_supplied_state"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "const": "explain_receipt"
+        },
+        "args": {
+          "type": "object",
+          "properties": {
+            "receipt_id": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "receipt_id"
+          ],
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "read_supplied_state"
+              },
+              "capability": {
+                "const": "quantum.explain_receipt"
+              },
+              "args": {
+                "type": "object",
+                "properties": {
+                  "receipt_id": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "receipt_id"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "kind",
+              "capability",
+              "args"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "effects": {
+          "const": [
+            "read_supplied_state"
+          ]
+        },
+        "diagnostics": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "maxItems": 0
+        }
+      }
+    },
+    {
+      "properties": {
+        "operation": {
+          "type": "null"
+        },
+        "args": {
+          "maxProperties": 0
+        },
+        "steps": {
+          "maxItems": 0
+        },
+        "effects": {
+          "maxItems": 0
+        },
+        "entities": {
+          "maxItems": 0
+        },
+        "quantities": {
+          "maxItems": 0
+        },
+        "diagnostics": {
+          "minItems": 1
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,1048 @@
+{
+  "fixtureBundle": "quantum-command-profile",
+  "fixtureVersion": "1.0.0",
+  "profile": "quantum",
+  "scope": "offline proposals; no credentials, model, IBM submission, scheduler or receipt forgery",
+  "quantitySpans": "half-open character offsets into original source",
+  "boundsPolicy": {
+    "check": "no execution; bounds inherited from checked operation catalog entry",
+    "compile": "no execution; bounds inherited from checked operation catalog entry",
+    "simulate": "positive integer shots/circuits; zero qpu_seconds; local backend",
+    "prepare_submission": "positive integer shots/circuits; positive qpu_seconds; hardware backend"
+  },
+  "marketBaseline": {
+    "fixture": "atsv2-golden-0.1.0.json",
+    "sha256": "6a2b3824af76f791d107a3000cec6e0dbc668eb6df7ee30cbbfe66b913d62eb4",
+    "lineEndings": "LF"
+  },
+  "catalog": {
+    "version": "quantum-catalog/1",
+    "backends": {
+      "local": {
+        "id": "local_simulator",
+        "kind": "local"
+      },
+      "simulator": {
+        "id": "local_simulator",
+        "kind": "local"
+      },
+      "ibm-fez": {
+        "id": "ibm_fez",
+        "kind": "hardware"
+      },
+      "fez": {
+        "id": "ibm_fez",
+        "kind": "hardware"
+      }
+    },
+    "plans": {
+      "demo-plan": {
+        "id": "plan:demo",
+        "operation_ref": "operation:demo-known-bits",
+        "operation_kind": "sample",
+        "admitted_preparation_ref": "preparation:demo-known-bits",
+        "max_shots": 1000,
+        "max_circuits": 3
+      }
+    },
+    "banks": {
+      "demo-bank": {
+        "id": "evidence-bank:demo",
+        "digest": "sha256:ed0110e537a5b9e00a105917d68ee9aa32d951de33f933086bb30d66b9a02391",
+        "schema_version": "evidence-bank/1"
+      }
+    },
+    "jobs": {
+      "demo-job": {
+        "id": "job:demo",
+        "plan_id": "plan:demo",
+        "state": "queued"
+      },
+      "cancelled-job": {
+        "id": "job:cancelled",
+        "plan_id": "plan:demo",
+        "state": "cancelled"
+      },
+      "accounting-job": {
+        "id": "job:accounting",
+        "plan_id": "plan:demo",
+        "state": "accounting-pending"
+      }
+    },
+    "receipts": {
+      "demo-receipt": {
+        "id": "receipt:demo",
+        "plan_id": "plan:demo",
+        "job_id": "job:demo",
+        "state": "verified"
+      }
+    }
+  },
+  "fixtures": [
+    {
+      "id": "check_canonical",
+      "source": "check quantum plan demo-plan",
+      "operation": "check",
+      "capability": "quantum.check",
+      "args": {
+        "plan_id": "plan:demo"
+      },
+      "equivalenceGroup": "check_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "check_paraphrase",
+      "source": "validate quantum plan demo-plan",
+      "operation": "check",
+      "capability": "quantum.check",
+      "args": {
+        "plan_id": "plan:demo"
+      },
+      "equivalenceGroup": "check_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "check_short",
+      "source": "check plan demo-plan",
+      "operation": "check",
+      "capability": "quantum.check",
+      "args": {
+        "plan_id": "plan:demo"
+      },
+      "equivalenceGroup": "check_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "compile_canonical",
+      "source": "compile quantum plan demo-plan on local",
+      "operation": "compile",
+      "capability": "quantum.compile",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator"
+      },
+      "equivalenceGroup": "compile_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "compile_paraphrase",
+      "source": "build quantum plan demo-plan on local",
+      "operation": "compile",
+      "capability": "quantum.compile",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator"
+      },
+      "equivalenceGroup": "compile_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "compile_short",
+      "source": "compile plan demo-plan on local",
+      "operation": "compile",
+      "capability": "quantum.compile",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator"
+      },
+      "equivalenceGroup": "compile_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "simulate_canonical",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 1 circuit 0 qpu seconds",
+      "operation": "simulate",
+      "capability": "quantum.simulate",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 0
+      },
+      "equivalenceGroup": "simulate_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            46,
+            55
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            56,
+            65
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 0,
+          "unit": "qpu_second",
+          "raw": "0 qpu seconds",
+          "span": [
+            66,
+            79
+          ]
+        }
+      ]
+    },
+    {
+      "id": "simulate_short",
+      "source": "simulate plan demo-plan on local with 100 shots 1 circuit 0 qpu seconds",
+      "operation": "simulate",
+      "capability": "quantum.simulate",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 0
+      },
+      "equivalenceGroup": "simulate_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            38,
+            47
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            48,
+            57
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 0,
+          "unit": "qpu_second",
+          "raw": "0 qpu seconds",
+          "span": [
+            58,
+            71
+          ]
+        }
+      ]
+    },
+    {
+      "id": "simulate_paraphrase",
+      "source": "simulate quantum plan demo-plan on simulator with 100 shots 1 circuit 0 qpu seconds",
+      "operation": "simulate",
+      "capability": "quantum.simulate",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 0
+      },
+      "equivalenceGroup": "simulate_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            50,
+            59
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            60,
+            69
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 0,
+          "unit": "qpu_second",
+          "raw": "0 qpu seconds",
+          "span": [
+            70,
+            83
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inspect_canonical",
+      "source": "inspect status job demo-job",
+      "operation": "inspect_status",
+      "capability": "quantum.inspect_status",
+      "args": {
+        "job_id": "job:demo"
+      },
+      "equivalenceGroup": "status_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "inspect_paraphrase",
+      "source": "show quantum job demo-job status",
+      "operation": "inspect_status",
+      "capability": "quantum.inspect_status",
+      "args": {
+        "job_id": "job:demo"
+      },
+      "equivalenceGroup": "status_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "inspect_short",
+      "source": "show status job demo-job",
+      "operation": "inspect_status",
+      "capability": "quantum.inspect_status",
+      "args": {
+        "job_id": "job:demo"
+      },
+      "equivalenceGroup": "status_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "inspect_cancelled",
+      "source": "inspect status job cancelled-job",
+      "operation": "inspect_status",
+      "capability": "quantum.inspect_status",
+      "args": {
+        "job_id": "job:cancelled"
+      },
+      "equivalenceGroup": null,
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "inspect_accounting_pending",
+      "source": "inspect status job accounting-job",
+      "operation": "inspect_status",
+      "capability": "quantum.inspect_status",
+      "args": {
+        "job_id": "job:accounting"
+      },
+      "equivalenceGroup": null,
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "explain_canonical",
+      "source": "explain receipt demo-receipt",
+      "operation": "explain_receipt",
+      "capability": "quantum.explain_receipt",
+      "args": {
+        "receipt_id": "receipt:demo"
+      },
+      "equivalenceGroup": "explain_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "explain_paraphrase",
+      "source": "describe receipt demo-receipt",
+      "operation": "explain_receipt",
+      "capability": "quantum.explain_receipt",
+      "args": {
+        "receipt_id": "receipt:demo"
+      },
+      "equivalenceGroup": "explain_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "prepare_canonical",
+      "source": "prepare submission quantum plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": "prepare_submission",
+      "capability": "quantum.prepare_submission",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "ibm_fez",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 2
+      },
+      "equivalenceGroup": "prepare_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            58,
+            67
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            68,
+            77
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 2,
+          "unit": "qpu_second",
+          "raw": "2 qpu seconds",
+          "span": [
+            78,
+            91
+          ]
+        }
+      ]
+    },
+    {
+      "id": "prepare_short",
+      "source": "prepare submission plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": "prepare_submission",
+      "capability": "quantum.prepare_submission",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "ibm_fez",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 2
+      },
+      "equivalenceGroup": "prepare_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            50,
+            59
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            60,
+            69
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 2,
+          "unit": "qpu_second",
+          "raw": "2 qpu seconds",
+          "span": [
+            70,
+            83
+          ]
+        }
+      ]
+    },
+    {
+      "id": "prepare_paraphrase",
+      "source": "prepare submission quantum plan demo-plan on fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": "prepare_submission",
+      "capability": "quantum.prepare_submission",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "ibm_fez",
+        "shots": 100,
+        "circuits": 1,
+        "qpu_seconds": 2
+      },
+      "equivalenceGroup": "prepare_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": [
+        {
+          "kind": "shots",
+          "value": 100,
+          "unit": "shot",
+          "raw": "100 shots",
+          "span": [
+            54,
+            63
+          ]
+        },
+        {
+          "kind": "circuits",
+          "value": 1,
+          "unit": "circuit",
+          "raw": "1 circuit",
+          "span": [
+            64,
+            73
+          ]
+        },
+        {
+          "kind": "qpu_seconds",
+          "value": 2,
+          "unit": "qpu_second",
+          "raw": "2 qpu seconds",
+          "span": [
+            74,
+            87
+          ]
+        }
+      ]
+    },
+    {
+      "id": "check_evidence_bank",
+      "source": "check quantum plan demo-plan using evidence bank demo-bank",
+      "operation": "check",
+      "capability": "quantum.check",
+      "args": {
+        "plan_id": "plan:demo",
+        "evidence_bank_ref": "evidence-bank:demo"
+      },
+      "equivalenceGroup": "check_bank_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "check_evidence_bank_short",
+      "source": "check plan demo-plan using evidence bank demo-bank",
+      "operation": "check",
+      "capability": "quantum.check",
+      "args": {
+        "plan_id": "plan:demo",
+        "evidence_bank_ref": "evidence-bank:demo"
+      },
+      "equivalenceGroup": "check_bank_demo",
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "compile_evidence_bank",
+      "source": "compile quantum plan demo-plan on local using evidence bank demo-bank",
+      "operation": "compile",
+      "capability": "quantum.compile",
+      "args": {
+        "plan_id": "plan:demo",
+        "backend": "local_simulator",
+        "evidence_bank_ref": "evidence-bank:demo"
+      },
+      "equivalenceGroup": null,
+      "diagnostic": null,
+      "category": "supported",
+      "quantities": []
+    },
+    {
+      "id": "negate_simulate",
+      "source": "do not simulate quantum plan demo-plan on local with 100 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "NEGATED_COMMAND",
+      "category": "negative",
+      "quantities": []
+    },
+    {
+      "id": "negate_prepare",
+      "source": "don't prepare submission plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "NEGATED_COMMAND",
+      "category": "negative",
+      "quantities": []
+    },
+    {
+      "id": "negate_never",
+      "source": "never compile quantum plan demo-plan on local",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "NEGATED_COMMAND",
+      "category": "negative",
+      "quantities": []
+    },
+    {
+      "id": "negate_postfix",
+      "source": "compile quantum plan demo-plan on local but do not run it",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "NEGATED_COMMAND",
+      "category": "negative",
+      "quantities": []
+    },
+    {
+      "id": "ambiguous_commands",
+      "source": "check or compile quantum plan demo-plan on local",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "AMBIGUOUS_COMMAND",
+      "category": "ambiguous",
+      "quantities": []
+    },
+    {
+      "id": "ambiguous_backend",
+      "source": "compile quantum plan demo-plan on local or ibm-fez",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "AMBIGUOUS_COMMAND",
+      "category": "ambiguous",
+      "quantities": []
+    },
+    {
+      "id": "ambiguous_plan",
+      "source": "compile quantum plan demo-plan or other-plan on local",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "AMBIGUOUS_COMMAND",
+      "category": "ambiguous",
+      "quantities": []
+    },
+    {
+      "id": "simulate_missing_all_bounds",
+      "source": "simulate quantum plan demo-plan on local",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "simulate_missing_shots",
+      "source": "simulate quantum plan demo-plan on local with 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "simulate_missing_circuits",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "simulate_missing_qpu_bound",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 1 circuit",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "prepare_missing_bounds",
+      "source": "prepare submission quantum plan demo-plan on ibm-fez",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "prepare_missing_qpu_bound",
+      "source": "prepare submission plan demo-plan on ibm-fez with 100 shots 1 circuit",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_BOUNDS",
+      "category": "missing_bounds",
+      "quantities": []
+    },
+    {
+      "id": "zero_shots",
+      "source": "simulate quantum plan demo-plan on local with 0 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "fractional_shots",
+      "source": "simulate quantum plan demo-plan on local with 1.5 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "negative_shots",
+      "source": "simulate quantum plan demo-plan on local with -1 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "zero_circuits",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 0 circuits 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "fractional_circuits",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 1.5 circuits 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "negative_qpu_seconds",
+      "source": "prepare submission quantum plan demo-plan on ibm-fez with 100 shots 1 circuit -2 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "hardware_zero_qpu_seconds",
+      "source": "prepare submission quantum plan demo-plan on ibm-fez with 100 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "duplicate_shots",
+      "source": "simulate quantum plan demo-plan on local with 100 shots 200 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "INVALID_BOUNDS",
+      "category": "invalid_bounds",
+      "quantities": []
+    },
+    {
+      "id": "unknown_plan",
+      "source": "check quantum plan unknown-plan",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNKNOWN_REFERENCE",
+      "category": "unresolved",
+      "quantities": []
+    },
+    {
+      "id": "unknown_backend",
+      "source": "compile quantum plan demo-plan on unknown-backend",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNKNOWN_REFERENCE",
+      "category": "unresolved",
+      "quantities": []
+    },
+    {
+      "id": "unknown_job",
+      "source": "inspect status job unknown-job",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNKNOWN_REFERENCE",
+      "category": "unresolved",
+      "quantities": []
+    },
+    {
+      "id": "unknown_receipt",
+      "source": "explain receipt unknown-receipt",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNKNOWN_REFERENCE",
+      "category": "unresolved",
+      "quantities": []
+    },
+    {
+      "id": "unknown_bank",
+      "source": "check quantum plan demo-plan using evidence bank unknown-bank",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNKNOWN_REFERENCE",
+      "category": "unresolved",
+      "quantities": []
+    },
+    {
+      "id": "missing_plan",
+      "source": "compile quantum search",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_REFERENCE",
+      "category": "missing_reference",
+      "quantities": []
+    },
+    {
+      "id": "missing_job",
+      "source": "show quantum job status",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_REFERENCE",
+      "category": "missing_reference",
+      "quantities": []
+    },
+    {
+      "id": "missing_receipt",
+      "source": "explain receipt",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "MISSING_REFERENCE",
+      "category": "missing_reference",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_circuit_explanation",
+      "source": "explain quantum circuit",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_bell",
+      "source": "simulate bell pair with 100 shots",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_ghz",
+      "source": "simulate ghz with 100 shots",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_arbitrary_circuit",
+      "source": "compile arbitrary quantum circuit",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_submit",
+      "source": "submit quantum plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_live_run",
+      "source": "run quantum plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "unsupported_hardware_simulation",
+      "source": "simulate quantum plan demo-plan on ibm-fez with 100 shots 1 circuit 2 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    },
+    {
+      "id": "market_ticker_spy",
+      "source": "show spy earnings",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "near_collision",
+      "quantities": []
+    },
+    {
+      "id": "market_status_ticker",
+      "source": "show JOB STATUS",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "near_collision",
+      "quantities": []
+    },
+    {
+      "id": "market_quote",
+      "source": "check IBM quote",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "near_collision",
+      "quantities": []
+    },
+    {
+      "id": "market_options",
+      "source": "compile options for SPY",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "near_collision",
+      "quantities": []
+    },
+    {
+      "id": "market_shots_collision",
+      "source": "show SHOT market",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "near_collision",
+      "quantities": []
+    },
+    {
+      "id": "typo_command",
+      "source": "simlate quantum plan demo-plan on local with 100 shots 1 circuit 0 qpu seconds",
+      "operation": null,
+      "capability": null,
+      "args": {},
+      "equivalenceGroup": null,
+      "diagnostic": "UNSUPPORTED_COMMAND",
+      "category": "unsupported",
+      "quantities": []
+    }
+  ]
+}
