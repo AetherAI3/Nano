@@ -8,6 +8,15 @@ whose recorded basis is the ISA's own gate names). ``variant ==
 "auto"`` compiles both candidates and keeps the smaller native 2Q count.
 ``compiled_plan_digest`` binds the ISA bytes and inspection so a receipt names
 one specific compiled program.
+
+Device compile (lane HW0, N2): an ``ibm_fez`` job compiled with
+``backend=`` (the live backend ATLAS ``resolve_qsearch_context`` resolved) is
+transpiled against **that backend's** ``Target`` (coupling map and supported
+instructions), not FakeFez, checked against it instruction by instruction, and
+frozen: the backend name and ``target_digest`` (a digest of the target's
+structure) ride in the ISA's metadata, so the QPY bytes bind them, and in the
+plan digest. ``fake_fez`` and ``heron_heavy_hex`` compile exactly as before;
+one function, the target source chosen by the job's target.
 """
 from __future__ import annotations
 
@@ -23,6 +32,10 @@ BASIS = ["cz", "rz", "sx", "x"]
 HEAVY_HEX_DISTANCES = (3, 5, 7, 9, 11)
 PLAN_SCHEMA = "nano.qsearch.compiled-plan.v1"
 QPY_CIRCUIT_NAME = "nano.qsearch.isa"
+TARGET_SCHEMA = "nano.qsearch.device-target.v1"
+DEVICE_TARGETS = ("ibm_fez",)          # targets compiled against a resolved live backend when one is given
+TARGET_METADATA_KEY = "nano_device_target"
+_UNCHECKED_OPS = frozenset({"barrier"})
 
 
 class TargetUnavailable(RuntimeError):
@@ -71,9 +84,52 @@ def _two_qubit_count(circuit) -> int:
     return sum(1 for inst in circuit.data if len(inst.qubits) == 2 and inst.operation.name != "barrier")
 
 
-def _transpile(circuit, job: QSearchJob):
+def target_digest(target: Any) -> str:
+    """Digest of a qiskit ``Target``'s structure: width and, per operation, the qubit tuples it supports.
+
+    Calibration numbers (errors, durations) are left out: they move with every
+    refresh, while the coupling map and instruction set are what an ISA circuit
+    must satisfy. A global operation (no qargs restriction) is recorded as null.
+    """
+    operations = {}
+    for name in sorted(target.operation_names):
+        qargs = target.qargs_for_operation_name(name)
+        operations[name] = None if qargs is None else sorted([int(q) for q in pair] for pair in qargs)
+    return canonical_digest({"schema": TARGET_SCHEMA, "num_qubits": int(target.num_qubits), "operations": operations})
+
+
+def check_isa(isa: Any, target: Any) -> None:
+    """``ValueError`` unless every instruction of ``isa`` is supported by ``target`` on its physical qubits."""
+    if isa.num_qubits > target.num_qubits:
+        raise ValueError("ISA circuit is wider than the target")
+    for inst in isa.data:
+        name = inst.operation.name
+        if name in _UNCHECKED_OPS:
+            continue
+        qargs = tuple(isa.find_bit(q).index for q in inst.qubits)
+        if not target.instruction_supported(name, qargs):
+            raise ValueError(f"ISA instruction {name} on {list(qargs)} is not supported by the target")
+
+
+def _device_transpile(circuit, job: QSearchJob, backend: Any):
+    """Transpile against ``backend.target``, verify, and bind backend name + target digest into the ISA."""
+    from qiskit import transpile
+    target = backend.target
+    isa = transpile(circuit, target=target, optimization_level=job.opt_level, seed_transpiler=job.compile_seed)
+    check_isa(isa, target)
+    binding = {"backend_name": str(backend.name), "target_digest": target_digest(target)}
+    isa.metadata = {**dict(isa.metadata or {}), TARGET_METADATA_KEY: binding}
+    # A fixed name, not the process-global ``circuit-N``: ATLAS fingerprints the raw QPY bytes into the
+    # child (and request) identity the operator's authority names, so an identical recompile must match.
+    isa.name = QPY_CIRCUIT_NAME
+    return isa, f"target:{backend.name}"
+
+
+def _transpile(circuit, job: QSearchJob, backend: Any = None):
     """Return ``(isa_circuit, coupling_map_name)`` for the job's target."""
     from qiskit import transpile
+    if backend is not None:
+        return _device_transpile(circuit, job, backend)
     if job.target == "heron_heavy_hex":
         cm = heavy_hex_map(job.n)
         isa = transpile(circuit, coupling_map=cm, basis_gates=BASIS, optimization_level=job.opt_level,
@@ -115,24 +171,37 @@ def _qpy_sha256(circuit) -> str:
     return hashlib.sha256(buffer.getvalue()).hexdigest()
 
 
-def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]]):
+def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], backend: Any = None):
     from aether_atlas.qcompiler.nucleus_program import build_nucleus_program
     logical, mapping = build_nucleus_program(
         [list(row) for row in job.q], variant=variant, nuclei=[tuple(v) for v in nuclei],
         gammas=list(job.gammas), betas=list(job.betas), objective_offset=job.offset)
-    isa, cm_name = _transpile(logical, job)
+    isa, cm_name = _transpile(logical, job, backend)
     metrics = {"logical_2q": _two_qubit_count(logical), "native_2q": _two_qubit_count(isa),
                "native_depth": int(isa.depth(lambda inst: len(inst.qubits) == 2 and inst.operation.name != "barrier"))}
     return logical, isa, list(mapping), metrics, cm_name
 
 
-def compile_program(job: QSearchJob) -> CompiledProgram:
+def _device_backend(job: QSearchJob, backend: Any) -> Any:
+    """The backend to compile against, or None for the FakeFez / heavy-hex path; refuse a mismatched one."""
+    if backend is None:
+        return None
+    if job.target not in DEVICE_TARGETS:
+        raise ValueError(f"a live backend applies only to targets {list(DEVICE_TARGETS)}")
+    if getattr(backend, "name", None) != job.target or getattr(backend, "target", None) is None:
+        raise ValueError("resolved backend name or target differs from the job's target")
+    return backend
+
+
+def compile_program(job: QSearchJob, *, backend: Any = None) -> CompiledProgram:
+    """Compile ``job``; with ``backend`` (ibm_fez only) against that live backend's target."""
     from aether_atlas.qcompiler.nuclei import find_nuclei
+    backend = _device_backend(job, backend)
     nuclei = [list(t) for t in find_nuclei([list(row) for row in job.q])] if job.variant in ("auto", "joint5") else []
     if job.variant == "joint5" and not nuclei:
         raise ValueError("joint5 requested but the objective has no edge-disjoint triangle")
     variants = {"auto": ["ordinary"] + (["joint5"] if nuclei else []), "ordinary": ["ordinary"], "joint5": ["joint5"]}[job.variant]
-    built = {v: _candidate(job, v, nuclei if v == "joint5" else []) for v in variants}
+    built = {v: _candidate(job, v, nuclei if v == "joint5" else [], backend) for v in variants}
     candidates = {"ordinary": built["ordinary"][3] if "ordinary" in built else None,
                   "joint5": built["joint5"][3] if "joint5" in built else None}
     chosen = min(built, key=lambda v: (built[v][3]["native_2q"], v != "ordinary"))
@@ -142,6 +211,8 @@ def compile_program(job: QSearchJob) -> CompiledProgram:
                        for inst in isa.data if inst.operation.name == "measure"]
     record = {"target": job.target, "coupling_map": cm_name, "physical_qubits": isa.num_qubits, "basis": _basis(isa, job),
               "opt_level": job.opt_level, "seed": job.compile_seed, "candidates": candidates}
+    device = dict(isa.metadata[TARGET_METADATA_KEY]) if backend is not None else {}
+    record.update(device)                  # backend_name, target_digest: device compiles only
     # The initial layout without ancillas is stable across identical compiles (only ancilla labels move).
     initial_layout = ([int(q) for q in isa.layout.initial_index_layout(filter_ancillas=True)]
                       if isa.layout is not None else None)
@@ -150,12 +221,12 @@ def compile_program(job: QSearchJob) -> CompiledProgram:
     digest = canonical_digest({"schema": PLAN_SCHEMA,
                                **{k: record[k] for k in ("target", "coupling_map", "physical_qubits", "basis", "opt_level", "seed")},
                                "variant": chosen, "nuclei": chosen_nuclei, "qpy_sha256": _qpy_sha256(isa),
-                               "inspection": inspection})
+                               "inspection": inspection, **device})
     return CompiledProgram(variant=chosen, nuclei=chosen_nuclei, logical=logical, isa=isa, mapping=mapping,
                            metrics=metrics, candidates=candidates, coupling_map=cm_name,
                            physical_qubits=isa.num_qubits, compiled_plan_digest=digest, compile_record=record,
                            inspection=inspection)
 
 
-__all__ = ["BASIS", "CompiledProgram", "HEAVY_HEX_DISTANCES", "PLAN_SCHEMA", "TargetUnavailable",
-           "compile_program", "heavy_hex_map"]
+__all__ = ["BASIS", "CompiledProgram", "DEVICE_TARGETS", "HEAVY_HEX_DISTANCES", "PLAN_SCHEMA", "TARGET_METADATA_KEY",
+           "TARGET_SCHEMA", "TargetUnavailable", "check_isa", "compile_program", "heavy_hex_map", "target_digest"]

@@ -1,4 +1,4 @@
-"""The q-search HTTP service: ``POST /qsearch/v1/submit``.
+"""The q-search HTTP service: ``POST /qsearch/v1/submit`` and, behind a flag, ``POST /qsearch/v2/submit_request``.
 
 Order of operations for one request: refuse an oversized body (413, before
 any MAC work, so it never consumes a nonce), authenticate (``auth``; a failure
@@ -23,6 +23,28 @@ resubmitted; those complete as NOT_RUN without running.
 
 One service owns a data directory at a time: ``QSearchService`` holds an
 exclusive OS lock on ``<data_dir>/qsearch.lock`` until ``close()``.
+
+``/qsearch/v2/submit_request`` (lane HW0, S2) answers only when
+``NANO_QSEARCH_V2=1`` (``ServiceConfig.v2_enabled``); otherwise it is 404
+``NOT_ENABLED`` before authentication, so it burns no nonce. It uses the v1
+request auth (the path is in the MAC), parses and cross-checks the request
+(``request.parse_request``; a failure is 400 with no receipt), records the
+request ACCEPTED before anything is submitted, marks its one attempt
+immediately before the IBM runtime's ``run_request`` (one ATLAS request for
+all N jobs), seals the v2 body (``receipt_v2.seal_receipt_v2``) and stores it.
+A repeated request digest returns the stored receipt; a request whose attempt
+was already used is never submitted again: it is re-attached through
+``IbmRuntime.recover_request`` (ATLAS ``recover_qsearch_submission``) and
+stays pending (503) until the provider job is done. ``recover()`` does the
+same for every ACCEPTED request on startup.
+
+Amendment R3 H1 / L1: a job or request that reached the provider is never
+sealed NOT_RUN. When the IBM runtime returns None (submitted, outcome not
+known yet) the row stays ACCEPTED with its attempt used and the caller gets
+503; a repeat or a restart re-attaches it through ATLAS recovery
+(``IbmRuntime.recover_job`` for v1, ``recover_request`` for v2), which yields
+the receipt (v2: OK or FAILED) or keeps it pending. A runtime without
+``recover_job`` keeps the v1 rule that hardware jobs are never run from recovery.
 """
 from __future__ import annotations
 
@@ -46,10 +68,15 @@ from .auth import AUTH_HEADER, WINDOW_S, AuthError, verify_request
 from .canonical import canonical_json
 from .job import JobValidationError, QSearchJob, parse_job
 from .receipt import MIN_KEY_BYTES, not_run_receipt, refused_receipt, seal_receipt
+from .receipt_v2 import not_run_v2, seal_receipt_v2
+from .request import QSearchRequest, RequestValidationError, parse_request
 from .runtime_mps import SERVICE_KINDS, build_runtime, select_kind
-from .store import JobRecord, JobStore
+from .store import JobRecord, JobStore, RequestIdConflict
 
 SUBMIT_PATH = "/qsearch/v1/submit"
+REQUEST_PATH = "/qsearch/v2/submit_request"
+V2_ENV = "NANO_QSEARCH_V2"
+REQUEST_RUNTIME_KIND = "ibm"   # every v2 job is an ibm job (request.parse_request enforces it)
 DEFAULT_BIND = "127.0.0.1:8798"
 DEFAULT_MAX_VARIABLES = 40
 DEFAULT_MAX_BODY_BYTES = 1_048_576
@@ -64,6 +91,7 @@ LOCK_FILE = "qsearch.lock"
 NOT_COMPLETED = {"error": "job not completed"}
 UNAUTHORIZED = {"error": "unauthorized"}
 NOT_FOUND = {"error": "not found"}
+NOT_ENABLED = {"error": "not found", "code": "NOT_ENABLED"}
 LISTEN_BACKLOG = 64           # connections queued in the kernel while recovery runs or every handler is busy
 _WIN_EDEADLOCK = 36           # Windows CRT EDEADLOCK; msvcrt.locking reports contention as this or EACCES
 # Only these errnos mean "another process holds the lock"; any other OSError is a real failure and re-raises.
@@ -159,6 +187,7 @@ class ServiceConfig:
     max_concurrent: int = DEFAULT_MAX_CONCURRENT
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S
     verbose: bool = False
+    v2_enabled: bool = False          # NANO_QSEARCH_V2=1: /qsearch/v2/submit_request answers
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
@@ -209,7 +238,7 @@ class ServiceConfig:
                    max_chi=cap("NANO_QSEARCH_MAX_CHI", DEFAULT_MAX_CHI),
                    max_concurrent=cap("NANO_QSEARCH_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT),
                    request_timeout_s=_env_number("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S, float),
-                   verbose=bool(getattr(args, "verbose", False)))
+                   verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1")
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -261,15 +290,21 @@ class QSearchService:
             return f"limits: compile.seed outside 0..{SEED_MAX}"
         return None
 
-    def _sealed(self, job: QSearchJob, build: Callable[[], dict[str, Any]]) -> dict[str, Any]:
-        """Seal the receipt ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only."""
+    def _sealed(self, job: QSearchJob, build: Callable[[], dict[str, Any] | None]) -> dict[str, Any] | None:
+        """Seal the receipt ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only.
+
+        None from ``build()`` means the job reached the provider and is still pending: nothing is sealed.
+        """
         try:
-            return seal_receipt(build(), self.config.receipt_key)
+            unsigned = build()
+            if unsigned is None:
+                return None
+            return seal_receipt(unsigned, self.config.receipt_key)
         except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
             _log(f"job {job.job_digest} not run: {type(exc).__name__}")
             return seal_receipt(not_run_receipt(job, f"service: {type(exc).__name__}"), self.config.receipt_key)
 
-    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any]:
+    def _execute(self, job: QSearchJob, kind: str) -> dict[str, Any] | None:
         """Refuse or run one job on runtime ``kind`` and return the SEALED receipt.
 
         A refusal needs no slot and records no attempt. A run waits for a concurrency slot
@@ -284,17 +319,23 @@ class QSearchService:
             self.store.mark_attempt(job.job_digest)
             return self._sealed(job, lambda: self._runtime(kind).run(job))
 
-    def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any]:
-        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt.
+    def _attempt(self, job: QSearchJob, record: JobRecord, *, recovering: bool) -> dict[str, Any] | None:
+        """Decide, from the stored attempt count, whether this job may run; return the sealed receipt,
+        or None while a job that reached the provider is still pending.
 
         The runtime kind is the one recorded when the job was accepted; rows from before
-        that column existed fall back to the current service backend.
+        that column existed fall back to the current service backend. A resumed IBM job is
+        never run again: a runtime with ``recover_job`` re-attaches it (L1), any other
+        completes it as NOT_RUN.
         """
         kind = record.kind or select_kind(self.config.backend, job)
         resuming = recovering or record.attempts > 0
         if record.attempts >= MAX_ATTEMPTS:
             unsigned = not_run_receipt(job, "recovery: attempt limit reached")
         elif resuming and kind == "ibm":
+            recover = getattr(self._runtime(kind), "recover_job", None)
+            if recover is not None:
+                return self._sealed(job, lambda: recover(job))
             unsigned = not_run_receipt(job, "recovery: hardware jobs are never run from recovery")
         else:
             return self._execute(job, kind)
@@ -336,6 +377,8 @@ class QSearchService:
             record = self.store.begin(job.job_digest, canonical_json(job.payload),
                                       kind=select_kind(self.config.backend, job))
             sealed = self._attempt(job, record, recovering=recovering)
+            if sealed is None:                 # reached the provider, outcome not known yet: stays ACCEPTED
+                return 503, dict(NOT_COMPLETED)
             return self._complete(job, sealed)
         except Exception as exc:  # noqa: BLE001 - the store failed; the row stays ACCEPTED for a later attempt
             _log(f"job {job.job_digest} not completed: {type(exc).__name__}")
@@ -376,8 +419,118 @@ class QSearchService:
             return 400, {"error": "invalid job", "code": "JSON"}
         return self._run_once(job)
 
+    # --- v2 requests ---------------------------------------------------------------------------
+
+    def _sealed_v2(self, request: QSearchRequest,
+                   build: Callable[[], dict[str, Any] | None]) -> dict[str, Any] | None:
+        """Seal the v2 body ``build()`` returns; any failure becomes a sealed NOT_RUN naming the class only.
+
+        None from ``build()`` means the request reached the provider and is still pending: nothing is sealed.
+        """
+        try:
+            unsigned = build()
+            if unsigned is None:
+                return None
+            return seal_receipt_v2(unsigned, self.config.receipt_key)
+        except Exception as exc:  # noqa: BLE001 - any failure is reported as NOT_RUN by class name only
+            _log(f"request {request.request_digest} not run: {type(exc).__name__}")
+            return seal_receipt_v2(not_run_v2(request, f"service: {type(exc).__name__}"), self.config.receipt_key)
+
+    def _stored_request(self, request_digest: str) -> tuple[int, dict[str, Any]] | None:
+        record = self.store.get_request(request_digest)
+        if record is None or record.state != "DONE":
+            return None
+        return 200, json.loads(record.receipt_json)
+
+    def _request_cap_violation(self, request: QSearchRequest) -> str | None:
+        for job in request.jobs:
+            reason = self._cap_violation(job)
+            if reason is not None:
+                return reason
+        return None
+
+    def _attempt_request(self, request: QSearchRequest, *, resuming: bool) -> dict[str, Any] | None:
+        """The SEALED v2 receipt for ``request``, or None while a submitted request is still pending.
+
+        A request whose one attempt is used (or any request seen by startup recovery)
+        is never submitted again: the runtime re-attaches it. Otherwise a cap refusal
+        needs no attempt; a run marks its attempt, then calls ``run_request`` once.
+        """
+        runtime = self._runtime(REQUEST_RUNTIME_KIND)
+        if resuming:
+            return self._sealed_v2(request, lambda: runtime.recover_request(request))
+        reason = self._request_cap_violation(request)
+        if reason is not None:
+            return self._sealed_v2(request, lambda: not_run_v2(request, "refused: " + reason))
+        with self._slots:
+            self.store.mark_request_attempt(request.request_digest)
+            return self._sealed_v2(request, lambda: runtime.run_request(request))
+
+    def _complete_request(self, request: QSearchRequest, sealed: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Store ``sealed``; if the row is already DONE (``ValueError``), the stored receipt wins."""
+        try:
+            self.store.complete_request(request.request_digest, json.dumps(sealed, sort_keys=True, allow_nan=False))
+        except ValueError:
+            stored = self._stored_request(request.request_digest)
+            if stored is None:
+                raise
+            return stored
+        return 200, sealed
+
+    def _run_request_once(self, request: QSearchRequest, body_json: str, *,
+                          recovering: bool = False) -> tuple[int, dict[str, Any]]:
+        """Single-flight by request digest: record before submitting, submit at most once, store once."""
+        flight = "request:" + request.request_digest
+        with self._lock:
+            stored = self._stored_request(request.request_digest)
+            if stored is not None:
+                return stored
+            waiter = self._inflight.get(flight)
+            owner = waiter is None
+            if owner:
+                waiter = self._inflight[flight] = threading.Event()
+        if not owner:
+            waiter.wait()
+            stored = self._stored_request(request.request_digest)
+            return stored if stored is not None else (503, dict(NOT_COMPLETED))
+        try:
+            record = self.store.begin_request(request.request_digest, request.request_id, body_json)
+            sealed = self._attempt_request(request, resuming=recovering or record.attempts > 0)
+            if sealed is None:
+                return 503, dict(NOT_COMPLETED)
+            return self._complete_request(request, sealed)
+        except RequestIdConflict:
+            return 409, {"error": "request_id conflict"}
+        except Exception as exc:  # noqa: BLE001 - the store failed; the row stays ACCEPTED for recovery
+            _log(f"request {request.request_digest} not completed: {type(exc).__name__}")
+            return 503, dict(NOT_COMPLETED)
+        finally:
+            with self._lock:
+                self._inflight.pop(flight, None)
+            waiter.set()
+
+    def submit_request(self, method: str, path: str, body: bytes, headers: Mapping[str, str | None], *,
+                       now: int | None = None) -> tuple[int, dict[str, Any]]:
+        """``POST /qsearch/v2/submit_request``: 404 NOT_ENABLED unless ``v2_enabled``; v1 auth; one request."""
+        if not self.config.v2_enabled:
+            return 404, dict(NOT_ENABLED)
+        if len(body) > self.config.max_body_bytes:
+            return 413, {"error": "body too large"}
+        now = int(time.time()) if now is None else now
+        refusal = self._authenticate(method, path, body, headers, now)
+        if refusal is not None:
+            return refusal
+        try:
+            parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
+            request = parse_request(parsed)
+        except RequestValidationError as exc:
+            return 400, {"error": "invalid request", "code": exc.code}
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            return 400, {"error": "invalid request", "code": "JSON"}
+        return self._run_request_once(request, canonical_json(parsed))
+
     def recover(self) -> list[str]:
-        """Finish every ACCEPTED job left by a previous process; return the digests completed."""
+        """Finish every ACCEPTED job and request left by a previous process; return the digests completed."""
         recovered = []
         for record in self.store.pending():
             try:
@@ -388,6 +541,15 @@ class QSearchService:
             status, _ = self._run_once(job, recovering=True)
             if status == 200:
                 recovered.append(job.job_digest)
+        for row in self.store.pending_requests():
+            try:
+                request = parse_request(json.loads(row.request_json))
+            except (RequestValidationError, ValueError, RecursionError) as exc:
+                _log(f"pending request {row.request_digest} is unreadable and stays pending: {type(exc).__name__}")
+                continue
+            status, _ = self._run_request_once(request, row.request_json, recovering=True)
+            if status == 200:
+                recovered.append(request.request_digest)
         return recovered
 
 
@@ -416,7 +578,13 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, dict(NOT_FOUND))
 
     def do_POST(self) -> None:  # noqa: N802 - http.server API
-        if self.path != SUBMIT_PATH:
+        if self.path == REQUEST_PATH and not self.service.config.v2_enabled:
+            length = self._content_length()
+            if 0 < length <= self.service.config.max_body_bytes:
+                self.rfile.read(length)  # drain, so closing the socket does not reset the client mid-response
+            self._send(404, dict(NOT_ENABLED))
+            return
+        if self.path not in (SUBMIT_PATH, REQUEST_PATH):
             self._not_found()
             return
         length = self._content_length()
@@ -428,7 +596,11 @@ class _Handler(BaseHTTPRequestHandler):
             self._send(413, {"error": "body too large"})
             return
         body = self.rfile.read(length)
-        status, payload = self.service.submit("POST", SUBMIT_PATH, body, {AUTH_HEADER: self.headers.get(AUTH_HEADER)})
+        headers = {AUTH_HEADER: self.headers.get(AUTH_HEADER)}
+        if self.path == REQUEST_PATH:
+            status, payload = self.service.submit_request("POST", REQUEST_PATH, body, headers)
+        else:
+            status, payload = self.service.submit("POST", SUBMIT_PATH, body, headers)
         self._send(status, payload)
 
     def do_GET(self) -> None:  # noqa: N802
@@ -539,8 +711,9 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["DEFAULT_BIND", "DataDirLocked", "MAX_ATTEMPTS", "QSearchService", "SEED_MAX", "SUBMIT_PATH", "ServiceConfig",
-           "main", "make_server", "prepare", "serve_in_thread", "startup_banner"]
+__all__ = ["DEFAULT_BIND", "DataDirLocked", "MAX_ATTEMPTS", "NOT_ENABLED", "QSearchService", "REQUEST_PATH", "SEED_MAX",
+           "SUBMIT_PATH", "ServiceConfig", "V2_ENV", "main", "make_server", "prepare", "serve_in_thread",
+           "startup_banner"]
 
 
 if __name__ == "__main__":
