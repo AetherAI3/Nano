@@ -1,0 +1,55 @@
+{
+  "schema": "nano.quantum.operations.v1",
+  "operations": [
+    {
+      "id": "optimize",
+      "op": "optimize_qubo",
+      "backend": "local_ideal",
+      "shots": 2,
+      "limits": {
+        "max_circuits": 1,
+        "max_wall_s": 5,
+        "max_qpu_s": 0
+      },
+      "seed": 0,
+      "result": {
+        "pub_index": 0,
+        "register": "meas",
+        "width": 2,
+        "bit_order": "msb_first"
+      },
+      "variables": [
+        "x0",
+        "x1"
+      ],
+      "qubo": {
+        "q": [
+          [
+            -1,
+            0
+          ],
+          [
+            0,
+            1
+          ]
+        ],
+        "offset": 0,
+        "convention": "symmetric_half"
+      },
+      "method": {
+        "name": "qaoa",
+        "variant": "ordinary",
+        "p": 1,
+        "gammas": [
+          0.2
+        ],
+        "betas": [
+          0.4
+        ]
+      },
+      "audit": {
+        "classical_min_energy": -1
+      }
+    }
+  ]
+}

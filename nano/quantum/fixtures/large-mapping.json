@@ -1,0 +1,9 @@
+{
+  "schema": "nano.quantum.large-mapping-fixture.v1",
+  "recipients": 400,
+  "chunks_per_recipient": 3,
+  "pubs": 1200,
+  "generator": "nano.quantum.conformance.large_mapping_fixture",
+  "plan_digest": "sha256:60f6a9ad2fce1d09486bc6a89ffef7916ce45768997a83eeedeed4e9e63d172b",
+  "mapping_digest": "sha256:c5d8ccda41afd149d85378287f8948251475d52cc27922c2aa32ceb15ecd294f"
+}
