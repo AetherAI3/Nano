@@ -16,7 +16,10 @@ instructions), not FakeFez, checked against it instruction by instruction, and
 frozen: the backend name and ``target_digest`` (a digest of the target's
 structure) ride in the ISA's metadata, so the QPY bytes bind them, and in the
 plan digest. ``fake_fez`` and ``heron_heavy_hex`` compile exactly as before;
-one function, the target source chosen by the job's target.
+one function, the target source chosen by the job's target. J6 amendment A2:
+``ibm_kingston`` and ``ibm_marrakesh`` take the same device path and compile
+only against their resolved live backend (no fake stands in for them); a
+calibration layout ranks their own snapshot entry.
 
 Two rewrites are available and off by default (``CompileOptions``, read from
 the environment when no options are passed): ``basis_prep`` prepares the unique
@@ -46,16 +49,40 @@ HEAVY_HEX_DISTANCES = (3, 5, 7, 9, 11)
 PLAN_SCHEMA = "nano.qsearch.compiled-plan.v1"
 QPY_CIRCUIT_NAME = "nano.qsearch.isa"
 TARGET_SCHEMA = "nano.qsearch.device-target.v1"
-DEVICE_TARGETS = ("ibm_fez",)          # targets compiled against a resolved live backend when one is given
+DEVICE_TARGETS = ("ibm_fez", "ibm_kingston", "ibm_marrakesh")   # compiled against a resolved live backend when one is given
+# J6 amendment A2: no fake backend stands in for these two; they compile only against their resolved live backend.
+LIVE_ONLY_TARGETS = ("ibm_kingston", "ibm_marrakesh")
 TARGET_METADATA_KEY = "nano_device_target"
 _UNCHECKED_OPS = frozenset({"barrier"})
+
+
+@dataclass(frozen=True)
+class FrozenTarget:
+    """A live backend resolved once for a whole request (J6): its name, its ``Target`` and that target's digest.
+
+    ``compile_jobs`` compiles every job of a request against one of these, so a 1,200-job
+    request reads the backend's target once and digests it once, never per job.
+    """
+
+    name: str
+    target: Any
+    target_digest: str
+
+    @classmethod
+    def of(cls, backend: Any) -> "FrozenTarget":
+        if isinstance(backend, cls):
+            return backend
+        target = backend.target
+        return cls(name=str(backend.name), target=target, target_digest=target_digest(target))
 BASIS_PREP_ENV = "NANO_QSEARCH_BASIS_PREP"
 LAYOUT_ENV = "NANO_QSEARCH_LAYOUT"
 LAYOUT_BACKEND_ENV = "NANO_QSEARCH_LAYOUT_BACKEND"
 CALIBRATION_PREFIX = "calibration:"
 LAYOUT_MODES = ("target", "calibration")
 FEZ_TARGETS = ("fake_fez", "ibm_fez")      # targets whose physical qubits are the Fez register
-SNAPSHOT_ENTRIES = {"fake_fez": ("fake_fez", "ibm_fez"), "ibm_fez": ("ibm_fez",)}   # entries a target may rank from
+CALIBRATED_TARGETS = FEZ_TARGETS + LIVE_ONLY_TARGETS   # targets with a device calibration a layout may rank
+SNAPSHOT_ENTRIES = {"fake_fez": ("fake_fez", "ibm_fez"), "ibm_fez": ("ibm_fez",),     # entries a target may rank from
+                    "ibm_kingston": ("ibm_kingston",), "ibm_marrakesh": ("ibm_marrakesh",)}
 
 
 class TargetUnavailable(RuntimeError):
@@ -265,7 +292,8 @@ def _device_transpile(circuit, job: QSearchJob, backend: Any, initial_layout: li
     isa = transpile(circuit, target=target, optimization_level=job.opt_level, seed_transpiler=job.compile_seed,
                     initial_layout=initial_layout)
     check_isa(isa, target)
-    binding = {"backend_name": str(backend.name), "target_digest": target_digest(target)}
+    digest = backend.target_digest if isinstance(backend, FrozenTarget) else target_digest(target)
+    binding = {"backend_name": str(backend.name), "target_digest": digest}
     isa.metadata = {**dict(isa.metadata or {}), TARGET_METADATA_KEY: binding}
     # A fixed name, not the process-global ``circuit-N``: ATLAS fingerprints the raw QPY bytes into the
     # child (and request) identity the operator's authority names, so an identical recompile must match.
@@ -320,7 +348,7 @@ def _layout(job: QSearchJob, options: CompileOptions, logical, backend) -> tuple
     if options.layout is None:
         return None, {"mode": "off"}
     info: dict[str, Any] = {"mode": options.layout}
-    if job.target not in FEZ_TARGETS:
+    if job.target not in CALIBRATED_TARGETS:
         return None, {**info, "applied": False, "reason": "target has no device calibration"}
     if _two_qubit_count(logical):
         return None, {**info, "applied": False, "reason": "circuit has two-qubit gates"}
@@ -370,7 +398,7 @@ def _qpy_sha256(circuit) -> str:
 
 
 def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: CompileOptions,
-               ground: tuple[int, ...] | None = None, backend: Any = None):
+               ground: tuple[int, ...] | None = None, backend: Any = None, fez: Any = None):
     if ground is not None:
         logical, mapping = _basis_prep_program(ground)
     else:
@@ -379,7 +407,8 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
             [list(row) for row in job.q], variant=variant, nuclei=[tuple(v) for v in nuclei],
             gammas=list(job.gammas), betas=list(job.betas), objective_offset=job.offset)
     # The layout ranks the qubits of the target the circuit is transpiled against: the live backend if given.
-    fez = _fez_backend(job) if backend is None and options.layout is not None and job.target in FEZ_TARGETS else None
+    if fez is None and backend is None and options.layout is not None and job.target in FEZ_TARGETS:
+        fez = _fez_backend(job)
     physical, layout = _layout(job, options, logical, backend if backend is not None else fez)
     isa, cm_name = _transpile(logical, job, backend, fez=fez, initial_layout=physical)
     if physical is not None and [int(q) for q in isa.layout.initial_index_layout(filter_ancillas=True)] != physical:
@@ -390,8 +419,12 @@ def _candidate(job: QSearchJob, variant: str, nuclei: list[list[int]], options: 
 
 
 def _device_backend(job: QSearchJob, backend: Any) -> Any:
-    """The backend to compile against, or None for the FakeFez / heavy-hex path; refuse a mismatched one."""
+    """The backend to compile against, or None for the FakeFez / heavy-hex path; refuse a mismatched one.
+
+    A live-only target (``LIVE_ONLY_TARGETS``) without a backend is refused: nothing may stand in for it."""
     if backend is None:
+        if job.target in LIVE_ONLY_TARGETS:
+            raise ValueError(f"{job.target} compiles only against its resolved live backend")
         return None
     if job.target not in DEVICE_TARGETS:
         raise ValueError(f"a live backend applies only to targets {list(DEVICE_TARGETS)}")
@@ -400,10 +433,12 @@ def _device_backend(job: QSearchJob, backend: Any) -> Any:
     return backend
 
 
-def compile_program(job: QSearchJob, *, backend: Any = None, options: CompileOptions | None = None) -> CompiledProgram:
+def compile_program(job: QSearchJob, *, backend: Any = None, options: CompileOptions | None = None,
+                    fez: Any = None) -> CompiledProgram:
     """Compile ``job``; with ``backend`` (ibm_fez only) against that live backend's target.
 
-    ``options=None`` reads ``CompileOptions.from_env()`` (all off when the env is unset)."""
+    ``options=None`` reads ``CompileOptions.from_env()`` (all off when the env is unset); ``fez`` is a
+    FakeFez instance to reuse instead of building one per transpile (same target, same result)."""
     backend = _device_backend(job, backend)
     options = CompileOptions.from_env() if options is None else options
     ground = diagonal_ground(job.q) if options.basis_prep and job.variant != "joint5" else None
@@ -415,7 +450,7 @@ def compile_program(job: QSearchJob, *, backend: Any = None, options: CompileOpt
         if job.variant == "joint5" and not nuclei:
             raise ValueError("joint5 requested but the objective has no edge-disjoint triangle")
         variants = {"auto": ["ordinary"] + (["joint5"] if nuclei else []), "ordinary": ["ordinary"], "joint5": ["joint5"]}[job.variant]
-    built = {v: _candidate(job, v, nuclei if v == "joint5" else [], options, ground, backend) for v in variants}
+    built = {v: _candidate(job, v, nuclei if v == "joint5" else [], options, ground, backend, fez) for v in variants}
     candidates = {"ordinary": built["ordinary"][3] if "ordinary" in built else None,
                   "joint5": built["joint5"][3] if "joint5" in built else None}
     chosen = min(built, key=lambda v: (built[v][3]["native_2q"], v != "ordinary"))
@@ -446,7 +481,22 @@ def compile_program(job: QSearchJob, *, backend: Any = None, options: CompileOpt
                            inspection=inspection)
 
 
-__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram", "DEVICE_TARGETS",
-           "FEZ_TARGETS", "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV", "LAYOUT_ENV", "LAYOUT_MODES", "PLAN_SCHEMA",
+def compile_jobs(jobs: Any, *, backend: Any = None, options: CompileOptions | None = None) -> list[CompiledProgram]:
+    """Compile every job of one request against ONE resolved target (J6).
+
+    The live backend (ibm_fez) is frozen once (``FrozenTarget``: one target read, one digest),
+    the compile options are read once, and Fez-register jobs compiled without a live backend
+    share one FakeFez instance. Each plan is exactly what ``compile_program`` gives the job alone.
+    """
+    jobs = list(jobs)
+    options = CompileOptions.from_env() if options is None else options
+    frozen = FrozenTarget.of(backend) if backend is not None else None
+    fez = (_fez_backend(jobs[0]) if frozen is None and any(job.target in FEZ_TARGETS for job in jobs) else None)
+    return [compile_program(job, backend=frozen, options=options, fez=fez) for job in jobs]
+
+
+__all__ = ["BASIS", "BASIS_PREP_ENV", "CALIBRATED_TARGETS", "CALIBRATION_PREFIX", "CompileOptions", "CompiledProgram",
+           "DEVICE_TARGETS", "FEZ_TARGETS", "FrozenTarget", "compile_jobs", "HEAVY_HEX_DISTANCES", "LAYOUT_BACKEND_ENV",
+           "LAYOUT_ENV", "LAYOUT_MODES", "LIVE_ONLY_TARGETS", "PLAN_SCHEMA",
            "SNAPSHOT_ENTRIES", "TARGET_METADATA_KEY", "TARGET_SCHEMA", "TargetUnavailable", "check_isa",
            "compile_program", "diagonal_ground", "heavy_hex_map", "rank_qubits", "target_digest"]

@@ -403,6 +403,15 @@ only as fresh as the calibration it reads.
   submitted from the service**, and a recovered IBM job is never resubmitted.
   An `ibm` receipt is sealed with the hardware seal by its `backend.kind` alone;
   one without its `hardware` block is never sealed at all.
+- **`ibm_kingston` and `ibm_marrakesh` (J6 amendment A2) are live targets with
+  exactly `ibm_fez`'s gates** (GO, authority, QPU seconds, LIVE / PACKED flags,
+  live context, device binding, recovery through ATLAS; never a dry run). They
+  compile **only** against their resolved live backend: no fake backend stands
+  in for them, so a job on one of them without a live context is refused
+  (`ValueError`), including on a V1 ledger and on the local MPS / statevector
+  engines. A calibration layout ranks only that backend's own snapshot entry
+  (`backends.ibm_kingston` / `backends.ibm_marrakesh`). `fake_fez` stays the
+  only dry-run target.
 
 The child purpose, `qsearch` (default) or `qcomms`, is a service setting
 (`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the
@@ -417,7 +426,7 @@ the v1 request auth (the path is part of the MAC). The body is
 
 ```json
 {"schema": "predator.qsearch.request.v2",
- "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez",
+ "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez|ibm_kingston|ibm_marrakesh",
                 "purpose": "qsearch|qcomms", "max_execution_time": 10, "manifest_digest": "sha256:...",
                 "batch_index": 0, "batch_digest": "sha256:...",
                 "blocks": [{"pub_index": 0, "job_digest": "sha256:...",
@@ -429,7 +438,7 @@ the v1 request auth (the path is part of the MAC). The body is
 `canonical_digest(descriptor)` is the request digest. Each job must match its
 block (digest, width, shots, backend seed, classical floor), be `backend.kind
 == "ibm"` on the one target, 1..16 blocks, no repeated job or `(agent_id,
-chunk)`; for `ibm_fez` the jobs' `limits.max_qpu_s` must sum to at least
+chunk)`; for a live target (`ibm_fez`, `ibm_kingston`, `ibm_marrakesh`) the jobs' `limits.max_qpu_s` must sum to at least
 `max_execution_time`. A failure is 400 with no receipt. Each job is compiled
 (device compile for `ibm_fez`), frozen as an ATLAS child, the children become
 one ATLAS request (`prepare_qsearch_request`) and run once:
@@ -475,6 +484,54 @@ answers 503 until recovery; on a repeat or restart `IbmRuntime.recover_job`
 re-attaches it through ATLAS, recompiles against the live target and requires
 the submitted child's compiled plan digest (else REFUSED); a provider failure
 is REFUSED `ibm: provider job failed`.
+
+**Large requests (J6).** `NANO_QSEARCH_V2_MAX_PUBS` sets the PUBs per v2
+request (default 16, at most 4,096; an invalid value stops the service at
+startup). The count is checked before any job is parsed or compiled, so an
+over-limit request is a 400 that costs nothing. A larger request needs a larger
+`NANO_QSEARCH_MAX_BODY_BYTES` too (a 1,200-job request of 16-variable jobs is a
+few MiB). All jobs of a request compile against one resolved target: the live
+backend's target is read and digested once, a dry run builds one FakeFez, and
+the compile options are read once (`compile.compile_jobs`). ATLAS is given the
+request PUB bound: the ledger's Q-stage cap (`qsearch_max_request_pubs`) for
+ibm_fez, `NANO_QSEARCH_V2_MAX_PUBS` for a FakeFez dry run. The compile seconds,
+the job count and the number of target resolutions are kept in the request
+row's `record_json` and logged on stderr; they are not in the sealed receipt.
+
+**Final usage before a final receipt (accounting gate).** A live request whose
+provider job is DONE or FAILED but whose usage is not final yet (missing or
+zero, which is never a free run) is held: the row stays ACCEPTED, the answer is
+503 `{"code": "ACCOUNTING_PENDING"}`, and nothing is resubmitted. Every repeat
+of the same request (and every restart) drives ATLAS recovery, whose accounting
+read settles the ledger row; Nano merges the row's settled usage into the stored
+ATLAS receipt (same provider job, positive usage only) and only then seals the
+OK or FAILED receipt, once, with `usage_pending: false`. After
+`NANO_QSEARCH_ACCOUNTING_WINDOW_S` (default 900) the 503 code becomes
+`ACCOUNTING_TIMEOUT`, but the request is still held and still settles if
+accounting arrives later; it is never sealed pending and never NOT_RUN. A DONE
+receipt an older version sealed while usage was pending is never served as
+final: on retrieval it is re-derived from the settled row (the results must be
+identical; the replaced seal and usage are kept in `record_json["reseals"]`),
+or answered 503 until accounting settles (`RESEAL_MISMATCH` if the settled
+results would differ). FakeFez dry runs and v1 receipts (which carry no usage)
+are unchanged.
+
+While nothing is sealed the 503 says what the client can record. Outcome not
+known yet: `SUBMITTED_PENDING` with the provider `job_id` when ATLAS named it.
+Results held for accounting: `job_id`, `result` (OK / FAILED),
+`provider_status`, `terminal`, `usage_pending: true` and, for FAILED, `reason`,
+under code `ACCOUNTING_PENDING_TERMINAL` when the provider job ended FAILED
+(cancelled, errored, max time; its usage may stay 0 and is then never reported
+as final), `ACCOUNTING_PENDING` otherwise, `ACCOUNTING_TIMEOUT` after the
+window, and `ACCOUNTING_NEEDS_LIVE_CONTEXT` when the accounting read needs the
+provider but `AETHER_AQRC_HW_GO` / `AETHER_AQRC_QSEARCH_LIVE` are off. Every
+recovery first reads ATLAS's ledger-only `qsearch_receipt_with_settled_usage`
+(no provider call, no flags), so an already settled row (a historical re-seal
+included) completes without a live context; only an unsettled row goes on to
+provider recovery. In a settled receipt `usage.quantum_seconds` is the ledger's
+settled usage while `usage.provider_metrics` is the provider's read at job
+completion and may still show 0 there; `record_json` says so (`usage_note`,
+`provider_usage_at_receipt`).
 
 ## Predator side
 

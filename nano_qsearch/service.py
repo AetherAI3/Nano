@@ -38,6 +38,20 @@ was already used is never submitted again: it is re-attached through
 stays pending (503) until the provider job is done. ``recover()`` does the
 same for every ACCEPTED request on startup.
 
+J6: the PUB limit per request is ``NANO_QSEARCH_V2_MAX_PUBS`` (default 16,
+at most 4,096; an invalid value refuses startup). A larger request also needs
+a larger ``NANO_QSEARCH_MAX_BODY_BYTES``. The run's compile seconds are kept in
+the request row's ``record_json`` and logged; they are not in the sealed body.
+
+Accounting gate: a live v2 request whose provider usage is not final yet is
+held ACCEPTED and answered 503 ``ACCOUNTING_PENDING`` (``ACCOUNTING_TIMEOUT``
+after ``NANO_QSEARCH_ACCOUNTING_WINDOW_S``, default 900 s; still 503, still
+never sealed, never NOT_RUN); every repeat drives the runtime's recovery, and
+the OK / FAILED receipt is sealed once, with settled usage. A DONE receipt an
+older version sealed while usage was pending is never served as final: it is
+re-derived from the settled ledger row (identical results; the replaced seal is
+kept in ``record_json["reseals"]``) or answered 503 until accounting settles.
+
 Amendment R3 H1 / L1: a job or request that reached the provider is never
 sealed NOT_RUN. When the IBM runtime returns None (submitted, outcome not
 known yet) the row stays ACCEPTED with its attempt used and the caller gets
@@ -69,7 +83,9 @@ from .canonical import canonical_json
 from .job import JobValidationError, QSearchJob, parse_job
 from .receipt import MIN_KEY_BYTES, not_run_receipt, refused_receipt, seal_receipt
 from .receipt_v2 import not_run_v2, seal_receipt_v2
-from .request import QSearchRequest, RequestValidationError, parse_request
+from .request import (
+    MAX_BLOCKS, MAX_BLOCKS_LIMIT, QSearchRequest, RequestValidationError, max_pubs_from_env, parse_request,
+)
 from .runtime_mps import SERVICE_KINDS, build_runtime, select_kind
 from .store import JobRecord, JobStore, RequestIdConflict
 
@@ -92,6 +108,14 @@ NOT_COMPLETED = {"error": "job not completed"}
 UNAUTHORIZED = {"error": "unauthorized"}
 NOT_FOUND = {"error": "not found"}
 NOT_ENABLED = {"error": "not found", "code": "NOT_ENABLED"}
+ACCOUNTING_PENDING = {"error": "job not completed", "code": "ACCOUNTING_PENDING"}
+ACCOUNTING_TIMEOUT = {"error": "job not completed", "code": "ACCOUNTING_TIMEOUT"}
+ACCOUNTING_PENDING_TERMINAL = {"error": "job not completed", "code": "ACCOUNTING_PENDING_TERMINAL"}
+ACCOUNTING_NEEDS_LIVE_CONTEXT = {"error": "job not completed", "code": "ACCOUNTING_NEEDS_LIVE_CONTEXT"}
+SUBMITTED_PENDING = {"error": "job not completed", "code": "SUBMITTED_PENDING"}
+RESEAL_MISMATCH = {"error": "job not completed", "code": "RESEAL_MISMATCH"}
+ACCOUNTING_WINDOW_ENV = "NANO_QSEARCH_ACCOUNTING_WINDOW_S"
+DEFAULT_ACCOUNTING_WINDOW_S = 900.0
 LISTEN_BACKLOG = 64           # connections queued in the kernel while recovery runs or every handler is busy
 _WIN_EDEADLOCK = 36           # Windows CRT EDEADLOCK; msvcrt.locking reports contention as this or EACCES
 # Only these errnos mean "another process holds the lock"; any other OSError is a real failure and re-raises.
@@ -188,6 +212,8 @@ class ServiceConfig:
     request_timeout_s: float = DEFAULT_REQUEST_TIMEOUT_S
     verbose: bool = False
     v2_enabled: bool = False          # NANO_QSEARCH_V2=1: /qsearch/v2/submit_request answers
+    v2_max_pubs: int = MAX_BLOCKS     # NANO_QSEARCH_V2_MAX_PUBS: PUBs per v2 request, 1..MAX_BLOCKS_LIMIT
+    accounting_window_s: float = DEFAULT_ACCOUNTING_WINDOW_S   # after this, 503 says ACCOUNTING_TIMEOUT
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
@@ -201,6 +227,12 @@ class ServiceConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
+        window = self.accounting_window_s
+        if isinstance(window, bool) or not isinstance(window, (int, float)) or not (math.isfinite(window) and window > 0):
+            raise ValueError("accounting_window_s must be a positive number of seconds")
+        if (isinstance(self.v2_max_pubs, bool) or not isinstance(self.v2_max_pubs, int)
+                or not 1 <= self.v2_max_pubs <= MAX_BLOCKS_LIMIT):
+            raise ValueError(f"v2_max_pubs must be an int in 1..{MAX_BLOCKS_LIMIT}")
         timeout = self.request_timeout_s
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not (math.isfinite(timeout) and timeout > 0):
             raise ValueError("request_timeout_s must be a positive number of seconds")
@@ -238,7 +270,9 @@ class ServiceConfig:
                    max_chi=cap("NANO_QSEARCH_MAX_CHI", DEFAULT_MAX_CHI),
                    max_concurrent=cap("NANO_QSEARCH_MAX_CONCURRENT", DEFAULT_MAX_CONCURRENT),
                    request_timeout_s=_env_number("NANO_QSEARCH_REQUEST_TIMEOUT_S", DEFAULT_REQUEST_TIMEOUT_S, float),
-                   verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1")
+                   verbose=bool(getattr(args, "verbose", False)), v2_enabled=env.get(V2_ENV) == "1",
+                   v2_max_pubs=max_pubs_from_env(env),
+                   accounting_window_s=_env_number(ACCOUNTING_WINDOW_ENV, DEFAULT_ACCOUNTING_WINDOW_S, float))
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -449,7 +483,8 @@ class QSearchService:
                 return reason
         return None
 
-    def _attempt_request(self, request: QSearchRequest, *, resuming: bool) -> dict[str, Any] | None:
+    def _attempt_request(self, request: QSearchRequest, *, resuming: bool,
+                         record: dict[str, Any]) -> dict[str, Any] | None:
         """The SEALED v2 receipt for ``request``, or None while a submitted request is still pending.
 
         A request whose one attempt is used (or any request seen by startup recovery)
@@ -458,13 +493,106 @@ class QSearchService:
         """
         runtime = self._runtime(REQUEST_RUNTIME_KIND)
         if resuming:
-            return self._sealed_v2(request, lambda: runtime.recover_request(request))
+            return self._sealed_v2(request, lambda: runtime.recover_request(request, record=record))
         reason = self._request_cap_violation(request)
         if reason is not None:
             return self._sealed_v2(request, lambda: not_run_v2(request, "refused: " + reason))
         with self._slots:
             self.store.mark_request_attempt(request.request_digest)
-            return self._sealed_v2(request, lambda: runtime.run_request(request))
+            return self._sealed_v2(request, lambda: runtime.run_request(
+                request, max_pubs=self.config.v2_max_pubs, record=record))
+
+    def _stored_record(self, request_digest: str) -> dict[str, Any]:
+        try:
+            raw = self.store.request_record(request_digest)
+            stored = json.loads(raw) if raw else {}
+        except Exception:  # noqa: BLE001 - an unreadable record is treated as empty, never as a receipt
+            return {}
+        return stored if isinstance(stored, dict) else {}
+
+    def _keep_record(self, request: QSearchRequest, record: dict[str, Any]) -> dict[str, Any]:
+        """Merge, store and log the run record (compile seconds, accounting); never touches the receipt.
+
+        Returns the merged record. ``accounting_pending_since`` is set once, the first time a
+        result is held for accounting.
+        """
+        if not record:
+            return self._stored_record(request.request_digest)
+        merged = {**self._stored_record(request.request_digest), **record}
+        if merged.get("accounting") == "pending" and "accounting_pending_since" not in merged:
+            merged["accounting_pending_since"] = time.time()
+        try:
+            self.store.set_request_record(request.request_digest, json.dumps(merged, sort_keys=True))
+        except Exception as exc:  # noqa: BLE001 - the record is evidence beside the receipt, not the receipt
+            _log(f"request {request.request_digest} record not stored: {type(exc).__name__}")
+        if record.get("accounting") == "pending":
+            _log(f"request {request.request_digest} results held: provider usage not final yet")
+        if "compile_s" in record:
+            _log(f"request {request.request_digest} compiled {record.get('compiled_jobs')} jobs "
+                 f"in {record['compile_s']} s ({record.get('target_resolutions')} target resolution)")
+        return merged
+
+    def _pending(self, record: Mapping[str, Any]) -> tuple[int, dict[str, Any]]:
+        """503 with what the client can record while nothing is sealed.
+
+        Outcome not known: ``SUBMITTED_PENDING`` with the provider job id when ATLAS named it (else
+        the plain body). Results held for accounting: ``ACCOUNTING_NEEDS_LIVE_CONTEXT`` (the accounting
+        read needs the live flags), else ``ACCOUNTING_TIMEOUT`` after the window, else
+        ``ACCOUNTING_PENDING_TERMINAL`` (the provider job ended FAILED: cancelled, errored, max time) or
+        ``ACCOUNTING_PENDING``; each with the job id, the result, the provider status, the reason and
+        ``terminal``. Usage is never reported final, and a zero is never a free run.
+        """
+        job_id = record.get("provider_job_id")
+        if record.get("accounting") != "pending":
+            return 503, ({**SUBMITTED_PENDING, "job_id": job_id} if isinstance(job_id, str) and job_id
+                         else dict(NOT_COMPLETED))
+        since = record.get("accounting_pending_since")
+        late = isinstance(since, (int, float)) and time.time() - since > self.config.accounting_window_s
+        terminal = record.get("result") == "FAILED"
+        if record.get("accounting_blocker") == "needs_live_context":
+            base = ACCOUNTING_NEEDS_LIVE_CONTEXT
+        elif late:
+            base = ACCOUNTING_TIMEOUT
+        else:
+            base = ACCOUNTING_PENDING_TERMINAL if terminal else ACCOUNTING_PENDING
+        detail = {"job_id": job_id, "result": record.get("result"), "provider_status": record.get("provider_status"),
+                  "terminal": terminal, "usage_pending": True}
+        if terminal:
+            detail["reason"] = record.get("reason")
+        return 503, {**base, **detail}
+
+    @staticmethod
+    def _sealed_pending(receipt: Mapping[str, Any]) -> bool:
+        """A live OK / FAILED v2 receipt sealed while usage was pending: never served as final."""
+        backend, usage = receipt.get("backend"), receipt.get("usage")
+        return (receipt.get("schema") == "predator.qsearch.receipt.v2" and receipt.get("status") in ("OK", "FAILED")
+                and isinstance(backend, Mapping) and backend.get("kind") == "ibm" and backend.get("dry_run") is False
+                and isinstance(usage, Mapping) and usage.get("usage_pending") is not False)
+
+    def _settle_sealed(self, request: QSearchRequest, stored: dict[str, Any],
+                       record: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Re-derive a receipt sealed while usage was pending from the settled ledger row; else 503.
+
+        The re-sealed body must equal the stored one except ``usage`` (and ``seal``); the replaced
+        seal and usage are kept in ``record_json["reseals"]``.
+        """
+        runtime = self._runtime(REQUEST_RUNTIME_KIND)
+        unsigned = runtime.recover_request(request, record=record)
+        if unsigned is None:
+            record["accounting"] = "pending"
+            return self._pending(self._keep_record(request, record))
+        same = {k: v for k, v in stored.items() if k not in ("usage", "seal")}
+        if {k: v for k, v in unsigned.items() if k != "usage"} != same or unsigned["usage"]["usage_pending"]:
+            _log(f"request {request.request_digest} settled receipt differs from the stored results; not re-sealed")
+            return 503, dict(RESEAL_MISMATCH)
+        sealed = seal_receipt_v2(unsigned, self.config.receipt_key)
+        old_json = self.store.get_request(request.request_digest).receipt_json
+        self.store.reseal_request(request.request_digest, old_json, json.dumps(sealed, sort_keys=True, allow_nan=False))
+        history = list(self._stored_record(request.request_digest).get("reseals", []))
+        history.append({"at": time.time(), "reason": "accounting settled", "previous_seal": stored.get("seal"),
+                        "previous_usage": stored.get("usage")})
+        self._keep_record(request, {**record, "reseals": history})
+        return 200, sealed
 
     def _complete_request(self, request: QSearchRequest, sealed: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         """Store ``sealed``; if the row is already DONE (``ValueError``), the stored receipt wins."""
@@ -483,7 +611,7 @@ class QSearchService:
         flight = "request:" + request.request_digest
         with self._lock:
             stored = self._stored_request(request.request_digest)
-            if stored is not None:
+            if stored is not None and not self._sealed_pending(stored[1]):
                 return stored
             waiter = self._inflight.get(flight)
             owner = waiter is None
@@ -492,12 +620,20 @@ class QSearchService:
         if not owner:
             waiter.wait()
             stored = self._stored_request(request.request_digest)
-            return stored if stored is not None else (503, dict(NOT_COMPLETED))
+            if stored is not None and not self._sealed_pending(stored[1]):
+                return stored
+            return self._pending(self._stored_record(request.request_digest))
+        run_record: dict[str, Any] = {}
         try:
-            record = self.store.begin_request(request.request_digest, request.request_id, body_json)
-            sealed = self._attempt_request(request, resuming=recovering or record.attempts > 0)
+            if stored is not None:                 # sealed while usage was pending: settle, never serve as final
+                return self._settle_sealed(request, stored[1], run_record)
+            row = self.store.begin_request(request.request_digest, request.request_id, body_json)
+            try:
+                sealed = self._attempt_request(request, resuming=recovering or row.attempts > 0, record=run_record)
+            finally:
+                merged = self._keep_record(request, run_record)
             if sealed is None:
-                return 503, dict(NOT_COMPLETED)
+                return self._pending(merged)
             return self._complete_request(request, sealed)
         except RequestIdConflict:
             return 409, {"error": "request_id conflict"}
@@ -522,7 +658,7 @@ class QSearchService:
             return refusal
         try:
             parsed = json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
-            request = parse_request(parsed)
+            request = parse_request(parsed, max_blocks=self.config.v2_max_pubs)
         except RequestValidationError as exc:
             return 400, {"error": "invalid request", "code": exc.code}
         except (ValueError, UnicodeDecodeError, RecursionError):
@@ -543,7 +679,7 @@ class QSearchService:
                 recovered.append(job.job_digest)
         for row in self.store.pending_requests():
             try:
-                request = parse_request(json.loads(row.request_json))
+                request = parse_request(json.loads(row.request_json), max_blocks=MAX_BLOCKS_LIMIT)  # admitted
             except (RequestValidationError, ValueError, RecursionError) as exc:
                 _log(f"pending request {row.request_digest} is unreadable and stays pending: {type(exc).__name__}")
                 continue

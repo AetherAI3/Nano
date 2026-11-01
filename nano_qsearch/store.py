@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS requests (
   receipt_json TEXT,
   accepted_at REAL NOT NULL,
   completed_at REAL,
-  attempts INTEGER NOT NULL DEFAULT 0
+  attempts INTEGER NOT NULL DEFAULT 0,
+  record_json TEXT
 );
 CREATE TABLE IF NOT EXISTS nonces (
   nonce TEXT PRIMARY KEY,
@@ -98,7 +99,10 @@ class JobStore:
         self._migrate()
 
     def _migrate(self) -> None:
-        """Bring a file written by an older version up to the current schema (add ``jobs.kind``)."""
+        """Bring a file written by an older version up to the current schema (``jobs.kind``, ``requests.record_json``)."""
+        request_columns = {row[1] for row in self._db.execute("PRAGMA table_info(requests)").fetchall()}
+        if "record_json" not in request_columns:
+            self._db.execute("ALTER TABLE requests ADD COLUMN record_json TEXT")
         columns = {row[1] for row in self._db.execute("PRAGMA table_info(jobs)").fetchall()}
         if "kind" not in columns:
             self._db.execute("ALTER TABLE jobs ADD COLUMN kind TEXT")
@@ -209,6 +213,33 @@ class JobStore:
                 raise KeyError(request_digest)
             return int(self._db.execute("SELECT attempts FROM requests WHERE request_digest=?",
                                         (request_digest,)).fetchone()[0])
+
+    def set_request_record(self, request_digest: str, record_json: str) -> None:
+        """Keep the run record (compile seconds, ...) beside the request; never part of the sealed receipt."""
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET record_json=? WHERE request_digest=?",
+                                   (record_json, request_digest))
+            if cur.rowcount != 1:
+                raise KeyError(request_digest)
+
+    def reseal_request(self, request_digest: str, old_receipt_json: str, new_receipt_json: str) -> None:
+        """Replace a DONE receipt sealed while usage was pending by its settled re-seal (compare-and-swap).
+
+        ``ValueError`` unless the row is DONE and still holds exactly ``old_receipt_json``; the caller
+        keeps the replaced seal in the request record, so the history stays visible.
+        """
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET receipt_json=?, completed_at=? WHERE request_digest=? "
+                                   "AND state='DONE' AND receipt_json=?",
+                                   (new_receipt_json, time.time(), request_digest, old_receipt_json))
+            if cur.rowcount != 1:
+                raise ValueError("stored receipt changed or is not DONE; nothing re-sealed")
+
+    def request_record(self, request_digest: str) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
+                                   (request_digest,)).fetchone()
+        return None if row is None else row[0]
 
     def complete_request(self, request_digest: str, receipt_json: str) -> None:
         """ACCEPTED → DONE in one statement; ``KeyError`` if unknown, ``ValueError`` if already DONE."""
