@@ -17,6 +17,7 @@ from ..compiler import (
     LookaheadError,
     NanoCompileError,
     NanoSyntaxError,
+    NanoCapabilityError,
     NanoTypeError,
     compile_module,
     compile_source,
@@ -888,7 +889,7 @@ def _invalid_case(seed: int, index: int, family: str) -> InvalidProgram:
             source,
             base,
             "remove tier grant",
-            NanoTypeError,
+            NanoCapabilityError,
             _location(source, "escalate"),
         )
     if family == "type_operand_order":

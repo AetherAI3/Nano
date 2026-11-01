@@ -15,6 +15,14 @@ orders, or create a reasoning provider.
 Every fenced `nano` program in this document is compiled and loaded by
 `tests/test_language_spec.py`.
 
+Pinned local modules and scalar pure typed helpers are available through the
+separate, opt-in `compile_package(manifest_path, lock_path=...)` API. Ordinary
+single-source compilation keeps its existing grammar. See
+[RFC 0066](rfc-0066-hermetic-packages.md) and the
+[offline agent example](../examples/agent-package/README.md) for the shipped
+subset, source maps, byte pins and fixed expansion limits. Reusable records,
+enums and results are proposals, not accepted syntax.
+
 ## A complete v1 example
 
 ```nano
@@ -565,10 +573,19 @@ IR version, accepted by the loader, and given current runtime semantics.
 
 Lexer, parser, and checker failures are `NanoCompileError` subclasses carrying
 1-based line and column positions. The principal specializations are
-`NanoSyntaxError`, `NanoTypeError`, and `LookaheadError`. Serialized-document
+`NanoSyntaxError`, `NanoTypeError`, `NanoCapabilityError`, `LookaheadError`, and
+`NanoResourceLimitError`. Source parsing admits at most 32 active recursive
+syntax scopes and expression operator depth 32; trusted hosts may lower this
+ceiling. See [compiler limits](compiler-limits.md) for counting rules, explicit
+configuration, unbounded resources, and measured boundary fixtures. Serialized-document
 failures are `IRValidationError`, `ManifestViolation`, or `TierViolation`.
 Runtime failures, such as a required frame signal being absent, are separate
 from source or IR validation failures.
+
+For agent tooling, `nano check --json` emits a versioned diagnostic envelope
+with stable codes, source digests, and truthful optional spans; the editor uses
+the same diagnostic representation. See [compiler diagnostics](compiler-diagnostics.md)
+for the schema, exit codes, and bounded offline repair fixture.
 
 For the component boundary, see [Architecture](architecture.md). For canonical
 run artifacts, see [Run receipts](receipts.md).

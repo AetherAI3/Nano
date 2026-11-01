@@ -1,0 +1,12 @@
+{
+  "nanoPackageVersion": "0.1.0",
+  "entry": "agent.nano",
+  "modules": {
+    "Evidence": "evidence.nano",
+    "Task": "task.nano"
+  },
+  "effects": [
+    "intent.emit",
+    "log.append"
+  ]
+}

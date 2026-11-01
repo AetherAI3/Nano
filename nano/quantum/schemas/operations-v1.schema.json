@@ -1,0 +1,426 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.operations.v1.json",
+  "title": "Nano quantum operation proposals v1",
+  "description": "Structural schema. The strict parser additionally checks cross references, dimensions, ordering and limits.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.operations.v1"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "op": {
+                "const": "prepare_bits"
+              },
+              "variables": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "bits": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[01]+$"
+              },
+              "packets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "recipient_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                    },
+                    "chunk": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "slot": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "evidence_bank": {
+                      "type": "object",
+                      "properties": {
+                        "reference": {
+                          "type": "string",
+                          "minLength": 1,
+                          "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                        },
+                        "digest": {
+                          "type": "string",
+                          "pattern": "^sha256:[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "reference",
+                        "digest"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "codec": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "enum": [
+                            "raw_bits",
+                            "evidence_index"
+                          ]
+                        },
+                        "version": {
+                          "const": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "payload_width": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "authentication_width": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "bit_significance": {
+                      "enum": [
+                        "lsb_first",
+                        "msb_first"
+                      ]
+                    },
+                    "expected_records": {
+                      "const": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "recipient_id",
+                    "chunk",
+                    "slot",
+                    "evidence_bank",
+                    "codec",
+                    "payload_width",
+                    "authentication_width",
+                    "bit_significance",
+                    "expected_records"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "variables",
+              "bits",
+              "packets"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "op": {
+                "const": "sample"
+              },
+              "preparation_id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "backend": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "shots": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "limits": {
+                "type": "object",
+                "properties": {
+                  "max_circuits": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_wall_s": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_qpu_s": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max_circuits",
+                  "max_wall_s",
+                  "max_qpu_s"
+                ],
+                "additionalProperties": false
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "result": {
+                "type": "object",
+                "properties": {
+                  "pub_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "register": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bit_order": {
+                    "const": "msb_first"
+                  }
+                },
+                "required": [
+                  "pub_index",
+                  "register",
+                  "width",
+                  "bit_order"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "preparation_id",
+              "backend",
+              "shots",
+              "limits",
+              "seed",
+              "result"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "op": {
+                "const": "optimize_qubo"
+              },
+              "variables": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                },
+                "minItems": 1,
+                "uniqueItems": true
+              },
+              "qubo": {
+                "type": "object",
+                "properties": {
+                  "q": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "items": {
+                        "type": "number"
+                      }
+                    }
+                  },
+                  "offset": {
+                    "type": "number"
+                  },
+                  "convention": {
+                    "const": "symmetric_half"
+                  }
+                },
+                "required": [
+                  "q",
+                  "offset",
+                  "convention"
+                ],
+                "additionalProperties": false
+              },
+              "method": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "const": "qaoa"
+                  },
+                  "variant": {
+                    "enum": [
+                      "auto",
+                      "ordinary",
+                      "joint5"
+                    ]
+                  },
+                  "p": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "gammas": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "number"
+                    }
+                  },
+                  "betas": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "variant",
+                  "p",
+                  "gammas",
+                  "betas"
+                ],
+                "additionalProperties": false
+              },
+              "audit": {
+                "type": "object",
+                "properties": {
+                  "classical_min_energy": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "classical_min_energy"
+                ],
+                "additionalProperties": false
+              },
+              "backend": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+              },
+              "shots": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "limits": {
+                "type": "object",
+                "properties": {
+                  "max_circuits": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_wall_s": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_qpu_s": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "max_circuits",
+                  "max_wall_s",
+                  "max_qpu_s"
+                ],
+                "additionalProperties": false
+              },
+              "seed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "result": {
+                "type": "object",
+                "properties": {
+                  "pub_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "register": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "bit_order": {
+                    "const": "msb_first"
+                  }
+                },
+                "required": [
+                  "pub_index",
+                  "register",
+                  "width",
+                  "bit_order"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "id",
+              "op",
+              "variables",
+              "qubo",
+              "method",
+              "audit",
+              "backend",
+              "shots",
+              "limits",
+              "seed",
+              "result"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "operations"
+  ],
+  "additionalProperties": false
+}

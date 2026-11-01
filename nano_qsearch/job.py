@@ -21,7 +21,7 @@ from .canonical import canonical_digest, validate_digest
 JOB_SCHEMA = "predator.qsearch.job.v1"
 VARIANTS = ("auto", "ordinary", "joint5")
 BACKEND_KINDS = ("auto", "mps", "statevector", "ibm")
-TARGETS = ("heron_heavy_hex", "fake_fez", "ibm_fez")
+TARGETS = ("heron_heavy_hex", "fake_fez", "ibm_fez", "ibm_kingston", "ibm_marrakesh")   # J6 A2: the last two are live only
 CONVENTION = "symmetric_half"
 _TOP_KEYS = frozenset({"schema", "compiled_search_digest", "variables", "qubo", "compile",
                        "backend", "limits", "audit", "job_digest"})

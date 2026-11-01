@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from .quantum import QuantumCommandIR
 
 from .ast import IntentAST
 from .entities import bind_entities
@@ -34,10 +37,18 @@ def _bundle(catalogs: CatalogBundle | Sequence[Catalog] | None) -> CatalogBundle
 
 
 def parse_intent(
-    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None
-) -> IntentAST:
+    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None,
+    profile: str = "market", quantum_catalog: Mapping[str, Any] | None = None,
+) -> IntentAST | QuantumCommandIR:
     """Normalize, tokenize, bind, and parse source into a typed Intent AST."""
 
+    if profile == "quantum":
+        if catalogs is not None:
+            raise ValueError("quantum profile requires quantum_catalog, not market catalogs")
+        from .quantum import compile_quantum
+        return compile_quantum(source, catalog=quantum_catalog)
+    if profile != "market" or quantum_catalog is not None:
+        raise ValueError("select profile='quantum' with quantum_catalog, or profile='market'")
     bundle = _bundle(catalogs)
     normalized = normalize(source)
     tokens = tokenize(normalized.value, bundle)
@@ -53,10 +64,15 @@ def parse_intent(
 
 
 def compile_intent(
-    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None
-) -> IntentIR:
+    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None,
+    profile: str = "market", quantum_catalog: Mapping[str, Any] | None = None,
+) -> IntentIR | QuantumCommandIR:
     """Compile source into immutable, host-neutral Nano Intent IR 0.1.0."""
 
+    if profile == "quantum":
+        return parse_intent(source, catalogs=catalogs, profile=profile, quantum_catalog=quantum_catalog)
+    if profile != "market" or quantum_catalog is not None:
+        raise ValueError("select profile='quantum' with quantum_catalog, or profile='market'")
     bundle = _bundle(catalogs)
     ast = parse_intent(source, catalogs=bundle)
     plan = plan_intent(ast, bundle)
@@ -90,17 +106,23 @@ def compile_intent(
 
 
 def compile_to_dict(
-    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None
+    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None,
+    profile: str = "market", quantum_catalog: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return compile_intent(source, catalogs=catalogs).to_dict()
+    return compile_intent(source, catalogs=catalogs, profile=profile, quantum_catalog=quantum_catalog).to_dict()
 
 
 def explain_intent(
-    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None
+    source: str, *, catalogs: CatalogBundle | Sequence[Catalog] | None = None,
+    profile: str = "market", quantum_catalog: Mapping[str, Any] | None = None,
 ) -> str:
     """Render a stable, human-readable explanation of a compiled plan."""
 
-    ir = compile_intent(source, catalogs=catalogs)
+    ir = compile_intent(source, catalogs=catalogs, profile=profile, quantum_catalog=quantum_catalog)
+    if profile == "quantum":
+        import json
+        from .quantum import structured_reply
+        return json.dumps(structured_reply(ir, catalog=quantum_catalog), sort_keys=True, ensure_ascii=False)
     receipt = ir.receipt
     lines = [
         f"normalized: {ir.normalized}",

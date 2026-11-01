@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.fixture-result.v1.json",
+  "title": "Local fixture observations (not a receipt)",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.fixture-result.v1"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pubs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "pub_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "register": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "bit_order": {
+            "const": "msb_first"
+          },
+          "samples": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[01]+$"
+            }
+          }
+        },
+        "required": [
+          "operation_id",
+          "pub_index",
+          "register",
+          "bit_order",
+          "samples"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "optimization_verdict": {
+      "enum": [
+        "not_applicable",
+        "unverified",
+        "pass",
+        "fail"
+      ]
+    },
+    "delivery_verdict": {
+      "enum": [
+        "not_applicable",
+        "unverified",
+        "pass",
+        "fail"
+      ]
+    }
+  },
+  "required": [
+    "schema",
+    "plan_digest",
+    "pubs",
+    "optimization_verdict",
+    "delivery_verdict"
+  ],
+  "additionalProperties": false
+}

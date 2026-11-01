@@ -1,0 +1,35 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "category": "lookahead",
+          "code": "LOOKAHEAD_ERROR",
+          "message": "Series offset -1 reads into the future (offsets count backwards from the current bar; the minimum is 0)",
+          "severity": "error",
+          "span": {
+            "end": {
+              "column": 65,
+              "line": 1
+            },
+            "start": {
+              "column": 65,
+              "line": 1
+            }
+          }
+        }
+      ],
+      "input": "lookahead.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:f718f1b72b61828aed4ac078523097d4dfa128099194f5bdb922e7480e403adb",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}

@@ -8,7 +8,9 @@ Taxonomy (v1.0):
 
     NanoCompileError            any compile-time failure -- catch this
      └── NanoSyntaxError        lexing / parsing
+          ├── NanoResourceLimitError deterministic source admission limit
           └── NanoTypeError     semantic analysis (types, arity, unknown names)
+               ├── NanoCapabilityError a construct unavailable in the tier
                └── LookaheadError  a read of future data
 
 ``NanoTypeError`` deliberately subclasses ``NanoSyntaxError`` rather than
@@ -26,19 +28,56 @@ from __future__ import annotations
 class NanoCompileError(ValueError):
     """`.nano` source failed to compile. Carries .line, .column, .message."""
 
-    def __init__(self, message: str, line: int, column: int) -> None:
+    code = "SYNTAX_ERROR"
+    category = "syntax"
+
+    def __init__(
+        self, message: str, line: int, column: int, *,
+        expected: str | None = None, actual: str | None = None,
+        hint: str | None = None,
+    ) -> None:
         super().__init__(f"{line}:{column}: {message}")
         self.message = message
         self.line = line
         self.column = column
+        self.expected = expected
+        self.actual = actual
+        self.hint = hint[:240] if hint is not None else None
 
 
 class NanoSyntaxError(NanoCompileError):
     """Source is not well-formed: the lexer or parser rejected it."""
 
 
+class NanoResourceLimitError(NanoSyntaxError):
+    """Source exceeds a deterministic compiler admission budget."""
+
+    code = "RESOURCE_LIMIT"
+    category = "resource"
+
+    def __init__(self, resource: str, limit: int, line: int, column: int) -> None:
+        self.resource = resource
+        self.limit = limit
+        super().__init__(
+            f"Compiler {resource} limit ({limit}) exceeded; "
+            "simplify or split the expression or nested conditional",
+            line,
+            column,
+        )
+
+
 class NanoTypeError(NanoSyntaxError):
     """Source parses but violates the type system or a semantic rule."""
+
+    code = "TYPE_ERROR"
+    category = "type"
+
+
+class NanoCapabilityError(NanoTypeError):
+    """Source requests a construct unavailable in its declared language tier."""
+
+    code = "CAPABILITY_ERROR"
+    category = "capability"
 
 
 class LookaheadError(NanoTypeError):
@@ -49,3 +88,6 @@ class LookaheadError(NanoTypeError):
     Nano makes it unrepresentable rather than merely detectable — see
     ``nano/types/lookahead.py``.
     """
+
+    code = "LOOKAHEAD_ERROR"
+    category = "lookahead"

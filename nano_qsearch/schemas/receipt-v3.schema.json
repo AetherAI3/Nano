@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano-qsearch/receipt-v3.schema.json",
+  "title": "Nano/Predator opt-in packed provenance receipt v3",
+  "$comment": "A JSON Schema pass is insufficient: consumers must verify the HMAC, caller-expected compile manifest, ordered block mappings, counts/digests, pending semantics and every reconstructed prior accounting HMAC. This contract is not activated by the production v2 route.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "receipt_version",
+    "status",
+    "request",
+    "backend",
+    "hardware",
+    "blocks",
+    "results_digest",
+    "usage",
+    "compile_manifest",
+    "compile_identity",
+    "atlas_receipt_sha256",
+    "accounting_revision",
+    "accounting_history",
+    "seal"
+  ],
+  "properties": {
+    "schema": {
+      "const": "predator.qsearch.receipt.v3"
+    },
+    "receipt_version": {
+      "const": 3
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "FAILED"
+      ]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_digest",
+        "block_count"
+      ],
+      "properties": {
+        "request_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "block_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4096
+        }
+      }
+    },
+    "backend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "dry_run"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ibm"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "dry_run": {
+          "type": "boolean"
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend_name",
+        "provider_job_id",
+        "bit_order",
+        "register",
+        "purpose",
+        "dry_run",
+        "max_execution_time",
+        "job_tags"
+      ],
+      "properties": {
+        "backend_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "provider_job_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "bit_order": {
+          "const": "msb_first"
+        },
+        "register": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "purpose": {
+          "enum": [
+            "qsearch",
+            "qcomms"
+          ]
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "max_execution_time": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600
+        },
+        "job_tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "blocks": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "block_index",
+          "pub_index",
+          "job_digest",
+          "recipients",
+          "n",
+          "shots",
+          "seed",
+          "counts",
+          "counts_digest",
+          "audit"
+        ],
+        "properties": {
+          "block_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "pub_index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "job_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "recipients": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "agent_id",
+                "chunk",
+                "slot"
+              ],
+              "properties": {
+                "agent_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "chunk": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "slot": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              }
+            }
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096
+          },
+          "shots": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "counts": {
+            "type": "object",
+            "minProperties": 1,
+            "propertyNames": {
+              "pattern": "^[01]+$"
+            },
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "counts_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "audit": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "classical_min_energy",
+              "best_sample_energy",
+              "agree"
+            ],
+            "properties": {
+              "classical_min_energy": {
+                "type": "number"
+              },
+              "best_sample_energy": {
+                "type": "number"
+              },
+              "agree": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    },
+    "results_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quantum_seconds",
+        "usage_pending",
+        "provider_sub_jobs",
+        "provider_metrics"
+      ],
+      "properties": {
+        "quantum_seconds": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage_pending": {
+          "type": "boolean"
+        },
+        "provider_sub_jobs": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provider_metrics": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "compile_manifest": {
+      "$ref": "compile-manifest-v1.schema.json"
+    },
+    "compile_identity": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "atlas_receipt_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "accounting_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 64
+    },
+    "accounting_history": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "usage",
+          "atlas_receipt_sha256",
+          "seal",
+          "receipt_digest"
+        ],
+        "properties": {
+          "usage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "quantum_seconds",
+              "usage_pending",
+              "provider_sub_jobs",
+              "provider_metrics"
+            ],
+            "properties": {
+              "quantum_seconds": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "usage_pending": {
+                "type": "boolean"
+              },
+              "provider_sub_jobs": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider_metrics": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "atlas_receipt_sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "seal": {
+            "type": "string",
+            "pattern": "^hmac-sha256\\+hardware-v3:[0-9a-f]{64}$"
+          },
+          "receipt_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    },
+    "seal": {
+      "type": "string",
+      "pattern": "^hmac-sha256\\+hardware-v3:[0-9a-f]{64}$"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "FAILED"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "blocks": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "reason"
+          ]
+        }
+      }
+    }
+  ]
+}
