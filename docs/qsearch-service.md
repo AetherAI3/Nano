@@ -585,6 +585,19 @@ flags or an unauthenticated receipt cannot authorize a zero settlement. The #59
 lifecycle bridge must retain that authentication gate and conservative behavior
 when this predicate is absent.
 
+## Native prepare/sample routes (opt-in, local only)
+
+`POST /qsearch/native/v1/submit`, `GET /qsearch/native/v1/requests/<digest>` and
+`POST /qsearch/native/v1/requests/<digest>/cancel` carry `prepare_bits`/`sample`
+plans as `nano.quantum.native-request.v1` artifacts. They answer only when
+`ServiceConfig.native_policy` is set (`NANO_QSEARCH_NATIVE=1` plus a
+`NANO_QSEARCH_NATIVE_POLICY` file); otherwise they are 404 `NOT_ENABLED` before
+authentication. They reuse the request MAC, nonce store, durable `requests`
+rows, attempt claim, cancellation fence and job-state projection described
+above, accept only local runtimes, and never enable hardware. v1/v2 routes,
+schemas and defaults are unchanged. See
+[quantum-native-bridge.md](quantum-native-bridge.md).
+
 ## Predator side
 
 Predator's default `NanoRuntimeQSearchBackend` opener (`_urllib_opener`) sends

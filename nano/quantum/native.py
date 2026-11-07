@@ -280,9 +280,8 @@ def capability_matrix() -> dict[str, Any]:
 
 
 __all__ = ["ARTIFACT_SCHEMA", "CAPABILITIES_SCHEMA", "COMPILER_NAME", "DESCRIPTOR_KEYS", "LAYOUT", "LOCAL_BASIS",
-           "LOCAL_KIND", "parse_request_descriptor",
-           "LOCAL_SIMULATOR", "LOCAL_TARGET", "MAX_LOCAL_QUBITS", "NATIVE_OPERATIONS", "PINNED_QISKIT",
+           "LOCAL_KIND", "LOCAL_SIMULATOR", "LOCAL_TARGET", "MAX_LOCAL_QUBITS", "NATIVE_OPERATIONS", "PINNED_QISKIT",
            "PROFILE_SCHEMA", "PUB_MAP_SCHEMA", "REQUEST_SCHEMA", "RESOURCE_KEYS", "RESULT_SCHEMA", "TARGET_SCHEMA",
            "NativeProfile", "NativeTarget", "capability_matrix", "check_schema", "local_target", "native_plan",
            "native_profile", "native_resources", "parse_native_plan", "parse_native_profile",
-           "parse_native_target", "parse_resources", "pub_map", "pub_map_digest"]
+           "parse_native_target", "parse_request_descriptor", "parse_resources", "pub_map", "pub_map_digest"]

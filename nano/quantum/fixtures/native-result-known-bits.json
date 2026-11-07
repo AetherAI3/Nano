@@ -1,0 +1,51 @@
+{
+  "accounting": {
+    "provider_usage": null,
+    "status": "not_applicable"
+  },
+  "backend": {
+    "dry_run": true,
+    "kind": "local_ideal",
+    "qiskit_version": "2.3.1"
+  },
+  "decoding": {
+    "delivery_verdict": "unverified",
+    "optimization_verdict": "not_applicable"
+  },
+  "effect": "local_simulation",
+  "hardware": null,
+  "identity": {
+    "artifact_digest": "sha256:38c10afb57344ab4f2b441cc79613eab667030fc0e0d34d686b6f5e672e8aaba",
+    "plan_digest": "sha256:d54d01ad61a6cfaf558f54e23469855b8b9cf6522454af1e76390fb29aa298e4",
+    "profile_digest": "sha256:f2057d341cb1ab57ed32c04d196561fd358180e4d163c3a187c069803e67d3ec",
+    "pub_map_digest": "sha256:b14999517065689fb671306e2494507e9e2300bea9b37a0919bbac95e63bd390",
+    "target_digest": "sha256:f6fca647d215645a769d13dec5ce154e59dd12362ecf632dfbe224cff88cfc1f"
+  },
+  "observations": {
+    "delivery_verdict": "unverified",
+    "optimization_verdict": "not_applicable",
+    "plan_digest": "sha256:d54d01ad61a6cfaf558f54e23469855b8b9cf6522454af1e76390fb29aa298e4",
+    "pubs": [
+      {
+        "bit_order": "msb_first",
+        "operation_id": "sample",
+        "pub_index": 0,
+        "register": "meas",
+        "samples": [
+          "001",
+          "001"
+        ]
+      }
+    ],
+    "schema": "nano.quantum.fixture-result.v1"
+  },
+  "reason": null,
+  "request": {
+    "request_digest": "sha256:286ae9f13043fc67bf1b092b10090f0228b9040c5a246ad0ef6705dae444a165",
+    "request_id": "native-known-bits"
+  },
+  "schema": "nano.quantum.native-result.v1",
+  "seal": "hmac-sha256+native-local-v1:ad6d7ce9675ec13cd34a6220946e90d63b17b66c0a75694313c054c9783c3669",
+  "source_verification": "admitted",
+  "status": "OK"
+}

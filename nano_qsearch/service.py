@@ -83,6 +83,9 @@ from .auth import AUTH_HEADER, WINDOW_S, AuthError, verify_request
 from .canonical import canonical_json
 from .job import JobValidationError, QSearchJob, parse_job
 from .lifecycle import job_state, lifecycle_error
+from .native_policy import NativeHostPolicy
+from .native_service import NativeService, is_native_path, is_native_row, policy_from_env
+from .native_service import NOT_ENABLED as NATIVE_NOT_ENABLED
 from .receipt import MIN_KEY_BYTES, not_run_receipt, refused_receipt, seal_receipt
 from .receipt_v2 import not_run_v2, seal_receipt_v2
 from .request import (
@@ -221,10 +224,13 @@ class ServiceConfig:
     accounting_window_s: float = DEFAULT_ACCOUNTING_WINDOW_S   # after this, 503 says ACCOUNTING_TIMEOUT
     queue_deadline_s: float = 3600
     poll_interval_s: float = 30
+    native_policy: NativeHostPolicy | None = None   # None: native prepare/sample routes are NOT_ENABLED
 
     def __post_init__(self) -> None:
         if self.backend not in SERVICE_KINDS:
             raise ValueError(f"backend must be one of {SERVICE_KINDS}")
+        if self.native_policy is not None and not isinstance(self.native_policy, NativeHostPolicy):
+            raise ValueError("native_policy must be a NativeHostPolicy or None")
         for name, key in (("receipt_key", self.receipt_key), ("request_key", self.request_key)):
             if not isinstance(key, (bytes, bytearray)) or len(key) < MIN_KEY_BYTES:
                 raise ValueError(f"{name} must be at least {MIN_KEY_BYTES} bytes")
@@ -282,7 +288,8 @@ class ServiceConfig:
                    v2_max_pubs=max_pubs_from_env(env),
                    accounting_window_s=_env_number(ACCOUNTING_WINDOW_ENV, DEFAULT_ACCOUNTING_WINDOW_S, float),
                    queue_deadline_s=_env_number("NANO_QSEARCH_QUEUE_DEADLINE_S", 3600, float),
-                   poll_interval_s=_env_number("NANO_QSEARCH_POLL_INTERVAL_S", 30, float))
+                   poll_interval_s=_env_number("NANO_QSEARCH_POLL_INTERVAL_S", 30, float),
+                   native_policy=policy_from_env(env))
 
 
 RuntimeFactory = Callable[[str], Any]
@@ -294,7 +301,8 @@ def _log(message: str) -> None:
 
 class QSearchService:
     def __init__(self, config: ServiceConfig, *, runtime_factory: RuntimeFactory = build_runtime,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 native_runtime_factory: Callable[[], Any] | None = None) -> None:
         self.config = config
         self._clock = clock
         self._dir_lock = _DataDirLock(config.data_dir / LOCK_FILE)      # raises DataDirLocked
@@ -308,6 +316,7 @@ class QSearchService:
         self._inflight: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
         self._slots = threading.BoundedSemaphore(config.max_concurrent)
+        self.native = NativeService(self, config.native_policy, native_runtime_factory)
 
     def close(self) -> None:
         try:
@@ -501,7 +510,7 @@ class QSearchService:
         owner = False
         try:
             row = self.store.get_request(digest)
-            if row is None:
+            if row is None or is_native_row(row):
                 return 404, lifecycle_error("REQUEST_NOT_FOUND", field="request_digest")
             if action == "cancel":
                 # Must also fence an in-flight submission before waiting for its acknowledgement.
@@ -612,7 +621,7 @@ class QSearchService:
                                               retryable=refusal[0] == 503)
         try:
             row = self.store.get_request(match[1])
-            if row is None:
+            if row is None or is_native_row(row):
                 return 404, lifecycle_error("REQUEST_NOT_FOUND", field="request_digest")
             raw_record = self.store.request_record(row.request_digest)
             record = json.loads(raw_record) if raw_record else {}
@@ -870,6 +879,8 @@ class QSearchService:
             if status == 200:
                 recovered.append(job.job_digest)
         for row in self.store.pending_requests():
+            if is_native_row(row):
+                continue                    # native rows are re-attached by self.native.recover()
             try:
                 request = parse_request(json.loads(row.request_json), max_blocks=MAX_BLOCKS_LIMIT)  # admitted
             except (RequestValidationError, ValueError, RecursionError) as exc:
@@ -878,6 +889,7 @@ class QSearchService:
             status, _ = self._run_request_once(request, row.request_json, recovering=True)
             if status == 200:
                 recovered.append(request.request_digest)
+        recovered.extend(self.native.recover())
         return recovered
 
 
@@ -905,7 +917,31 @@ class _Handler(BaseHTTPRequestHandler):
             self.rfile.read(length)      # drain, so closing the socket does not reset the client mid-response
         self._send(404, dict(NOT_FOUND))
 
+    def _native(self, method: str) -> None:
+        """Native prepare/sample routes; NOT_ENABLED before reading auth when no policy is configured."""
+        native, cap = self.service.native, self.service.config.max_body_bytes
+        length = self._content_length()
+        if not native.enabled:
+            if 0 < length <= cap:
+                self.rfile.read(length)  # drain, so closing the socket does not reset the client mid-response
+            self._send(404, dict(NATIVE_NOT_ENABLED))
+            return
+        if length < 0:
+            self._send(400, lifecycle_error("INVALID_CONTENT_LENGTH", field="headers.Content-Length"))
+            return
+        if length > cap:
+            self._send(413, lifecycle_error("BODY_TOO_LARGE", field="body"))   # never read an oversized body
+            return
+        body = self.rfile.read(length) if length else b""
+        headers = {AUTH_HEADER: self.headers.get(AUTH_HEADER)}
+        handler = native.status if method == "GET" else native.cancel if self.path.endswith("/cancel") else native.submit
+        status, payload = handler(method, self.path, body, headers)
+        self._send(status, payload)
+
     def do_POST(self) -> None:  # noqa: N802 - http.server API
+        if is_native_path(self.path):
+            self._native("POST")
+            return
         if (self.path == REQUEST_PATH or _REQUEST_CONTROL.fullmatch(self.path)) and not self.service.config.v2_enabled:
             length = self._content_length()
             if 0 < length <= self.service.config.max_body_bytes:
@@ -938,6 +974,9 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(status, payload)
 
     def do_GET(self) -> None:  # noqa: N802
+        if is_native_path(self.path):
+            self._native("GET")
+            return
         if _REQUEST_STATUS.fullmatch(self.path):
             length = self._content_length()
             if length != 0:
