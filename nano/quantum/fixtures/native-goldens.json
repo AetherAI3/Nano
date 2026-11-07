@@ -1,8 +1,11 @@
 {
   "plans": {
     "known-bits": {
+      "artifact_digest": "sha256:38c10afb57344ab4f2b441cc79613eab667030fc0e0d34d686b6f5e672e8aaba",
       "plan_digest": "sha256:d54d01ad61a6cfaf558f54e23469855b8b9cf6522454af1e76390fb29aa298e4",
       "pub_map_digest": "sha256:b14999517065689fb671306e2494507e9e2300bea9b37a0919bbac95e63bd390",
+      "request_digest": "sha256:286ae9f13043fc67bf1b092b10090f0228b9040c5a246ad0ef6705dae444a165",
+      "request_id": "native-known-bits",
       "resources": {
         "deadline_s": 5,
         "max_shots_per_pub": 2,
@@ -14,8 +17,11 @@
       }
     },
     "large-mapping": {
+      "artifact_digest": "sha256:c3124e8cb2e59a7df3f2bfaeb02c50e3d1c2a7317ce700c25dc93c9187749fb5",
       "plan_digest": "sha256:60f6a9ad2fce1d09486bc6a89ffef7916ce45768997a83eeedeed4e9e63d172b",
       "pub_map_digest": "sha256:6f00b56b0fa349e9b84eb2ed54bc60e1e13b472135cb20b93166d17954b48869",
+      "request_digest": "sha256:eedac553afd1aa1ae2507e912d6cbb6f2ef9f0b07afb6afdb338e0fa41396c4f",
+      "request_id": "native-large-mapping",
       "resources": {
         "deadline_s": 60,
         "max_shots_per_pub": 2,
@@ -27,8 +33,11 @@
       }
     },
     "one-record": {
+      "artifact_digest": "sha256:b87b23c13f31d97f5932768fd5da6c10702715a70ae68f5e0924ed0a707b8826",
       "plan_digest": "sha256:545034a8aef0d917ff534e763de577d5cdbd57226b6657477fbedc8e1bfb05f2",
       "pub_map_digest": "sha256:0adc17b36b1010fcc0cb0d3df72357d2a5e4609961badc91f43a620bd44182c3",
+      "request_digest": "sha256:5a3fa26b26d4725b4a05e54452cb205ea25262eae8a3cacb524205ea71016294",
+      "request_id": "native-one-record",
       "resources": {
         "deadline_s": 5,
         "max_shots_per_pub": 2,
@@ -40,8 +49,11 @@
       }
     },
     "packed-records": {
+      "artifact_digest": "sha256:b6d86a600557693d60201d193739d6c346f7f19ce932492df91879cbc6f01201",
       "plan_digest": "sha256:56aaa2ce555c928230927149eb32234e65135bd2313139c8b36f6694ea1e9307",
       "pub_map_digest": "sha256:a5f9642e3a21b2d9adf8781bca4940eece5be8ed866bdb2799dd83169e0d0e29",
+      "request_digest": "sha256:f63a58034ca37bf058f0eb0cca2fc68e3a4d19aaf8f7a1fd21603c79090adc8c",
+      "request_id": "native-packed-records",
       "resources": {
         "deadline_s": 5,
         "max_shots_per_pub": 2,
