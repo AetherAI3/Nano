@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-profile.v1.json",
+  "title": "Native prepare/sample compile profile",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-profile.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$",
+      "maxLength": 128
+    },
+    "operations": {
+      "const": [
+        "prepare_bits",
+        "sample"
+      ]
+    },
+    "target_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "layout": {
+      "const": "identity"
+    },
+    "optimization_level": {
+      "const": 0
+    },
+    "compiler": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "const": "nano-qsearch"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+        },
+        "qiskit_version": {
+          "const": "2.3.1"
+        },
+        "qiskit_ibm_runtime_version": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "name",
+        "qiskit_ibm_runtime_version",
+        "qiskit_version",
+        "version"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "compiler",
+    "id",
+    "layout",
+    "operations",
+    "optimization_level",
+    "schema",
+    "target_digest"
+  ],
+  "additionalProperties": false
+}

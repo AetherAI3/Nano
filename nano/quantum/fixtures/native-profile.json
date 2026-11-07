@@ -1,0 +1,17 @@
+{
+  "compiler": {
+    "name": "nano-qsearch",
+    "qiskit_ibm_runtime_version": null,
+    "qiskit_version": "2.3.1",
+    "version": "1.1.0"
+  },
+  "id": "local-ideal-identity-v1",
+  "layout": "identity",
+  "operations": [
+    "prepare_bits",
+    "sample"
+  ],
+  "optimization_level": 0,
+  "schema": "nano.quantum.native-profile.v1",
+  "target_digest": "sha256:f6fca647d215645a769d13dec5ce154e59dd12362ecf632dfbe224cff88cfc1f"
+}

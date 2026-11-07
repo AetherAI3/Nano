@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-artifact.v1.json",
+  "title": "Prepared native prepare/sample artifact (no samples or claims)",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-artifact.v1"
+    },
+    "plan": {
+      "type": "object"
+    },
+    "plan_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "pub_map_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "profile": {
+      "type": "object"
+    },
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "target": {
+      "type": "object"
+    },
+    "target_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "preparations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "preparation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "x_qubits": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "required": [
+          "preparation_id",
+          "width",
+          "x_qubits"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "pubs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pub_index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "operation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "preparation_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "register": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "shots": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "layout": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "ops": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "isa_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "qpy_base64": {
+            "type": "string",
+            "minLength": 4,
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$"
+          }
+        },
+        "required": [
+          "isa_digest",
+          "layout",
+          "operation_id",
+          "ops",
+          "preparation_id",
+          "pub_index",
+          "qpy_base64",
+          "register",
+          "seed",
+          "shots",
+          "width"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "preparations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pub_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_shots": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_shots_per_pub": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_width": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "deadline_s": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "qpu_seconds": {
+          "const": 0
+        }
+      },
+      "required": [
+        "deadline_s",
+        "max_shots_per_pub",
+        "max_width",
+        "preparations",
+        "pub_count",
+        "qpu_seconds",
+        "total_shots"
+      ],
+      "additionalProperties": false
+    },
+    "effect": {
+      "const": "local_compile"
+    },
+    "artifact_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "artifact_digest",
+    "effect",
+    "plan",
+    "plan_digest",
+    "preparations",
+    "profile",
+    "profile_digest",
+    "pub_map_digest",
+    "pubs",
+    "resources",
+    "schema",
+    "target",
+    "target_digest"
+  ],
+  "additionalProperties": false
+}

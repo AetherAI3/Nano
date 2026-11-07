@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-request.v1.json",
+  "title": "Authenticated native prepare/sample service request",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-request.v1"
+    },
+    "descriptor": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "const": "nano.quantum.native-request.v1"
+        },
+        "request_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "target": {
+          "const": "local_ideal"
+        },
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "plan_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "pub_map_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "profile_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "target_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "preparations": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pub_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "total_shots": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_shots_per_pub": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_width": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "deadline_s": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "qpu_seconds": {
+              "const": 0
+            }
+          },
+          "required": [
+            "deadline_s",
+            "max_shots_per_pub",
+            "max_width",
+            "preparations",
+            "pub_count",
+            "qpu_seconds",
+            "total_shots"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "artifact_digest",
+        "plan_digest",
+        "profile_digest",
+        "pub_map_digest",
+        "request_id",
+        "resources",
+        "schema",
+        "target",
+        "target_digest"
+      ],
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "artifact",
+    "descriptor",
+    "schema"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-capabilities.v1.json",
+  "title": "Operation x surface capability matrix",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-capabilities.v1"
+    },
+    "operations": {
+      "type": "object",
+      "properties": {
+        "prepare_bits": {
+          "type": "object",
+          "properties": {
+            "operations_v1": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "direct_local_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_job_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_prepared_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_service": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "hardware": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            }
+          },
+          "required": [
+            "direct_local_adapter",
+            "hardware",
+            "legacy_job_adapter",
+            "legacy_prepared_artifact",
+            "native_artifact",
+            "native_service",
+            "operations_v1"
+          ],
+          "additionalProperties": false
+        },
+        "sample": {
+          "type": "object",
+          "properties": {
+            "operations_v1": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "direct_local_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_job_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_prepared_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_service": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "hardware": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            }
+          },
+          "required": [
+            "direct_local_adapter",
+            "hardware",
+            "legacy_job_adapter",
+            "legacy_prepared_artifact",
+            "native_artifact",
+            "native_service",
+            "operations_v1"
+          ],
+          "additionalProperties": false
+        },
+        "optimize_qubo": {
+          "type": "object",
+          "properties": {
+            "operations_v1": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "direct_local_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_job_adapter": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "legacy_prepared_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_artifact": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "native_service": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            },
+            "hardware": {
+              "enum": [
+                "supported",
+                "unsupported",
+                "opt_in_local_only",
+                "legacy_host_gated"
+              ]
+            }
+          },
+          "required": [
+            "direct_local_adapter",
+            "hardware",
+            "legacy_job_adapter",
+            "legacy_prepared_artifact",
+            "native_artifact",
+            "native_service",
+            "operations_v1"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "optimize_qubo",
+        "prepare_bits",
+        "sample"
+      ],
+      "additionalProperties": false
+    },
+    "native_targets": {
+      "const": [
+        "local_ideal"
+      ]
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "native_service_enabled": {
+          "const": false
+        },
+        "native_enables_hardware": {
+          "const": false
+        },
+        "preparation_only_artifact": {
+          "const": "admitted_without_execution"
+        }
+      },
+      "required": [
+        "native_enables_hardware",
+        "native_service_enabled",
+        "preparation_only_artifact"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "defaults",
+    "native_targets",
+    "operations",
+    "schema"
+  ],
+  "additionalProperties": false
+}

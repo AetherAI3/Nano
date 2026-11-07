@@ -1,0 +1,59 @@
+{
+  "plans": {
+    "known-bits": {
+      "plan_digest": "sha256:d54d01ad61a6cfaf558f54e23469855b8b9cf6522454af1e76390fb29aa298e4",
+      "pub_map_digest": "sha256:b14999517065689fb671306e2494507e9e2300bea9b37a0919bbac95e63bd390",
+      "resources": {
+        "deadline_s": 5,
+        "max_shots_per_pub": 2,
+        "max_width": 3,
+        "preparations": 1,
+        "pub_count": 1,
+        "qpu_seconds": 0,
+        "total_shots": 2
+      }
+    },
+    "large-mapping": {
+      "plan_digest": "sha256:60f6a9ad2fce1d09486bc6a89ffef7916ce45768997a83eeedeed4e9e63d172b",
+      "pub_map_digest": "sha256:6f00b56b0fa349e9b84eb2ed54bc60e1e13b472135cb20b93166d17954b48869",
+      "resources": {
+        "deadline_s": 60,
+        "max_shots_per_pub": 2,
+        "max_width": 11,
+        "preparations": 1200,
+        "pub_count": 1200,
+        "qpu_seconds": 0,
+        "total_shots": 2400
+      }
+    },
+    "one-record": {
+      "plan_digest": "sha256:545034a8aef0d917ff534e763de577d5cdbd57226b6657477fbedc8e1bfb05f2",
+      "pub_map_digest": "sha256:0adc17b36b1010fcc0cb0d3df72357d2a5e4609961badc91f43a620bd44182c3",
+      "resources": {
+        "deadline_s": 5,
+        "max_shots_per_pub": 2,
+        "max_width": 3,
+        "preparations": 1,
+        "pub_count": 1,
+        "qpu_seconds": 0,
+        "total_shots": 2
+      }
+    },
+    "packed-records": {
+      "plan_digest": "sha256:56aaa2ce555c928230927149eb32234e65135bd2313139c8b36f6694ea1e9307",
+      "pub_map_digest": "sha256:a5f9642e3a21b2d9adf8781bca4940eece5be8ed866bdb2799dd83169e0d0e29",
+      "resources": {
+        "deadline_s": 5,
+        "max_shots_per_pub": 2,
+        "max_width": 6,
+        "preparations": 1,
+        "pub_count": 1,
+        "qpu_seconds": 0,
+        "total_shots": 2
+      }
+    }
+  },
+  "profile_digest": "sha256:f2057d341cb1ab57ed32c04d196561fd358180e4d163c3a187c069803e67d3ec",
+  "schema": "nano.quantum.native-goldens.v1",
+  "target_digest": "sha256:f6fca647d215645a769d13dec5ce154e59dd12362ecf632dfbe224cff88cfc1f"
+}

@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-result.v1.json",
+  "title": "Local native result record (never a hardware receipt)",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-result.v1"
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "request_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "request_digest",
+        "request_id"
+      ],
+      "additionalProperties": false
+    },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "artifact_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "plan_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "pub_map_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "profile_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "target_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "artifact_digest",
+        "plan_digest",
+        "profile_digest",
+        "pub_map_digest",
+        "target_digest"
+      ],
+      "additionalProperties": false
+    },
+    "status": {
+      "enum": [
+        "OK",
+        "FAILED",
+        "NOT_RUN"
+      ]
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "backend": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "local_ideal",
+            "fake_local"
+          ]
+        },
+        "dry_run": {
+          "const": true
+        },
+        "qiskit_version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "dry_run",
+        "kind",
+        "qiskit_version"
+      ],
+      "additionalProperties": false
+    },
+    "effect": {
+      "enum": [
+        "local_simulation",
+        "none"
+      ]
+    },
+    "source_verification": {
+      "const": "admitted"
+    },
+    "observations": {
+      "anyOf": [
+        {
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "decoding": {
+      "type": "object",
+      "properties": {
+        "delivery_verdict": {
+          "const": "unverified"
+        },
+        "optimization_verdict": {
+          "const": "not_applicable"
+        }
+      },
+      "required": [
+        "delivery_verdict",
+        "optimization_verdict"
+      ],
+      "additionalProperties": false
+    },
+    "accounting": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "const": "not_applicable"
+        },
+        "provider_usage": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "provider_usage",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "hardware": {
+      "type": "null"
+    },
+    "seal": {
+      "type": "string",
+      "pattern": "^hmac-sha256\\+native-local-v1:[0-9a-f]{64}$"
+    }
+  },
+  "required": [
+    "accounting",
+    "backend",
+    "decoding",
+    "effect",
+    "hardware",
+    "identity",
+    "observations",
+    "reason",
+    "request",
+    "schema",
+    "seal",
+    "source_verification",
+    "status"
+  ],
+  "additionalProperties": false
+}
