@@ -40,13 +40,16 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, Optional, Sequence, Set, Tuple
 
+from .records import RecordDecl, load_record_table, validate_record_flow
 from .schema import (
     AGENT_ROLES,
+    EXECUTABLE_IR_VERSIONS,
     INTENT_ACTIONS,
     IRValidationError,
     KNOWN_EFFECTS,
     ManifestViolation,
     NANO_IR_VERSION_1_0,
+    NANO_IR_VERSION_1_1,
     PARAM_SCALAR_TYPES,
     RISK_LIMITS,
     TIER_REQUIREMENTS,
@@ -125,6 +128,10 @@ OPS: Mapping[str, OpSpec] = {
     "route": OpSpec(min_inputs=2, max_inputs=2, construct="route"),
     "risk.limits": OpSpec(),
     "agent": OpSpec(),
+    # IR 1.1.0 only (RFC 0085): a validated host record series, and one field
+    # of a record-typed operand. Rejected in 1.0.0 documents.
+    "record.input": OpSpec(),
+    "record.get": OpSpec(min_inputs=1, max_inputs=1),
 }
 
 # Operator spellings shared with codegen, so the two cannot disagree about what
@@ -321,6 +328,12 @@ class NanoModule:
         default_factory=lambda: dict(DETERMINISM_CONTRACT)
     )
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    # Non-empty exactly for IR 1.1.0 documents; see nano/ir/records.py.
+    records: Tuple[RecordDecl, ...] = ()
+
+    @property
+    def ir_version(self) -> str:
+        return NANO_IR_VERSION_1_1 if self.records else NANO_IR_VERSION_1_0
 
     # -- lookup ------------------------------------------------------------
 
@@ -349,12 +362,19 @@ class NanoModule:
         if data.get("type") != "Strategy":
             raise IRValidationError("Root 'type' must be 'Strategy'")
         version = data.get("nanoIrVersion")
-        if version != NANO_IR_VERSION_1_0:
+        if version not in EXECUTABLE_IR_VERSIONS:
             raise IRValidationError(
                 f"nanoIrVersion {version!r} unsupported by NanoModule "
-                f"(expected {NANO_IR_VERSION_1_0!r}; load 0.1.0 documents with "
-                "nano.ir.graph.StrategyGraph)"
+                f"(expected {NANO_IR_VERSION_1_0!r} or {NANO_IR_VERSION_1_1!r}; "
+                "load 0.1.0 documents with nano.ir.graph.StrategyGraph)"
             )
+        records: Tuple[RecordDecl, ...] = ()
+        if "records" in data:
+            if version != NANO_IR_VERSION_1_1:
+                raise IRValidationError(
+                    "RECORD_IR_VERSION: 'records' requires nanoIrVersion 1.1.0"
+                )
+            records = load_record_table(data["records"])
         name = _require_text(data, "name", "Strategy")
 
         tier = data.get("tier", "nano")
@@ -468,6 +488,7 @@ class NanoModule:
         provenance = data.get("provenance", {})
         if not isinstance(provenance, dict):
             raise IRValidationError("'provenance' must be an object")
+        validate_record_flow(version, nodes, inputs, records)
 
         return NanoModule(
             name=name,
@@ -481,6 +502,7 @@ class NanoModule:
             warmup=_require_non_negative_int(data.get("warmup", 0), "'warmup'"),
             determinism=dict(determinism),
             provenance=dict(provenance),
+            records=records,
         )
 
     def validate(self) -> "NanoModule":
@@ -505,12 +527,14 @@ class NanoModule:
         """The canonical document. Key order is fixed so output stays diffable."""
         out: dict = {
             "type": "Strategy",
-            "nanoIrVersion": NANO_IR_VERSION_1_0,
+            "nanoIrVersion": self.ir_version,
             "tier": self.tier,
             "name": self.name,
             "effects": list(self.effects),
             "determinism": dict(self.determinism),
         }
+        if self.records:
+            out["records"] = [decl.to_dict() for decl in self.records]
         if self.params:
             out["params"] = [p.to_dict() for p in self.params]
         if self.inputs:

@@ -24,9 +24,12 @@ from .module import (
     ParamDecl,
 )
 from .nodes import AgentNode, ConditionNode, IntentNode, ScheduleNode
+from .records import RecordDecl, RecordIRError, RecordValue, RecordValueError, record_id
 from .schema import (
+    EXECUTABLE_IR_VERSIONS,
     NANO_IR_VERSION,
     NANO_IR_VERSION_1_0,
+    NANO_IR_VERSION_1_1,
     NANO_IR_VERSION_BASELINE,
     NANO_IR_VERSION_LATEST,
     SUPPORTED_IR_VERSIONS,
@@ -43,6 +46,7 @@ __all__ = [
     "COMPILER_VERSION",
     "ConditionNode",
     "DETERMINISM_CONTRACT",
+    "EXECUTABLE_IR_VERSIONS",
     "IRNode",
     "IRValidationError",
     "InputDecl",
@@ -50,12 +54,18 @@ __all__ = [
     "ManifestViolation",
     "NANO_IR_VERSION",
     "NANO_IR_VERSION_1_0",
+    "NANO_IR_VERSION_1_1",
     "NANO_IR_VERSION_BASELINE",
     "NANO_IR_VERSION_LATEST",
     "NanoModule",
     "OPS",
     "OpSpec",
     "ParamDecl",
+    "RecordDecl",
+    "RecordIRError",
+    "RecordValue",
+    "RecordValueError",
+    "record_id",
     "SUPPORTED_IR_VERSIONS",
     "ScheduleNode",
     "StrategyGraph",
@@ -75,11 +85,11 @@ def load(document: Mapping[str, Any]):
     version = document.get("nanoIrVersion")
     if version == NANO_IR_VERSION_BASELINE:
         return StrategyGraph.from_dict(document)
-    if version == NANO_IR_VERSION_1_0:
+    if version in EXECUTABLE_IR_VERSIONS:
         return NanoModule.from_dict(document)
     raise IRValidationError(
         f"nanoIrVersion {version!r} unsupported "
-        f"(expected one of {', '.join(SUPPORTED_IR_VERSIONS)})"
+        f"(expected one of {', '.join((*SUPPORTED_IR_VERSIONS, NANO_IR_VERSION_1_1))})"
     )
 
 

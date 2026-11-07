@@ -40,8 +40,18 @@ NANO_IR_VERSION_1_0 = "1.0.0"
 NANO_IR_VERSION = NANO_IR_VERSION_BASELINE
 NANO_IR_VERSION_LATEST = NANO_IR_VERSION_1_0
 
-# Every version a runtime in this package accepts, oldest first.
+# Every version the single-source compiler can emit (and `--ir-version` offers),
+# oldest first. Its meaning predates records and is kept: see RFC 0085.
 SUPPORTED_IR_VERSIONS = (NANO_IR_VERSION_BASELINE, NANO_IR_VERSION_1_0)
+
+# `1.1.0` is `1.0.0` plus immutable record declarations, record-typed inputs and
+# the `record.input` / `record.get` opcodes (docs/rfc-0085-immutable-records.md).
+# Only the package compiler emits it, and only for a program with a record input.
+NANO_IR_VERSION_1_1 = "1.1.0"
+
+# Executable revisions `NanoModule` loads. A pre-1.1 loader compares the version
+# to "1.0.0" exactly, so it rejects a 1.1.0 document instead of ignoring records.
+EXECUTABLE_IR_VERSIONS = (NANO_IR_VERSION_1_0, NANO_IR_VERSION_1_1)
 
 # Node vocabulary of the baseline document. A `0.1.0` graph containing anything
 # outside this set is rejected — the version is a promise about shape, and a

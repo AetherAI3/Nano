@@ -12,18 +12,20 @@ from dataclasses import dataclass, fields, is_dataclass, replace
 from pathlib import Path, PurePosixPath
 
 from .ast import (
-    Binary, BoolLit, Call, Expr, InputAst, LetAst, Name, NumberLit,
-    StrategyAst, StringLit, Unary,
+    Binary, BoolLit, Call, Expr, InputAst, LetAst, Member, Name, NumberLit,
+    RecordLit, StrategyAst, StringLit, Unary,
 )
 from .codegen import _Lowerer, source_hash
 from .errors import NanoCompileError
 from .lexer import tokenize
 from . import parser as _parser_module
 from .parser import _Parser
+from .records import RecordLowering, build_registry, module_records, parse_record, record_parser
 from ..ir.module import COMPILER_VERSION, NanoModule
 from ..ir.schema import KNOWN_EFFECTS
-from ..types.checker import _BUILTINS, _Checker, check
-from ..types.kinds import parse_type
+from ..types.checker import _BUILTINS, _Checker
+from ..types.kinds import SCALAR_TYPES, parse_type
+from ..types.records import RecordChecking, RecordType, RecordTypeError, describe, resolve_signature_type
 from ..indicators import lookup
 
 PACKAGE_VERSION = "0.1.0"
@@ -48,9 +50,11 @@ class PackageError(NanoCompileError):
     code = "PACKAGE_ERROR"
     category = "syntax"
 
-    def __init__(self, message, path, line=1, column=1):
+    def __init__(self, message, path, line=1, column=1, *, stack=()):
         super().__init__(f"{path}: {message}", line, column)
         self.path = path
+        # Ordered expansion call sites (outer call -> inner definition), when known.
+        self.stack = tuple(stack)
 
     @classmethod
     def from_error(cls, error, path):
@@ -112,6 +116,16 @@ def _location(path, node):
     return {"path": path, "line": node.line, "column": node.column}
 
 
+def _record_error(code, message, node):
+    return RecordTypeError(code, message, node.line, node.column)
+
+
+def _reserved(name):
+    """Names a helper or record declaration may not shadow."""
+    return (name == "infer" or name in dict(_BUILTINS) or lookup(name) is not None
+            or name in SCALAR_TYPES or name in {"series", "record", "void"})
+
+
 @dataclass(frozen=True)
 class _Function:
     name: str
@@ -143,10 +157,14 @@ class CompiledPackage:
         return {**payload, "packageHash": _digest(_canonical(payload))}
 
 
-class _SignatureChecker(_Checker):
-    def __init__(self, strategy, functions):
+class _SignatureChecker(RecordChecking, _Checker):
+    def __init__(self, strategy, functions, signatures=None, records=None, table=None):
         super().__init__(strategy)
         self.functions = functions
+        self.signatures = signatures or {}
+        self.record_scope = records or {}
+        self.record_table = table or {}
+        self.helper_names = frozenset(functions)
 
     def _visit_call(self, expr):
         fn = self.functions.get(expr.callee)
@@ -155,13 +173,20 @@ class _SignatureChecker(_Checker):
         if len(expr.args) != len(fn.params):
             raise self._fail(f"{fn.name} expects {len(fn.params)} arguments, got {len(expr.args)}",
                              expr.line, expr.column)
-        for arg, param in zip(expr.args, fn.params):
+        params, result = self.signatures.get((fn.path, fn.name)) or (
+            tuple(parse_type(p.declared_type) for p in fn.params), parse_type(fn.result))
+        for arg, param, expected in zip(expr.args, fn.params, params):
             self._check_argument(arg)
             actual, _ = self._visit(arg)
-            if str(actual) != param.declared_type:
-                raise self._fail(f"{fn.name}.{param.name} expects {param.declared_type}, got {actual}",
-                                 expr.line, expr.column)
-        return parse_type(fn.result), 0
+            if actual == expected:
+                continue
+            if isinstance(expected, RecordType) or isinstance(actual.scalar, RecordType):
+                code = "RECORD_SERIES" if actual.is_series else "RECORD_TYPE"
+                raise _record_error(code, f"{fn.name}.{param.name} expects {describe(expected)}, "
+                                    f"got {describe(actual)}", expr)
+            raise self._fail(f"{fn.name}.{param.name} expects {param.declared_type}, got {actual}",
+                             expr.line, expr.column)
+        return result, 0
 
     def _check_argument(self, value):
         if isinstance(value, Call) and value.callee not in self.functions:
@@ -175,7 +200,7 @@ class _SignatureChecker(_Checker):
                 self._check_argument(item)
 
 
-class _MappedLowerer(_Lowerer):
+class _MappedLowerer(RecordLowering, _Lowerer):
     def __init__(self, program, origins, default):
         super().__init__(program)
         self.origins = origins
@@ -211,6 +236,7 @@ class _Build:
         self.origins = {}
         self.costs = {}
         self.expansion = 0
+        self.record_lets = {}
         self._validate_config()
 
     @staticmethod
@@ -240,8 +266,14 @@ class _Build:
     def fail(self, message, path, node=None):
         raise PackageError(message, path, getattr(node, "line", 1), getattr(node, "column", 1))
 
-    def limit(self, message, path, node=None):
-        raise PackageResourceError(message, path, getattr(node, "line", 1), getattr(node, "column", 1))
+    def limit(self, message, path, node=None, stack=()):
+        raise PackageResourceError(message, path, getattr(node, "line", 1), getattr(node, "column", 1),
+                                   stack=stack)
+
+    def record_fail(self, code, message, path, node=None):
+        error = PackageError(message, path, getattr(node, "line", 1), getattr(node, "column", 1))
+        error.code, error.category = code, "type"
+        raise error
 
     def _bound_tree(self, value, path):
         pending = [(value, 0)]
@@ -331,64 +363,79 @@ class _Build:
                     depth -= 1
             # #64 adds an explicit immutable limits argument. Keep the opt-in
             # package API usable on both baseline and bounded parser versions.
+            # Record syntax (RFC 0085) is layered over whichever parser is used.
             limits = getattr(_parser_module, "DEFAULT_COMPILER_LIMITS", None)
-            parser = _Parser(tokens, limits) if limits is not None else _Parser(tokens)
+            parser_class = record_parser(_Parser)
+            parser = parser_class(tokens, limits) if limits is not None else parser_class(tokens)
             imports = []
             while parser._at_keyword("import"):
                 parser._advance()
                 imports.append(parser._expect("IDENT", "manifest module name"))
-            functions = []
+            functions, records = [], []
             if module_name is not None:
-                parser._expect_keyword("module")
-                name = parser._expect("IDENT", "module name")
-                if name.value != module_name:
-                    self.fail("module name differs from manifest", path, name)
-                parser._expect("LBRACE", "'{'")
-                while parser._peek().type != "RBRACE":
-                    parser._expect_keyword("pure")
-                    parser._expect_keyword("fn")
-                    name = parser._expect("IDENT", "function name")
-                    if name.value in {fn.name for fn in functions}:
-                        self.fail(f"duplicate symbol {name.value!r}", path, name)
-                    if name.value == "infer" or name.value in dict(_BUILTINS) or lookup(name.value) is not None:
-                        self.fail(f"helper shadows builtin {name.value!r}", path, name)
-                    parser._expect("LPAREN", "'('")
-                    params = []
-                    while parser._peek().type != "RPAREN":
-                        param = parser._expect("IDENT", "parameter name")
-                        parser._expect("COLON", "':'")
-                        type_ = parser._parse_type()
-                        if type_ not in SCALARS:
-                            self.fail("pure parameters require scalar types", path, param)
-                        if param.value in {p.name for p in params}:
-                            self.fail("duplicate parameter", path, param)
-                        params.append(InputAst(param.value, type_, param.line, param.column))
-                        if parser._peek().type != "COMMA":
-                            break
-                        parser._advance()
-                    parser._expect("RPAREN", "')'")
-                    parser._expect("COLON", "':'")
-                    result = parser._parse_type()
-                    if result not in SCALARS:
-                        self.fail("pure result requires scalar type", path, name)
-                    parser._expect("LBRACE", "'{'")
-                    body = parser._parse_expr()
-                    self._bound_tree(body, path)
-                    parser._expect("RBRACE", "'}'")
-                    functions.append(_Function(name.value, tuple(params), result, body, path, name.line, name.column))
-                parser._advance()
-                parser._expect("EOF", "end of module")
+                self._parse_module(parser, path, module_name, functions, records)
                 strategy = None
             else:
                 strategy = parser.parse_program()
                 self._bound_tree(strategy, path)
-            self.units[path] = (imports, functions, strategy)
+            self.units[path] = (imports, functions, strategy, records)
         except RecursionError:
             self.limit("syntax depth budget exceeded", path)
         except NanoCompileError as exc:
             if isinstance(exc, PackageError):
                 raise
             raise PackageError.from_error(exc, path) from exc
+
+    def _parse_module(self, parser, path, module_name, functions, records):
+        parser._expect_keyword("module")
+        name = parser._expect("IDENT", "module name")
+        if name.value != module_name:
+            self.fail("module name differs from manifest", path, name)
+        parser._expect("LBRACE", "'{'")
+        while parser._peek().type != "RBRACE":
+            if parser._at_keyword("record"):
+                records.append(parse_record(parser))
+                continue
+            parser._expect_keyword("pure")
+            parser._expect_keyword("fn")
+            name = parser._expect("IDENT", "function name")
+            if name.value in {fn.name for fn in functions}:
+                self.fail(f"duplicate symbol {name.value!r}", path, name)
+            if name.value == "infer" or name.value in dict(_BUILTINS) or lookup(name.value) is not None:
+                self.fail(f"helper shadows builtin {name.value!r}", path, name)
+            parser._expect("LPAREN", "'('")
+            params = []
+            while parser._peek().type != "RPAREN":
+                param = parser._expect("IDENT", "parameter name")
+                parser._expect("COLON", "':'")
+                type_ = parser._parse_type()
+                self._signature_spelling(type_, "pure parameters require scalar types", path, param)
+                if param.value in {p.name for p in params}:
+                    self.fail("duplicate parameter", path, param)
+                params.append(InputAst(param.value, type_, param.line, param.column))
+                if parser._peek().type != "COMMA":
+                    break
+                parser._advance()
+            parser._expect("RPAREN", "')'")
+            parser._expect("COLON", "':'")
+            result = parser._parse_type()
+            self._signature_spelling(result, "pure result requires scalar type", path, name)
+            parser._expect("LBRACE", "'{'")
+            body = parser._parse_expr()
+            self._bound_tree(body, path)
+            parser._expect("RBRACE", "'}'")
+            functions.append(_Function(name.value, tuple(params), result, body, path, name.line, name.column))
+        parser._advance()
+        parser._expect("EOF", "end of module")
+
+    def _signature_spelling(self, spelling, scalar_message, path, site):
+        """Scalars, or a bare name resolved later as a record (RFC 0085)."""
+        if spelling in SCALARS:
+            return
+        if spelling.startswith("series<") and spelling[7:-1] not in SCALAR_TYPES:
+            self.record_fail("RECORD_SERIES", f"{spelling} is not a type: records are not series", path, site)
+        if spelling in SCALAR_TYPES or "<" in spelling:
+            self.fail(scalar_message, path, site)
 
     def _load(self, path, stack=()):
         if len(stack) > MAX_DEPTH:
@@ -410,12 +457,15 @@ class _Build:
                 self._load(dep, (*stack, path))
 
     def _scope(self, path):
-        imports, functions, strategy = self.units[path]
+        imports, functions, strategy, _ = self.units[path]
+        records = self.registry.scopes[path]
         scope = {}
         for site in imports:
             for fn in self.units[self.manifest["modules"][site.value]][1]:
                 if fn.name in scope:
                     self.fail(f"duplicate symbol {fn.name!r}", path, site)
+                if fn.name in records:
+                    self.record_fail("RECORD_DUPLICATE", f"duplicate symbol {fn.name!r}", path, site)
                 scope[fn.name] = fn
         for fn in functions:
             if fn.name in scope:
@@ -426,7 +476,25 @@ class _Build:
                 for item in group:
                     if item.name in scope:
                         self.fail(f"duplicate symbol {item.name!r}", path, item)
+                    if item.name in records:
+                        self.record_fail("RECORD_DUPLICATE", f"duplicate symbol {item.name!r}", path, item)
         return scope
+
+    def _signature(self, fn):
+        """Resolve a helper's parameter/result spellings in its defining module."""
+        scope = self.registry.scopes[fn.path]
+
+        def resolve(spelling, site):
+            resolved = resolve_signature_type(spelling, scope)
+            if resolved is None:
+                self.record_fail("RECORD_TYPE", f"unknown record type {spelling!r}", fn.path, site)
+            return resolved
+        return tuple(resolve(p.declared_type, p) for p in fn.params), resolve(fn.result, fn)
+
+    def _checker(self, strategy, path, functions=None):
+        scope = self.scopes[path] if functions is None else functions
+        return _SignatureChecker(strategy, scope, self.signatures,
+                                 self.registry.scopes[path], self.registry.table)
 
     def _pure(self, expr, fn, scope, stack, depth=0):
         height = 0
@@ -456,37 +524,58 @@ class _Build:
         elif isinstance(expr, Binary):
             height = max(self._pure(expr.left, fn, scope, stack, depth + 1),
                          self._pure(expr.right, fn, scope, stack, depth + 1))
+        elif isinstance(expr, Member):
+            height = self._pure(expr.target, fn, scope, stack, depth + 1)
+        elif isinstance(expr, RecordLit):
+            for init in expr.fields:
+                height = max(height, self._pure(init.value, fn, scope, stack, depth + 1))
         elif not isinstance(expr, (NumberLit, BoolLit, StringLit)):
             self.fail("unsupported pure expression", fn.path, expr)
         return height
 
+    def _substitute(self, argument, site, path, chain):
+        """Copy an already expanded expression to a use site, keeping provenance."""
+        result = replace(argument)
+        self.costs[id(result)] = self.costs[id(argument)]
+        self.origins[id(result)] = (*chain, _location(path, site), *self.origins[id(argument)])
+        return result
+
     def _expand(self, value, path, env=None, chain=(), depth=0):
         if depth > MAX_DEPTH * 4:
-            self.limit("expansion depth budget exceeded", path, value)
+            self.limit("expansion depth budget exceeded", path, value, chain)
         if isinstance(value, tuple):
             return tuple(self._expand(v, path, env, chain, depth + 1) for v in value)
         if not is_dataclass(value):
             return value
         self.expansion += 1
         if self.expansion > MAX_EXPANSION:
-            self.limit("expansion budget exceeded", path, value)
+            self.limit("expansion budget exceeded", path, value, chain)
         if isinstance(value, Name) and env is not None:
             # Substitute only formal parameters; arguments were expanded in
             # the caller's lexical scope, so helpers cannot capture its names.
-            argument = env[value.name]
-            result = replace(argument)
-            self.costs[id(result)] = self.costs[id(argument)]
-            self.origins[id(result)] = (*chain, _location(path, value), *self.origins[id(argument)])
-            return result
+            return self._substitute(env[value.name], value, path, chain)
+        if isinstance(value, Name) and value.name in self.record_lets:
+            # A record-typed strategy `let` is a compile-time value (RFC 0085).
+            return self._substitute(self.record_lets[value.name], value, path, chain)
         if isinstance(value, Call) and value.callee in self.scopes[path]:
             fn = self.scopes[path][value.callee]
             args = tuple(self._expand(a, path, env, chain, depth + 1) for a in value.args)
             return self._expand(fn.body, fn.path, dict(zip((p.name for p in fn.params), args)),
                                 (*chain, _location(path, value)), depth + 1)
+        if isinstance(value, Member):
+            target = self._expand(value.target, path, env, chain, depth + 1)
+            if isinstance(target, RecordLit):
+                # Projection: `R(f: x, ...).f` is `x`; constructions never materialize.
+                chosen = next(i.value for i in target.fields if i.name == value.field_name)
+                return self._substitute(chosen, value, path, chain)
+            return self._finish(replace(value, target=target), value, path, chain)
         result = replace(value, **{
             f.name: self._expand(getattr(value, f.name), path, env, chain, depth + 1)
             for f in fields(value)
         })
+        return self._finish(result, value, path, chain)
+
+    def _finish(self, result, value, path, chain):
         def cost(item):
             if is_dataclass(item):
                 return self.costs[id(item)]
@@ -497,7 +586,7 @@ class _Build:
         # whose tree traversal would otherwise explode in the type checker.
         size = 1 + sum(cost(getattr(result, f.name)) for f in fields(result))
         if size > MAX_EXPANSION:
-            self.limit("expanded tree budget exceeded", path, value)
+            self.limit("expanded tree budget exceeded", path, value, chain)
         self.costs[id(result)] = size
         if isinstance(result, Expr):
             self.origins[id(result)] = (*chain, _location(path, value))
@@ -518,9 +607,23 @@ class _Build:
         count = sum(len(unit[1]) for unit in self.units.values())
         if count > MAX_FUNCTIONS:
             self.limit("function budget exceeded", entry)
+        self.registry = build_registry(self.units, self.manifest["modules"], self.record_fail, self.limit, _reserved)
         self.scopes = {p: self._scope(p) for p in self.units}
+        self.signatures = {(fn.path, fn.name): self._signature(fn)
+                           for unit in self.units.values() for fn in unit[1]}
         self.checked = {}
-        for path, (_, functions, _) in sorted(self.units.items()):
+        self._check_definitions()
+        module, source_map = self._compile_entry(entry)
+        if len(module.nodes) > MAX_IR_NODES:
+            self.limit("IR node budget exceeded", entry)
+        undeclared = set(module.effects) - set(self.manifest["effects"])
+        if undeclared:
+            self.fail("undeclared effects: " + ", ".join(sorted(undeclared)), entry)
+        module = NanoModule.from_dict(module.to_dict())
+        return CompiledPackage(module, self.manifest, self.lock, source_map)
+
+    def _check_definitions(self):
+        for path, (_, functions, _, _) in sorted(self.units.items()):
             for fn in functions:
                 self._pure(fn.body, fn, self.scopes[path], ((path, fn.name),))
                 # Check definitions even when unused, with no implicit feeds.
@@ -530,21 +633,36 @@ class _Build:
                 strategy = StrategyAst(name="Pure", inputs=fn.params,
                     lets=(LetAst(result_name, None, fn.body, fn.line, fn.column),))
                 try:
-                    typed = _SignatureChecker(strategy, self.scopes[path]).run()
-                    actual = typed.type_of(fn.body)
-                    if str(actual) != fn.result:
-                        self.fail(f"{fn.name} returns {actual}, expected {fn.result}", path, fn)
+                    actual = self._checker(strategy, path).run().type_of(fn.body)
+                    self._check_result(fn, actual, path)
                 except NanoCompileError as exc:
                     if isinstance(exc, PackageError):
                         raise
                     raise PackageError.from_error(exc, path) from exc
+
+    def _check_result(self, fn, actual, path):
+        expected = self.signatures[(path, fn.name)][1]
+        if actual == expected:
+            return
+        if isinstance(expected, RecordType) or isinstance(actual.scalar, RecordType):
+            self.record_fail("RECORD_TYPE", f"{fn.name} returns {describe(actual)}, "
+                             f"expected {describe(expected)}", path, fn)
+        self.fail(f"{fn.name} returns {actual}, expected {fn.result}", path, fn)
+
+    def _compile_entry(self, entry):
         strategy = self.units[entry][2]
         try:
-            _SignatureChecker(strategy, self.scopes[entry]).run()
-            expanded = self._expand(strategy, entry)
+            typed = self._checker(strategy, entry).run()
+            kept = []
+            for binding in strategy.lets:
+                if isinstance(typed.symbols[binding.name].type, RecordType):
+                    self.record_lets[binding.name] = self._expand(binding.expr, entry)
+                else:
+                    kept.append(binding)
+            expanded = self._expand(replace(strategy, lets=tuple(kept)), entry)
             self._bound_tree(expanded, entry)
-            typed = check(expanded)
-            lowerer = _MappedLowerer(typed, self.origins, _location(entry, strategy))
+            program = self._checker(expanded, entry, functions={}).run()
+            lowerer = _MappedLowerer(program, self.origins, _location(entry, strategy))
             module = lowerer.run(source_hash=source_hash(self.sources[entry]))
         except RecursionError:
             self.limit("expansion depth budget exceeded", entry)
@@ -552,13 +670,8 @@ class _Build:
             if isinstance(exc, PackageError):
                 raise
             raise PackageError.from_error(exc, entry) from exc
-        if len(module.nodes) > MAX_IR_NODES:
-            self.limit("IR node budget exceeded", entry)
-        undeclared = set(module.effects) - set(self.manifest["effects"])
-        if undeclared:
-            self.fail("undeclared effects: " + ", ".join(sorted(undeclared)), entry)
-        module = NanoModule.from_dict(module.to_dict())
-        return CompiledPackage(module, self.manifest, self.lock, lowerer.source_map)
+        records = module_records(module.inputs, self.registry.table)
+        return replace(module, records=records), lowerer.source_map
 
 
 def compile_package(manifest_path, *, lock_path):
