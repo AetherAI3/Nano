@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nano:qsearch:lifecycle-error:v1",
+  "title": "nano.qsearch.lifecycle-error.v1",
+  "description": "Non-2xx body of the status surface as emitted by nano_qsearch.lifecycle.lifecycle_error() or the service NOT_ENABLED constant. Open on purpose: clients map it through allowlists (CONTRACT.md section 2.3) and discard everything else, so unknown members or codes are not parse failures. The body must still be strict JSON.",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": {"type": "string"},
+    "code": {"type": "string"},
+    "field": {"type": ["string", "null"]},
+    "retryable": {"type": "boolean"},
+    "next_action": {"type": "string"}
+  }
+}
