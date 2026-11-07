@@ -195,10 +195,15 @@ Recorded as failing compatibility tests in `tests/test_qsearch_lifecycle_wire_co
 (`xfail(strict=True)`), so fixing one turns the suite red until the marker is
 removed deliberately:
 
-* `LifecycleClient` uses `json.loads`, which keeps the last of duplicate member
-  names instead of refusing them.
 * `LifecycleClient` checks only `schema`, `request.request_digest` and
-  `next_action` on success; it does not validate the closed envelope.
+  `next_action` on success; it does not validate the closed envelope (missing or
+  extra members, member types, enums, or invariants I1-I8).
+* `LifecycleClient` accepts integers above 2^53-1, and maps a non-2xx body that
+  exceeds the 2^53-1 or depth-64 rules as a remote error rather than
+  `INVALID_RESPONSE`.
+
+Resolved: duplicate member names are refused by the Python client in success and
+error bodies (separate parity patch; previously `json.loads` kept the last one).
 
 Python integers are unbounded, but the service never emits a number above 2^53-1;
 the cap is a portability rule for every client.
