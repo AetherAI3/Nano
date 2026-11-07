@@ -1,0 +1,35 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "category": "resource",
+          "code": "RESOURCE_LIMIT",
+          "message": "Compiler syntax nesting limit (32) exceeded; simplify or split the expression or nested conditional",
+          "severity": "error",
+          "span": {
+            "end": {
+              "column": 62,
+              "line": 1
+            },
+            "start": {
+              "column": 62,
+              "line": 1
+            }
+          }
+        }
+      ],
+      "input": "resource.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:36c5e8384f873af0b8561a1780bc0f90b9c94d0da0d9448f5581e371fa80e58b",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}

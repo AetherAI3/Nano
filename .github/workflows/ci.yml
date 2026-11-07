@@ -19,9 +19,22 @@ jobs:
         with:
           python-version: "${{ matrix.python-version }}"
       - name: Install
-        run: pip install -e . pytest
+        run: pip install -e ".[dev]"
       - name: Run tests
         run: pytest -q
+
+  quantum-local:
+    name: Quantum local conformance (Qiskit 2.3.1)
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned local simulator dependencies
+        run: pip install -e ".[dev,quantum]"
+      - name: Verify typed operations and actual local circuit round trips
+        run: pytest tests/test_quantum_contract.py tests/test_quantum_adapter.py -q
 
   contribution-shape:
     # The test suite proves a library entry compiles to its pinned IR. It says
@@ -61,7 +74,7 @@ jobs:
           wheel = next(Path("dist").glob("*.whl"))
           expected = {
               path.as_posix()
-              for root in (Path("nano/examples"), Path("nano/library"), Path("nano/project"))
+              for root in (Path("nano/examples"), Path("nano/library"), Path("nano/project"), Path("nano/quantum"), Path("nano/intent"))
               for path in root.rglob("*")
               if path.suffix in {".nano", ".json"}
           }

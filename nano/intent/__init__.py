@@ -25,6 +25,7 @@ from .ir import (
 from .lexicon import Catalog, CatalogBundle, CatalogError, default_catalogs
 from .normalize import normalize, normalize_text
 from .tokens import IntentInputError, MAX_INPUT_CHARS, MAX_TOKENS
+from .quantum import QuantumCommandIR, compile_quantum, structured_reply, validate_quantum_document
 
 __all__ = [
     "Catalog",
@@ -50,4 +51,8 @@ __all__ = [
     "normalize",
     "normalize_text",
     "parse_intent",
+    "QuantumCommandIR",
+    "compile_quantum",
+    "structured_reply",
+    "validate_quantum_document",
 ]

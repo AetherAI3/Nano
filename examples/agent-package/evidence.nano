@@ -1,0 +1,3 @@
+module Evidence {
+  pure fn sufficient(count: int, verified: bool): bool { count >= 2 and verified }
+}

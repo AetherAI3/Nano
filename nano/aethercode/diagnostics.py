@@ -1,19 +1,18 @@
-"""Diagnostics for `.nano` source.
+"""Editor adapter for the shared compiler diagnostic representation.
 
-Invariant: diagnostics never raises and never invents positions. Valid source
-yields an empty tuple. A NanoSyntaxError becomes one diagnostic carrying the
-compiler's exact 1-based line/column and message. IR-level validation failures
-(grammatical programs the IR contract rejects) have no source position, so
-they are anchored at line 1, column 1 — the strategy header — never guessed.
+Source errors retain the compiler's exact coordinates. Positionless IR failures
+retain the old line/column 1:1 locator for consumers of those legacy fields;
+``span`` remains ``None`` so structured consumers never mistake it for evidence
+of a source position. Valid programs of either supported IR version are accepted.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
-from ..compiler import NanoSyntaxError, compile_source
-from ..ir.schema import IRValidationError
+from ..compiler.diagnostics import SourceSpan, check_report
+from ..compiler.parser import CompilerLimits, DEFAULT_COMPILER_LIMITS
 
 SEVERITY_ERROR = "error"
 
@@ -24,23 +23,27 @@ class Diagnostic:
     column: int
     message: str
     severity: str
+    code: str = "SYNTAX_ERROR"
+    category: str = "syntax"
+    span: Optional[SourceSpan] = None
+    expected: Optional[str] = None
+    actual: Optional[str] = None
+    hint: Optional[str] = None
 
 
-def diagnostics(source: str) -> Tuple[Diagnostic, ...]:
-    """Compile source and report failures as diagnostics; never raises."""
-    try:
-        compile_source(source)
-    except NanoSyntaxError as error:
-        return (
-            Diagnostic(
-                line=error.line,
-                column=error.column,
-                message=error.message,
-                severity=SEVERITY_ERROR,
-            ),
+def diagnostics(
+    source: str, *, ir_version: Optional[str] = None,
+    limits: CompilerLimits = DEFAULT_COMPILER_LIMITS,
+) -> Tuple[Diagnostic, ...]:
+    """Return known compiler rejections, leaving internal exceptions visible."""
+    report = check_report(source, ir_version=ir_version, limits=limits)
+    return tuple(
+        Diagnostic(
+            line=item.span.start.line if item.span is not None else 1,
+            column=item.span.start.column if item.span is not None else 1,
+            message=item.message, severity=item.severity,
+            code=item.code, category=item.category, span=item.span,
+            expected=item.expected, actual=item.actual, hint=item.hint,
         )
-    except IRValidationError as error:
-        return (
-            Diagnostic(line=1, column=1, message=str(error), severity=SEVERITY_ERROR),
-        )
-    return ()
+        for item in report.diagnostics
+    )

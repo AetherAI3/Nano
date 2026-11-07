@@ -9,12 +9,20 @@ file so replay protection survives a restart. One connection, one lock.
 Each row also records the runtime ``kind`` chosen at accept time, so recovery
 re-runs on the same backend; files from before that column are migrated in
 place (``kind`` is NULL on their old rows).
+
+v2 requests (lane HW0) live in their own ``requests`` table, keyed by
+``request_digest`` with a unique ``request_id``: a row is recorded ACCEPTED
+before anything is submitted, its attempt is marked immediately before the
+single submission, and it moves to DONE exactly once with the sealed v2
+receipt. ``pending_requests()`` lists ACCEPTED rows for restart recovery.
 """
 from __future__ import annotations
 
 import sqlite3
+import json
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -32,9 +40,31 @@ CREATE TABLE IF NOT EXISTS jobs (
   attempts INTEGER NOT NULL DEFAULT 0,
   kind TEXT
 );
+CREATE TABLE IF NOT EXISTS requests (
+  request_digest TEXT PRIMARY KEY,
+  request_id TEXT UNIQUE NOT NULL,
+  state TEXT NOT NULL CHECK (state IN ('ACCEPTED', 'DONE')),
+  request_json TEXT NOT NULL,
+  receipt_json TEXT,
+  accepted_at REAL NOT NULL,
+  completed_at REAL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  record_json TEXT
+);
 CREATE TABLE IF NOT EXISTS nonces (
   nonce TEXT PRIMARY KEY,
   ts INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS request_events (
+  sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_digest TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  at REAL NOT NULL,
+  UNIQUE(request_digest, kind)
+);
+CREATE TABLE IF NOT EXISTS request_links (
+  parent_digest TEXT PRIMARY KEY,
+  child_digest TEXT UNIQUE NOT NULL
 );
 """
 
@@ -51,10 +81,27 @@ class JobRecord:
     kind: str | None = None     # runtime kind chosen at accept time; None on rows written before the column existed
 
 
+@dataclass(frozen=True)
+class RequestRecord:
+    request_digest: str
+    request_id: str
+    state: str
+    request_json: str
+    receipt_json: str | None
+    accepted_at: float
+    completed_at: float | None
+    attempts: int
+
+
+class RequestIdConflict(ValueError):
+    """A different request digest already owns this ``request_id``."""
+
+
 class JobStore:
     _COLS = "job_digest, state, job_json, receipt_json, accepted_at, completed_at, attempts, kind"
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path | str, *, clock: Callable[[], float] = time.time) -> None:
+        self._clock = clock
         self._path = Path(path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
@@ -66,7 +113,10 @@ class JobStore:
         self._migrate()
 
     def _migrate(self) -> None:
-        """Bring a file written by an older version up to the current schema (add ``jobs.kind``)."""
+        """Bring a file written by an older version up to the current schema (``jobs.kind``, ``requests.record_json``)."""
+        request_columns = {row[1] for row in self._db.execute("PRAGMA table_info(requests)").fetchall()}
+        if "record_json" not in request_columns:
+            self._db.execute("ALTER TABLE requests ADD COLUMN record_json TEXT")
         columns = {row[1] for row in self._db.execute("PRAGMA table_info(jobs)").fetchall()}
         if "kind" not in columns:
             self._db.execute("ALTER TABLE jobs ADD COLUMN kind TEXT")
@@ -140,6 +190,196 @@ class JobStore:
             rows = self._db.execute(f"SELECT {self._COLS} FROM jobs WHERE state='ACCEPTED' ORDER BY accepted_at").fetchall()
         return [self._row(r) for r in rows]
 
+    # --- v2 requests -------------------------------------------------------------------------
+
+    _REQUEST_COLS = "request_digest, request_id, state, request_json, receipt_json, accepted_at, completed_at, attempts"
+
+    def _request_row(self, request_digest: str) -> RequestRecord | None:
+        row = self._db.execute(f"SELECT {self._REQUEST_COLS} FROM requests WHERE request_digest=?",
+                               (request_digest,)).fetchone()
+        return None if row is None else RequestRecord(*row)
+
+    def get_request(self, request_digest: str) -> RequestRecord | None:
+        with self._lock:
+            return self._request_row(request_digest)
+
+    def begin_request(self, request_digest: str, request_id: str, request_json: str) -> RequestRecord:
+        """Insert an ACCEPTED request row (first call wins) and return it; ``RequestIdConflict`` when
+        another digest already owns ``request_id``."""
+        with self._lock:
+            try:
+                self._db.execute("INSERT OR IGNORE INTO requests (request_digest, request_id, state, request_json, "
+                                 "accepted_at) VALUES (?, ?, 'ACCEPTED', ?, ?)",
+                                 (request_digest, request_id, request_json, self._clock()))
+            except sqlite3.IntegrityError:
+                raise RequestIdConflict("request_id already belongs to another request") from None
+            row = self._request_row(request_digest)
+            if row is None:
+                raise RequestIdConflict("request_id already belongs to another request")
+            return row
+
+    def mark_request_attempt(self, request_digest: str) -> int:
+        """Increment and return the request's attempt count; ``KeyError`` when the digest is unknown."""
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET attempts = attempts + 1 WHERE request_digest=?",
+                                   (request_digest,))
+            if cur.rowcount != 1:
+                raise KeyError(request_digest)
+            return int(self._db.execute("SELECT attempts FROM requests WHERE request_digest=?",
+                                        (request_digest,)).fetchone()[0])
+
+    def claim_request_attempt(self, request_digest: str, *, queue_at: float) -> bool:
+        """Serialize the last pre-submit check against durable cancellation and queue expiry."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT attempts, record_json FROM requests WHERE request_digest=?",
+                                       (request_digest,)).fetchone()
+                if row is None:
+                    raise KeyError(request_digest)
+                record = json.loads(row[1]) if row[1] else {}
+                claimed = row[0] == 0 and "cancellation_requested_at" not in record and self._clock() < queue_at
+                if claimed:
+                    self._db.execute("UPDATE requests SET attempts=1 WHERE request_digest=?", (request_digest,))
+                self._db.execute("COMMIT")
+                return claimed
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def set_request_record(self, request_digest: str, record_json: str) -> None:
+        """Keep the run record (compile seconds, ...) beside the request; never part of the sealed receipt."""
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET record_json=? WHERE request_digest=?",
+                                   (record_json, request_digest))
+            if cur.rowcount != 1:
+                raise KeyError(request_digest)
+
+    def request_event(self, request_digest: str, kind: str, **updates) -> dict:
+        """Persist an idempotent lifecycle event and its fence together before external I/O."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
+                                       (request_digest,)).fetchone()
+                if row is None:
+                    raise KeyError(request_digest)
+                record = json.loads(row[0]) if row[0] else {}
+                if not isinstance(record, dict):
+                    raise ValueError("invalid lifecycle record")
+                at = self._clock()
+                self._db.execute("INSERT OR IGNORE INTO request_events(request_digest, kind, at) VALUES (?, ?, ?)",
+                                 (request_digest, kind, at))
+                at = self._db.execute("SELECT at FROM request_events WHERE request_digest=? AND kind=?",
+                                      (request_digest, kind)).fetchone()[0]
+                record.update(updates)
+                record.setdefault(kind + "_at", at)
+                self._db.execute("UPDATE requests SET record_json=? WHERE request_digest=?",
+                                 (json.dumps(record, sort_keys=True, allow_nan=False), request_digest))
+                self._db.execute("COMMIT")
+                return record
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def request_events(self, request_digest: str) -> list[dict]:
+        with self._lock:
+            return [dict(kind=r[0], at=r[1]) for r in self._db.execute(
+                "SELECT kind, at FROM request_events WHERE request_digest=? ORDER BY sequence", (request_digest,))]
+
+    def merge_request_record(self, request_digest: str, updates: dict) -> dict:
+        """Merge evidence atomically so a concurrent cancel fence cannot be overwritten."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
+                                       (request_digest,)).fetchone()
+                if row is None:
+                    raise KeyError(request_digest)
+                record = json.loads(row[0]) if row[0] else {}
+                record.update(updates)
+                # Event timestamps are immutable evidence even if a stale worker supplies them.
+                for kind, at in self._db.execute("SELECT kind, at FROM request_events WHERE request_digest=?",
+                                                (request_digest,)):
+                    record[kind + "_at"] = at
+                self._db.execute("UPDATE requests SET record_json=? WHERE request_digest=?",
+                                 (json.dumps(record, sort_keys=True, allow_nan=False), request_digest))
+                self._db.execute("COMMIT")
+                return record
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def link_replacement(self, parent_digest: str, child_digest: str, request_id: str, request_json: str) -> None:
+        """One durable successor per old attempt; commit identity/link before any submission."""
+        with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                parent = self._request_row(parent_digest)
+                if parent is None or parent.state != "DONE":
+                    raise ValueError("original attempt is not complete")
+                old = self._db.execute("SELECT child_digest FROM request_links WHERE parent_digest=?",
+                                       (parent_digest,)).fetchone()
+                if old is not None and old[0] != child_digest:
+                    raise RequestIdConflict("attempt already has a replacement")
+                child = self._request_row(child_digest)
+                if child is not None and old is None:
+                    raise RequestIdConflict("replacement identity already exists")
+                self._db.execute("INSERT OR IGNORE INTO request_links VALUES (?, ?)", (parent_digest, child_digest))
+                self._db.execute("INSERT OR IGNORE INTO requests(request_digest, request_id, state, request_json, "
+                                 "accepted_at, record_json) VALUES (?, ?, 'ACCEPTED', ?, ?, ?)",
+                                 (child_digest, request_id, request_json, self._clock(),
+                                  json.dumps({"replaces_request_digest": parent_digest})))
+                if self._request_row(child_digest) is None:
+                    raise RequestIdConflict("replacement request id already exists")
+                parent_raw = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
+                                              (parent_digest,)).fetchone()[0]
+                parent_record = json.loads(parent_raw) if parent_raw else {}
+                parent_record["replacement_request_digest"] = child_digest
+                self._db.execute("UPDATE requests SET record_json=? WHERE request_digest=?",
+                                 (json.dumps(parent_record, sort_keys=True), parent_digest))
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._db.execute("ROLLBACK")
+                raise
+
+    def reseal_request(self, request_digest: str, old_receipt_json: str, new_receipt_json: str) -> None:
+        """Replace a DONE receipt sealed while usage was pending by its settled re-seal (compare-and-swap).
+
+        ``ValueError`` unless the row is DONE and still holds exactly ``old_receipt_json``; the caller
+        keeps the replaced seal in the request record, so the history stays visible.
+        """
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET receipt_json=?, completed_at=? WHERE request_digest=? "
+                                   "AND state='DONE' AND receipt_json=?",
+                                   (new_receipt_json, self._clock(), request_digest, old_receipt_json))
+            if cur.rowcount != 1:
+                raise ValueError("stored receipt changed or is not DONE; nothing re-sealed")
+
+    def request_record(self, request_digest: str) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT record_json FROM requests WHERE request_digest=?",
+                                   (request_digest,)).fetchone()
+        return None if row is None else row[0]
+
+    def complete_request(self, request_digest: str, receipt_json: str) -> None:
+        """ACCEPTED → DONE in one statement; ``KeyError`` if unknown, ``ValueError`` if already DONE."""
+        with self._lock:
+            cur = self._db.execute("UPDATE requests SET state='DONE', receipt_json=?, completed_at=? "
+                                   "WHERE request_digest=? AND state='ACCEPTED'",
+                                   (receipt_json, self._clock(), request_digest))
+            if cur.rowcount == 1:
+                return
+            if self._request_row(request_digest) is None:
+                raise KeyError(request_digest)
+            raise ValueError("request already completed; a second result is never stored")
+
+    def pending_requests(self) -> list[RequestRecord]:
+        with self._lock:
+            rows = self._db.execute(f"SELECT {self._REQUEST_COLS} FROM requests WHERE state='ACCEPTED' "
+                                    "ORDER BY accepted_at").fetchall()
+        return [RequestRecord(*row) for row in rows]
+
     def remember(self, nonce: str, ts: int) -> bool:
         with self._lock:
             cur = self._db.execute("INSERT OR IGNORE INTO nonces (nonce, ts) VALUES (?, ?)", (nonce, ts))
@@ -150,4 +390,4 @@ class JobStore:
             self._db.execute("DELETE FROM nonces WHERE ts < ?", (before_ts,))
 
 
-__all__ = ["JobRecord", "JobStore"]
+__all__ = ["JobRecord", "JobStore", "RequestIdConflict", "RequestRecord"]

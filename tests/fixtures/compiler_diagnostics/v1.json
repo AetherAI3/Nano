@@ -1,0 +1,18 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [],
+      "input": "v1.nano",
+      "irVersion": "1.0.0",
+      "sourceDigest": "sha256:eec9912268bc72918da1e1e4d2fc31910dc4f88af91623a9f7a259f001441582",
+      "success": true
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": true
+}

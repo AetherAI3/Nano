@@ -1,0 +1,308 @@
+{
+  "schema": "nano.qsearch.target-snapshot.v1",
+  "name": "ibm_fez",
+  "num_qubits": 6,
+  "instructions": {
+    "x": [
+      {
+        "qargs": [
+          0
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          1
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          2
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          3
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          4
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          5
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      }
+    ],
+    "sx": [
+      {
+        "qargs": [
+          0
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          1
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          2
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          3
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          4
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          5
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      }
+    ],
+    "rz": [
+      {
+        "qargs": [
+          0
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          1
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          2
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          3
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          4
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          5
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      }
+    ],
+    "measure": [
+      {
+        "qargs": [
+          0
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          1
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          2
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          3
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          4
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          5
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      }
+    ],
+    "reset": [
+      {
+        "qargs": [
+          0
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          1
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          2
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          3
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          4
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      },
+      {
+        "qargs": [
+          5
+        ],
+        "error": 0.01,
+        "duration": 1e-06
+      }
+    ],
+    "cz": [
+      {
+        "qargs": [
+          0,
+          1
+        ],
+        "error": 0.02,
+        "duration": 1e-05
+      },
+      {
+        "qargs": [
+          1,
+          2
+        ],
+        "error": 0.02,
+        "duration": 1e-05
+      },
+      {
+        "qargs": [
+          2,
+          3
+        ],
+        "error": 0.02,
+        "duration": 1e-05
+      },
+      {
+        "qargs": [
+          3,
+          4
+        ],
+        "error": 0.02,
+        "duration": 1e-05
+      },
+      {
+        "qargs": [
+          4,
+          5
+        ],
+        "error": 0.02,
+        "duration": 1e-05
+      }
+    ]
+  },
+  "timing_properties": {
+    "dt": null,
+    "granularity": 1,
+    "min_length": 1,
+    "pulse_alignment": 1,
+    "acquire_alignment": 1
+  },
+  "qubit_properties": [
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    },
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    },
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    },
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    },
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    },
+    {
+      "t1": 0.0001,
+      "t2": 0.0001,
+      "frequency": 5000000000.0
+    }
+  ]
+}

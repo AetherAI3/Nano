@@ -48,7 +48,7 @@ provenance = ["aether-protocol-c"]
 # stdlib; only the child-process engine imports these. ATLAS is loaded by path
 # (NANO_QSEARCH_ATLAS_PATH) and is not on PyPI. See docs/qsearch-service.md.
 quantum = ["qiskit==2.3.1", "qiskit-aer==0.17.2", "numpy>=1.26"]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "jsonschema>=4"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -67,6 +67,7 @@ include = ["nano*"]
 # The source/IR conformance and strategy corpora live alongside the package.
 # Ship them deliberately so installed distributions retain the documented assets.
 [tool.setuptools.package-data]
+nano_qsearch = ["schemas/*.json"]
 nano = [
   "examples/*.nano",
   "examples/*.json",
@@ -74,6 +75,8 @@ nano = [
   "library/*/*.json",
   "intent/schemas/*.json",
   "intent/fixtures/*.json",
+  "quantum/schemas/*.json",
+  "quantum/fixtures/*.json",
   "project/fixtures/*.json",
   "project/schemas/*.json",
 ]
