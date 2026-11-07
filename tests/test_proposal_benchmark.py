@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -136,8 +137,20 @@ def test_cli_refuses_the_locked_split_without_explicit_flag(tmp_path):
     assert result.returncode == 2 and not (tmp_path / "x.json").exists()
 
 
-def test_committed_baseline_report_replays_byte_for_byte():
-    committed = BENCH / "reports" / "baseline-dev.json"
-    expected = json.loads(committed.read_text(encoding="utf-8"))
-    replay = canonical_text(evaluate(["dev"], expected["repair_policy"]["id"], expected["label"])) + "\n"
-    assert replay == committed.read_text(encoding="utf-8").replace("\r\n", "\n")
+COMMITTED_REPORTS = sorted(p.name for p in (BENCH / "reports").glob("*.json") if "telemetry" not in p.name)
+
+
+def test_baseline_report_is_committed():
+    assert "baseline-dev.json" in COMMITTED_REPORTS
+
+
+@pytest.mark.parametrize("name", COMMITTED_REPORTS)
+def test_committed_reports_replay_byte_for_byte_and_match_their_hash(name):
+    committed = BENCH / "reports" / name
+    text = committed.read_text(encoding="utf-8").replace("\r\n", "\n")
+    expected = json.loads(text)
+    check_integrity(expected, load_json(BENCH / "manifest.json"))
+    replay = canonical_text(evaluate(expected["splits"], expected["repair_policy"]["id"], expected["label"])) + "\n"
+    assert replay == text
+    sidecar = (BENCH / "reports" / (name + ".sha256")).read_text(encoding="utf-8").split()[0]
+    assert sidecar == "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
