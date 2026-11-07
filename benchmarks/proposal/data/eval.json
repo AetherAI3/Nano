@@ -1,0 +1,2507 @@
+{
+ "case_schema": "nano.benchmark.proposal.case.v1",
+ "cases": [
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s01",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "check plan gamma-plan"
+   },
+   "recorded_repair": null,
+   "request": "check plan gamma-plan",
+   "subset": "quantum",
+   "tags": [
+    "canonical"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:gamma"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s02",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "validate quantum plan spy using evidence bank bank-b"
+    },
+    "text": "{\"args\":{\"evidence_bank_ref\":\"evidence-bank:b\",\"plan_id\":\"plan:spy-research\"},\"catalog_snapshot\":{\"resources\":{\"bank\":{\"digest\":\"sha256:eef8807308b34c1c306179948b0c2f1c2b58520ad3a4cbfe28113be8cbe9c84e\",\"id\":\"evidence-bank:b\",\"schema_version\":\"evidence-bank/1\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:spy-bits\",\"id\":\"plan:spy-research\",\"max_circuits\":1,\"max_shots\":100,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:spy-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"pure\"],\"entities\":[{\"canonical\":\"plan:spy-research\",\"kind\":\"plan\",\"raw\":\"spy\",\"span\":[22,25]},{\"canonical\":\"evidence-bank:b\",\"kind\":\"evidence_bank\",\"raw\":\"bank-b\",\"span\":[46,52]}],\"operation\":\"check\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:fc0f15e078e0aa6cddb9e4ab1a009ab8a466349774c7264a45435e26bfd5ed77\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"validate quantum plan spy using evidence bank bank-b\",\"source_hash\":\"sha256:d80f32baa0896af11ec2066b80f5ed61285f488b9fef2a2d556effcb672ed239\",\"steps\":[{\"args\":{\"evidence_bank_ref\":\"evidence-bank:b\",\"plan_id\":\"plan:spy-research\"},\"capability\":\"quantum.check\",\"kind\":\"pure\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Validate the spy research plan against bank B.",
+   "subset": "quantum",
+   "tags": [
+    "evidence",
+    "json",
+    "ticker-collision"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": {
+     "digest": "sha256:eef8807308b34c1c306179948b0c2f1c2b58520ad3a4cbfe28113be8cbe9c84e",
+     "ref": "evidence-bank:b"
+    },
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:spy-research"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s03",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "compile plan alpha on aer"
+   },
+   "recorded_repair": null,
+   "request": "compile plan alpha on aer",
+   "subset": "quantum",
+   "tags": [
+    "alias"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_compile"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "compile",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s04",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "build quantum plan beta-plan on local using evidence bank bank-a"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"evidence_bank_ref\":\"evidence-bank:a\",\"plan_id\":\"plan:beta\"},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"bank\":{\"digest\":\"sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998\",\"id\":\"evidence-bank:a\",\"schema_version\":\"evidence-bank/1\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_compile\"],\"entities\":[{\"canonical\":\"plan:beta\",\"kind\":\"plan\",\"raw\":\"beta-plan\",\"span\":[19,28]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[32,37]},{\"canonical\":\"evidence-bank:a\",\"kind\":\"evidence_bank\",\"raw\":\"bank-a\",\"span\":[58,64]}],\"operation\":\"compile\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:a3409991650c795b68bcbae4db58ed201756649389fac98227c8f01e457ba44e\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"build quantum plan beta-plan on local using evidence bank bank-a\",\"source_hash\":\"sha256:bb84f27741174d4fab7099a5733340d48925823c8c4e1d3e30f52244fb417e9b\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"evidence_bank_ref\":\"evidence-bank:a\",\"plan_id\":\"plan:beta\"},\"capability\":\"quantum.compile\",\"kind\":\"local_compile\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Build beta-plan locally with evidence bank A.",
+   "subset": "quantum",
+   "tags": [
+    "evidence",
+    "json",
+    "paraphrase"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_compile"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": {
+     "digest": "sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998",
+     "ref": "evidence-bank:a"
+    },
+    "nodes": null,
+    "observation": null,
+    "operation": "compile",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s05",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate quantum plan spy on aer with 100 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "simulate quantum plan spy on aer with 100 shots 1 circuit 0 qpu seconds",
+   "subset": "quantum",
+   "tags": [
+    "at-ceiling",
+    "ticker-collision"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:spy-research"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s06",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "simulate plan alpha-plan on local with 2000 shots 4 circuits 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":4,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":2000},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[14,24]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[28,33]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:1898daabebd0fb6d24e264c407a590c3422fe4d59509b792b0002e57ace0a2a4\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"2000 shots\",\"span\":[39,49],\"unit\":\"shot\",\"value\":2000},{\"kind\":\"circuits\",\"raw\":\"4 circuits\",\"span\":[50,60],\"unit\":\"circuit\",\"value\":4},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[61,74],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan alpha-plan on local with 2000 shots 4 circuits 0 qpu seconds\",\"source_hash\":\"sha256:56e48a9baa896fe5f5e16505108b3b2cfe9c1e4526e2180240b4f426a1d710d7\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":4,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":2000},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Simulate alpha-plan locally at its full 2000-shot, 4-circuit ceiling with 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "at-ceiling",
+    "json"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 4,
+     "qpu_seconds": 0,
+     "shots": 2000
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s07",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan beta-plan on aer with 0 qpu seconds 2 circuits 250 shots"
+   },
+   "recorded_repair": null,
+   "request": "simulate plan beta-plan on aer with 0 qpu seconds 2 circuits 250 shots",
+   "subset": "quantum",
+   "tags": [
+    "quantity-order"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 2,
+     "qpu_seconds": 0,
+     "shots": 250
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s08",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "prepare submission plan beta-plan on torino with 500 shots 2 circuits 1.25 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"ibm_torino\",\"circuits\":2,\"plan_id\":\"plan:beta\",\"qpu_seconds\":1.25,\"shots\":500},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"ibm_torino\",\"kind\":\"hardware\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"proposal_only\"],\"entities\":[{\"canonical\":\"plan:beta\",\"kind\":\"plan\",\"raw\":\"beta-plan\",\"span\":[24,33]},{\"canonical\":\"ibm_torino\",\"kind\":\"backend\",\"raw\":\"torino\",\"span\":[37,43]}],\"operation\":\"prepare_submission\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:aa3ba60dc1b1a3c72ba12214c51597d12eda2cb065b8c55440542981393a550d\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"500 shots\",\"span\":[49,58],\"unit\":\"shot\",\"value\":500},{\"kind\":\"circuits\",\"raw\":\"2 circuits\",\"span\":[59,69],\"unit\":\"circuit\",\"value\":2},{\"kind\":\"qpu_seconds\",\"raw\":\"1.25 qpu seconds\",\"span\":[70,86],\"unit\":\"qpu_second\",\"value\":1.25}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"prepare submission plan beta-plan on torino with 500 shots 2 circuits 1.25 qpu seconds\",\"source_hash\":\"sha256:23709a54fdb4ac95ff298d761efc3570d0a9e94fe1b612b7572678fa7888d35a\",\"steps\":[{\"args\":{\"backend\":\"ibm_torino\",\"circuits\":2,\"plan_id\":\"plan:beta\",\"qpu_seconds\":1.25,\"shots\":500},\"capability\":\"quantum.prepare_submission\",\"kind\":\"proposal_only\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Prepare beta-plan for torino: 500 shots, 2 circuits, 1.25 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "fractional-qpu",
+    "json"
+   ],
+   "task": {
+    "authorized_effects": [
+     "proposal_only"
+    ],
+    "ceiling": {
+     "circuits": 2,
+     "qpu_seconds": 1.25,
+     "shots": 500
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "prepare_submission",
+    "resources": {
+     "backend": "ibm_torino",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s09",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "prepare submission quantum plan spy on ibm-kyiv with 1 shot 1 circuit 1 qpu second"
+   },
+   "recorded_repair": null,
+   "request": "prepare submission quantum plan spy on ibm-kyiv with 1 shot 1 circuit 1 qpu second",
+   "subset": "quantum",
+   "tags": [
+    "singular"
+   ],
+   "task": {
+    "authorized_effects": [
+     "proposal_only"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 1,
+     "shots": 1
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "prepare_submission",
+    "resources": {
+     "backend": "ibm_kyiv",
+     "plan_id": "plan:spy-research"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s10",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "inspect status job job-v"
+   },
+   "recorded_repair": null,
+   "request": "inspect status job job-v",
+   "subset": "quantum",
+   "tags": [
+    "observation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "verified",
+    "operation": "inspect_status",
+    "resources": {
+     "job_id": "job:v"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s11",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "show quantum job job-f status"
+    },
+    "text": "{\"args\":{\"job_id\":\"job:f\"},\"catalog_snapshot\":{\"resources\":{\"job\":{\"id\":\"job:f\",\"plan_id\":\"plan:beta\",\"state\":\"failed\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"read_supplied_state\"],\"entities\":[{\"canonical\":\"job:f\",\"kind\":\"job\",\"raw\":\"job-f\",\"span\":[17,22]}],\"operation\":\"inspect_status\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:82f00e85b8b641a15c4d3e01f34b58e21e8be907a8b13fce80bff02d8f2bcec8\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"show quantum job job-f status\",\"source_hash\":\"sha256:f6aa9ffa80ad2f9be436db4e80ec40e2bd30df12237bba5513c9d455db7724f1\",\"steps\":[{\"args\":{\"job_id\":\"job:f\"},\"capability\":\"quantum.inspect_status\",\"kind\":\"read_supplied_state\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Is quantum job job-f still running?",
+   "subset": "quantum",
+   "tags": [
+    "json",
+    "observation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "failed",
+    "operation": "inspect_status",
+    "resources": {
+     "job_id": "job:f"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s12",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "describe receipt rcpt-v"
+   },
+   "recorded_repair": null,
+   "request": "describe receipt rcpt-v",
+   "subset": "quantum",
+   "tags": [
+    "observation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "verified",
+    "operation": "explain_receipt",
+    "resources": {
+     "receipt_id": "receipt:v"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s13",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "explain receipt rcpt-p"
+    },
+    "text": "{\"args\":{\"receipt_id\":\"receipt:p\"},\"catalog_snapshot\":{\"resources\":{\"job\":{\"id\":\"job:p\",\"plan_id\":\"plan:beta\",\"state\":\"accounting-pending\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"},\"receipt\":{\"id\":\"receipt:p\",\"job_id\":\"job:p\",\"plan_id\":\"plan:beta\",\"state\":\"accounting-pending\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"read_supplied_state\"],\"entities\":[{\"canonical\":\"receipt:p\",\"kind\":\"receipt\",\"raw\":\"rcpt-p\",\"span\":[16,22]}],\"operation\":\"explain_receipt\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:9e72dff96f57b9a13b81e7760bdb29f9b9dc6efa5c60f23685875b71755cf1db\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"explain receipt rcpt-p\",\"source_hash\":\"sha256:9c0a104fbff2181dd6af05f352aed43fe82dea66a94bbb0ea08fbe273f7cb3a7\",\"steps\":[{\"args\":{\"receipt_id\":\"receipt:p\"},\"capability\":\"quantum.explain_receipt\",\"kind\":\"read_supplied_state\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Explain receipt rcpt-p.",
+   "subset": "quantum",
+   "tags": [
+    "json",
+    "observation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "accounting-pending",
+    "operation": "explain_receipt",
+    "resources": {
+     "receipt_id": "receipt:p"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s14",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "show status job job-c"
+   },
+   "recorded_repair": null,
+   "request": "show status job job-c",
+   "subset": "quantum",
+   "tags": [
+    "observation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "cancelled",
+    "operation": "inspect_status",
+    "resources": {
+     "job_id": "job:c"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-q-s15",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "check quantum plan alpha using evidence bank bank-a"
+    },
+    "text": "{\"args\":{\"evidence_bank_ref\":\"evidence-bank:a\",\"plan_id\":\"plan:alpha\"},\"catalog_snapshot\":{\"resources\":{\"bank\":{\"digest\":\"sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998\",\"id\":\"evidence-bank:a\",\"schema_version\":\"evidence-bank/1\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"pure\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha\",\"span\":[19,24]},{\"canonical\":\"evidence-bank:a\",\"kind\":\"evidence_bank\",\"raw\":\"bank-a\",\"span\":[45,51]}],\"operation\":\"check\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:80b115e4d386c0c755a3e484bc1ceb40ccc34109e0c19dcd2a90600fe397499c\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"check quantum plan alpha using evidence bank bank-a\",\"source_hash\":\"sha256:32c6272507b73621ab652c64d6b4fafa01819bbbfa4ee5fc2362d4dae78b934f\",\"steps\":[{\"args\":{\"evidence_bank_ref\":\"evidence-bank:a\",\"plan_id\":\"plan:alpha\"},\"capability\":\"quantum.check\",\"kind\":\"pure\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Check plan alpha with evidence bank A.",
+   "subset": "quantum",
+   "tags": [
+    "alias",
+    "evidence",
+    "json"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": {
+     "digest": "sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998",
+     "ref": "evidence-bank:a"
+    },
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-s16",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "please check quantum plan gamma-plan"
+   },
+   "recorded_repair": null,
+   "request": "Please check quantum plan gamma-plan.",
+   "subset": "quantum",
+   "tags": [
+    "out-of-grammar"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:gamma"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-s17",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "compile quantum plan alpha-plan on the local simulator"
+   },
+   "recorded_repair": null,
+   "request": "Compile alpha-plan on the local simulator.",
+   "subset": "quantum",
+   "tags": [
+    "out-of-grammar"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_compile"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "compile",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-n-s01",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Calm { every 5m { if RSI > 80 { observe() } } }"
+   },
+   "recorded_repair": null,
+   "request": "Every 5 minutes, observe when RSI is above 80.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [
+     "OBSERVE"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "5m",
+      "type": "Schedule"
+     },
+     {
+      "operator": ">",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 80
+     },
+     {
+      "action": "OBSERVE",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-n-s02",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Cut { every 1m { if RSI > 75 { sell(BTC) } } }"
+   },
+   "recorded_repair": null,
+   "request": "Every minute, propose selling BTC when RSI is above 75.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [
+     "SELL"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "1m",
+      "type": "Schedule"
+     },
+     {
+      "operator": ">",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 75
+     },
+     {
+      "action": "SELL",
+      "asset": "BTC",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  },
+  {
+   "class": "supported_unambiguous",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": null
+   },
+   "id": "eval-n-s03",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Add { every 1h { if RSI < 20 { buy(ETH) } } }"
+   },
+   "recorded_repair": null,
+   "request": "Hourly, propose buying ETH when RSI is below 20.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [
+     "BUY"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "1h",
+      "type": "Schedule"
+     },
+     {
+      "operator": "<",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 20
+     },
+     {
+      "action": "BUY",
+      "asset": "ETH",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "AMBIGUOUS_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a01",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "compile or build plan beta-plan on local"
+   },
+   "recorded_repair": null,
+   "request": "Compile or build beta-plan on local.",
+   "subset": "quantum",
+   "tags": [
+    "ambiguous"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "AMBIGUOUS_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a02",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan beta-plan on local or aer with 10 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Simulate beta-plan on local or aer.",
+   "subset": "quantum",
+   "tags": [
+    "ambiguous"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "NEGATED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a03",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "don't compile plan gamma-plan on local"
+   },
+   "recorded_repair": null,
+   "request": "Don't compile gamma-plan.",
+   "subset": "quantum",
+   "tags": [
+    "negation"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "NEGATED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a04",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "no simulation of plan alpha-plan please"
+   },
+   "recorded_repair": null,
+   "request": "No simulation of alpha-plan, please.",
+   "subset": "quantum",
+   "tags": [
+    "negation"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "MISSING_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a05",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "prepare submission plan beta-plan on kyiv"
+   },
+   "recorded_repair": null,
+   "request": "Prepare beta-plan for kyiv.",
+   "subset": "quantum",
+   "tags": [
+    "missing-bounds"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "MISSING_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a06",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan spy on local with 50 shots"
+   },
+   "recorded_repair": null,
+   "request": "Simulate spy locally with 50 shots.",
+   "subset": "quantum",
+   "tags": [
+    "missing-bounds"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "INVALID_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a07",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "prepare submission plan alpha-plan on kyiv with 100 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Prepare alpha-plan for kyiv with zero QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "resource-violation",
+    "zero-budget"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "INVALID_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a08",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan alpha-plan on local with 10 shots 1 circuit 1 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Simulate alpha-plan locally but charge 1 QPU second.",
+   "subset": "quantum",
+   "tags": [
+    "resource-violation"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "INVALID_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a09",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate quantum plan spy on aer with 101 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Simulate spy on aer with 101 shots.",
+   "subset": "quantum",
+   "tags": [
+    "resource-violation"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a10",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate bell pair with 100 shots"
+   },
+   "recorded_repair": null,
+   "request": "Simulate a Bell pair.",
+   "subset": "quantum",
+   "tags": [
+    "unsupported-kernel"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a11",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "run quantum plan alpha-plan on kyiv"
+   },
+   "recorded_repair": null,
+   "request": "Run alpha-plan on kyiv.",
+   "subset": "quantum",
+   "tags": [
+    "live-submission"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a12",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "cancel job job-q"
+   },
+   "recorded_repair": null,
+   "request": "Cancel job job-q.",
+   "subset": "quantum",
+   "tags": [
+    "unsupported-operation"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a13",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "show AAPL job status"
+   },
+   "recorded_repair": null,
+   "request": "Show AAPL job status.",
+   "subset": "quantum",
+   "tags": [
+    "market",
+    "ticker-collision"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "market",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNKNOWN_REFERENCE",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a14",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "check plan msft"
+   },
+   "recorded_repair": null,
+   "request": "Check the MSFT plan.",
+   "subset": "quantum",
+   "tags": [
+    "market",
+    "ticker-collision"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "market",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a15",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "explain receipt for spy"
+   },
+   "recorded_repair": null,
+   "request": "Explain the receipt for SPY.",
+   "subset": "quantum",
+   "tags": [
+    "market",
+    "ticker-collision"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "market",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "UNKNOWN_REFERENCE",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a16",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "describe receipt rcpt-x"
+   },
+   "recorded_repair": null,
+   "request": "Describe receipt rcpt-x.",
+   "subset": "quantum",
+   "tags": [
+    "unknown-resource"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "MISSING_REFERENCE",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-a17",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "compile plan gamma-plan"
+   },
+   "recorded_repair": null,
+   "request": "Compile gamma-plan.",
+   "subset": "quantum",
+   "tags": [
+    "missing-reference"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "RESOURCE_LIMIT",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-n-a01",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Deep { let value = (((((((((((((((((((((((((((((((((true))))))))))))))))))))))))))))))))) }"
+   },
+   "recorded_repair": null,
+   "request": "Nest a boolean thirty-three parentheses deep.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "LOOKAHEAD_ERROR",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-n-a02",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Ahead { input close: series<float> every 5m { if close[-2] > 0 { observe() } } }"
+   },
+   "recorded_repair": null,
+   "request": "Observe when the close two bars ahead is positive.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "ambiguous_or_unsupported",
+   "expected": {
+    "category": "CAPABILITY_ERROR",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-n-a03",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Ring { every 5m { escalate \"ops\" } }"
+   },
+   "recorded_repair": null,
+   "request": "Page the ops team every five minutes.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum"
+   ],
+   "task": {
+    "authorized_effects": [],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": null,
+    "resources": {},
+    "supported": false
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "INVALID_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m01",
+   "note": "The bounded tail swallows the suffix and rejects it.",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan spy on local with 100 shots 1 circuit 0 qpu seconds && submit quantum plan spy on kyiv"
+   },
+   "recorded_repair": null,
+   "request": "Simulate spy locally with 100 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "trailing-command"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:spy-research"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m02",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "check plan gamma-plan\nprepare submission plan gamma-plan on kyiv with 1 shot 1 circuit 1 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Check plan gamma-plan.",
+   "subset": "quantum",
+   "tags": [
+    "trailing-command"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:gamma"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "UNSUPPORTED_COMMAND",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m03",
+   "note": "A spelling suggestion is never applied; the abstention is final.",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simlate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": {
+    "kind": "quantum_source",
+    "text": "simulate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds"
+   },
+   "request": "Simulate alpha-plan on local with 100 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "repair-refused",
+    "typo"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "task_binding",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m04",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "explain receipt rcpt-v"
+    },
+    "text": "{\"args\":{\"receipt_id\":\"receipt:v\"},\"catalog_snapshot\":{\"resources\":{\"job\":{\"id\":\"job:v\",\"plan_id\":\"plan:alpha\",\"state\":\"verified\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"},\"receipt\":{\"id\":\"receipt:v\",\"job_id\":\"job:v\",\"plan_id\":\"plan:alpha\",\"state\":\"verified\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"read_supplied_state\"],\"entities\":[{\"canonical\":\"receipt:v\",\"kind\":\"receipt\",\"raw\":\"rcpt-v\",\"span\":[16,22]}],\"operation\":\"explain_receipt\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:bc5dbcb4391e28ad91a14533457237b327808578e0d645ac9ee7ed19281c45cc\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"explain receipt rcpt-v\",\"source_hash\":\"sha256:e67af297c12be48b17e09b317c05cd92657b216af9fb336e1164b372e1463ae7\",\"steps\":[{\"args\":{\"receipt_id\":\"receipt:v\"},\"capability\":\"quantum.explain_receipt\",\"kind\":\"read_supplied_state\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "inspect status job job-q",
+   "subset": "quantum",
+   "tags": [
+    "negative-control",
+    "wrong-operation"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "queued",
+    "operation": "inspect_status",
+    "resources": {
+     "job_id": "job:q"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": "constant_field"
+   },
+   "id": "eval-q-m05",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [
+      "operation_schema"
+     ],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "inspect status job job-v"
+    },
+    "text": "{\"args\":{\"job_id\":\"job:v\"},\"catalog_snapshot\":{\"resources\":{\"job\":{\"id\":\"job:v\",\"plan_id\":\"plan:alpha\",\"state\":\"verified\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"read_supplied_state\"],\"entities\":[{\"canonical\":\"job:v\",\"kind\":\"job\",\"raw\":\"job-v\",\"span\":[19,24]}],\"operation\":\"inspect_status\",\"plan_digest\":\"sha256:4bd915ac1767b10789e0bf45493773b4f475f605cc9eeeeb1554e2cb9f99d3e8\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"inspect status job job-v\",\"source_hash\":\"sha256:c826d2e1acda21eaf931afc0974dc19db1bb709057da3e480c048a707bfc89cc\",\"steps\":[{\"args\":{\"job_id\":\"job:v\"},\"capability\":\"quantum.inspect_status\",\"kind\":\"read_supplied_state\"}]}"
+   },
+   "recorded_repair": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "inspect status job job-v"
+    },
+    "text": "{\"args\":{\"job_id\":\"job:v\"},\"catalog_snapshot\":{\"resources\":{\"job\":{\"id\":\"job:v\",\"plan_id\":\"plan:alpha\",\"state\":\"verified\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"read_supplied_state\"],\"entities\":[{\"canonical\":\"job:v\",\"kind\":\"job\",\"raw\":\"job-v\",\"span\":[19,24]}],\"operation\":\"inspect_status\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:4bd915ac1767b10789e0bf45493773b4f475f605cc9eeeeb1554e2cb9f99d3e8\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"inspect status job job-v\",\"source_hash\":\"sha256:c826d2e1acda21eaf931afc0974dc19db1bb709057da3e480c048a707bfc89cc\",\"steps\":[{\"args\":{\"job_id\":\"job:v\"},\"capability\":\"quantum.inspect_status\",\"kind\":\"read_supplied_state\"}]}"
+   },
+   "request": "inspect status job job-v",
+   "subset": "quantum",
+   "tags": [
+    "missing-field",
+    "repairable"
+   ],
+   "task": {
+    "authorized_effects": [
+     "read_supplied_state"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": "verified",
+    "operation": "inspect_status",
+    "resources": {
+     "job_id": "job:v"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "task_binding",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m06",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "simulate plan alpha-plan on local with 200 shots 1 circuit 0 qpu seconds"
+   },
+   "recorded_repair": null,
+   "request": "Simulate alpha-plan on local with 100 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "wrong-ceiling"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "task_binding",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m07",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "compile plan beta-plan on local"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:beta\"},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_compile\"],\"entities\":[{\"canonical\":\"plan:beta\",\"kind\":\"plan\",\"raw\":\"beta-plan\",\"span\":[13,22]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[26,31]}],\"operation\":\"compile\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:e4bf49f15b8c70b32d193b56abefdbd55a95df69d12506995b5df88474ac5a0f\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"compile plan beta-plan on local\",\"source_hash\":\"sha256:b4e610d8c0cc096101120f30ce5a06803540edc761f904a1d2945e8a285ed9cb\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:beta\"},\"capability\":\"quantum.compile\",\"kind\":\"local_compile\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Compile beta-plan locally using evidence bank A.",
+   "subset": "quantum",
+   "tags": [
+    "dropped-evidence"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_compile"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": {
+     "digest": "sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998",
+     "ref": "evidence-bank:a"
+    },
+    "nodes": null,
+    "observation": null,
+    "operation": "compile",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "schema_mismatch",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m08",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [
+      [
+       "args.qpu_seconds",
+       0
+      ],
+      [
+       "steps.0.args.qpu_seconds",
+       0
+      ],
+      [
+       "quantities.2.value",
+       0
+      ]
+     ],
+     "source": "prepare submission plan alpha-plan on kyiv with 100 shots 1 circuit 2 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"ibm_kyiv\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":100},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"ibm_kyiv\",\"kind\":\"hardware\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"proposal_only\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[24,34]},{\"canonical\":\"ibm_kyiv\",\"kind\":\"backend\",\"raw\":\"kyiv\",\"span\":[38,42]}],\"operation\":\"prepare_submission\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:29e7000b68390e1cb5afd87fc543ffe0b7a6b8f395bf167ade3c340c26df461f\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"100 shots\",\"span\":[48,57],\"unit\":\"shot\",\"value\":100},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[58,67],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"2 qpu seconds\",\"span\":[68,81],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"prepare submission plan alpha-plan on kyiv with 100 shots 1 circuit 2 qpu seconds\",\"source_hash\":\"sha256:fe6692c6d0afdd55e75ed5d8b8f2586132f2e126f762ce1e96dfde2969a632b5\",\"steps\":[{\"args\":{\"backend\":\"ibm_kyiv\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":100},\"capability\":\"quantum.prepare_submission\",\"kind\":\"proposal_only\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Prepare alpha-plan for kyiv with 100 shots, 1 circuit, 2 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "fabricated-zero-budget",
+    "negative-control"
+   ],
+   "task": {
+    "authorized_effects": [
+     "proposal_only"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 2,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "prepare_submission",
+    "resources": {
+     "backend": "ibm_kyiv",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "schema_mismatch",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m09",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [
+      [
+       "operation",
+       "check"
+      ],
+      [
+       "args",
+       {
+        "plan_id": "plan:alpha"
+       }
+      ],
+      [
+       "diagnostics",
+       []
+      ],
+      [
+       "effects",
+       [
+        "pure"
+       ]
+      ],
+      [
+       "steps",
+       [
+        {
+         "args": {
+          "plan_id": "plan:alpha"
+         },
+         "capability": "quantum.check",
+         "kind": "pure"
+        }
+       ]
+      ]
+     ],
+     "source": "check plan alpha-plan please"
+    },
+    "text": "{\"args\":{\"plan_id\":\"plan:alpha\"},\"catalog_snapshot\":{\"resources\":{},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"pure\"],\"entities\":[],\"operation\":\"check\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:2cf479efd71ba2edaaf745c6846ed846a19686200fa41a9e6ac58862810f0156\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"check plan alpha-plan please\",\"source_hash\":\"sha256:0652ea04f7a30593a56125ba3378e3041a7c0426cfc8467905036f5a4a717e5a\",\"steps\":[{\"args\":{\"plan_id\":\"plan:alpha\"},\"capability\":\"quantum.check\",\"kind\":\"pure\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Check plan alpha-plan.",
+   "subset": "quantum",
+   "tags": [
+    "forged-executable"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "schema_mismatch",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m10",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [
+      [
+       "effects",
+       [
+        "proposal_only"
+       ]
+      ],
+      [
+       "steps.0.kind",
+       "proposal_only"
+      ]
+     ],
+     "source": "check plan alpha-plan"
+    },
+    "text": "{\"args\":{\"plan_id\":\"plan:alpha\"},\"catalog_snapshot\":{\"resources\":{\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"proposal_only\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[11,21]}],\"operation\":\"check\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:fd1e9e214a38e031f7af7ed87e871c3db47cfe0ee48971978013dce647a0ba58\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"check plan alpha-plan\",\"source_hash\":\"sha256:23deb84ef67c1786f2e0a64a768d106540c130d854661477f7fcbcd48ba7ee9e\",\"steps\":[{\"args\":{\"plan_id\":\"plan:alpha\"},\"capability\":\"quantum.check\",\"kind\":\"proposal_only\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Check plan alpha-plan.",
+   "subset": "quantum",
+   "tags": [
+    "effect-escalation",
+    "host-authority"
+   ],
+   "task": {
+    "authorized_effects": [
+     "pure"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "check",
+    "resources": {
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "json_duplicate_key",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m11",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [
+      [
+       "\"resources\":{\"backend\":{\"id\":\"ibm_torino\"",
+       "\"resources\":{\"backend\":{\"id\":\"ibm_kyiv\",\"id\":\"ibm_torino\""
+      ]
+     ],
+     "replace_all": [],
+     "sets": [],
+     "source": "prepare submission plan beta-plan on torino with 300 shots 1 circuit 1 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"ibm_torino\",\"circuits\":1,\"plan_id\":\"plan:beta\",\"qpu_seconds\":1,\"shots\":300},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"ibm_kyiv\",\"id\":\"ibm_torino\",\"kind\":\"hardware\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"proposal_only\"],\"entities\":[{\"canonical\":\"plan:beta\",\"kind\":\"plan\",\"raw\":\"beta-plan\",\"span\":[24,33]},{\"canonical\":\"ibm_torino\",\"kind\":\"backend\",\"raw\":\"torino\",\"span\":[37,43]}],\"operation\":\"prepare_submission\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:bfa5bed39b40f6a0a02f1a438803c321e5b310f1eb88237fcd167c30aa6df802\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"300 shots\",\"span\":[49,58],\"unit\":\"shot\",\"value\":300},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[59,68],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"1 qpu seconds\",\"span\":[69,82],\"unit\":\"qpu_second\",\"value\":1}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"prepare submission plan beta-plan on torino with 300 shots 1 circuit 1 qpu seconds\",\"source_hash\":\"sha256:57231079a50bcff37da30cf02d4364cac29df27bf3dcd8164a5e07f2f8e55153\",\"steps\":[{\"args\":{\"backend\":\"ibm_torino\",\"circuits\":1,\"plan_id\":\"plan:beta\",\"qpu_seconds\":1,\"shots\":300},\"capability\":\"quantum.prepare_submission\",\"kind\":\"proposal_only\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Prepare beta-plan for torino with 300 shots, 1 circuit, 1 QPU second.",
+   "subset": "quantum",
+   "tags": [
+    "duplicate-key"
+   ],
+   "task": {
+    "authorized_effects": [
+     "proposal_only"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 1,
+     "shots": 300
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "prepare_submission",
+    "resources": {
+     "backend": "ibm_torino",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "schema_mismatch",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m12",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [
+      [
+       "args.circuits",
+       true
+      ],
+      [
+       "steps.0.args.circuits",
+       true
+      ],
+      [
+       "quantities.1.value",
+       true
+      ]
+     ],
+     "source": "simulate plan beta-plan on local with 10 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":true,\"plan_id\":\"plan:beta\",\"qpu_seconds\":0,\"shots\":10},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:beta-bits\",\"id\":\"plan:beta\",\"max_circuits\":2,\"max_shots\":500,\"operation_kind\":\"optimize_qubo\",\"operation_ref\":\"operation:beta-qubo\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:beta\",\"kind\":\"plan\",\"raw\":\"beta-plan\",\"span\":[14,23]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[27,32]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:516c3ff397ad196dec308c9b4d5c3ee9fc4b28914e767cc9432f1b53a6dcfaa5\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"10 shots\",\"span\":[38,46],\"unit\":\"shot\",\"value\":10},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[47,56],\"unit\":\"circuit\",\"value\":true},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[57,70],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan beta-plan on local with 10 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:5bade04bee467a0966d0d908b819051e0b3c1a47fc97dd083ed2a9516e068105\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":true,\"plan_id\":\"plan:beta\",\"qpu_seconds\":0,\"shots\":10},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Simulate beta-plan on local with 10 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "bool-quantity"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 10
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:beta"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "json_nonfinite",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m13",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [
+      [
+       "\"shots\":100",
+       "\"shots\":NaN"
+      ]
+     ],
+     "sets": [],
+     "source": "simulate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":NaN},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[14,24]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[28,33]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:0f5d9f4283ba275a2776a66d99c75bd004038f48c9c6c68b95b46c3e1454e065\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"100 shots\",\"span\":[39,48],\"unit\":\"shot\",\"value\":100},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[49,58],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[59,72],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:8d4a138c88185fa787cf61786252a53cd1058db485d146a552ce8d088c057b45\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":NaN},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]}"
+   },
+   "recorded_repair": null,
+   "request": "Simulate alpha-plan on local with 100 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "nonfinite"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "INVALID_BOUNDS",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m14",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_source",
+    "text": "prepare submission plan alpha-plan on kyiv with 100 shots 1 circuit 2 qpu secs"
+   },
+   "recorded_repair": null,
+   "request": "Prepare alpha-plan for kyiv with 100 shots, 1 circuit, 2 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "unit-error"
+   ],
+   "task": {
+    "authorized_effects": [
+     "proposal_only"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 2,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "prepare_submission",
+    "resources": {
+     "backend": "ibm_kyiv",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "schema_mismatch",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m15",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [
+      [
+       "operation_schema",
+       "nano.quantum.operations.v0"
+      ]
+     ],
+     "source": "compile plan alpha on aer"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:alpha\"},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_compile\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha\",\"span\":[13,18]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"aer\",\"span\":[22,25]}],\"operation\":\"compile\",\"operation_schema\":\"nano.quantum.operations.v0\",\"plan_digest\":\"sha256:351f87549ff26dcf10587582fba84f60632a8c5ae9f69f6a40ae7752ce8137ec\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"compile plan alpha on aer\",\"source_hash\":\"sha256:2a3d4441ce0d80a324d5a2064176938038b8669bcf20db4514053e2bcc84514d\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:alpha\"},\"capability\":\"quantum.compile\",\"kind\":\"local_compile\"}]}"
+   },
+   "recorded_repair": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "compile plan alpha on aer"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:alpha\"},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_compile\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha\",\"span\":[13,18]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"aer\",\"span\":[22,25]}],\"operation\":\"compile\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:351f87549ff26dcf10587582fba84f60632a8c5ae9f69f6a40ae7752ce8137ec\",\"profile\":\"quantum\",\"quantities\":[],\"schema\":\"nano.quantum.command.v1\",\"source\":\"compile plan alpha on aer\",\"source_hash\":\"sha256:2a3d4441ce0d80a324d5a2064176938038b8669bcf20db4514053e2bcc84514d\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"plan_id\":\"plan:alpha\"},\"capability\":\"quantum.compile\",\"kind\":\"local_compile\"}]}"
+   },
+   "request": "compile plan alpha on aer",
+   "subset": "quantum",
+   "tags": [
+    "repair-refused",
+    "stale-schema"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_compile"
+    ],
+    "ceiling": null,
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "compile",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "json_syntax",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-q-m16",
+   "note": "The recorded repair also changes the ceiling.",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [
+      [
+       "\"}]}",
+       "\"}],}"
+      ]
+     ],
+     "replace_all": [],
+     "sets": [],
+     "source": "simulate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":100},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[14,24]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[28,33]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:0f5d9f4283ba275a2776a66d99c75bd004038f48c9c6c68b95b46c3e1454e065\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"100 shots\",\"span\":[39,48],\"unit\":\"shot\",\"value\":100},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[49,58],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[59,72],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan alpha-plan on local with 100 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:8d4a138c88185fa787cf61786252a53cd1058db485d146a552ce8d088c057b45\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":100},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}],}"
+   },
+   "recorded_repair": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "simulate plan alpha-plan on local with 200 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":200},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:alpha-bits\",\"id\":\"plan:alpha\",\"max_circuits\":4,\"max_shots\":2000,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:alpha-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:alpha\",\"kind\":\"plan\",\"raw\":\"alpha-plan\",\"span\":[14,24]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"local\",\"span\":[28,33]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:4fafe7f456c67fb2cbe68fb20ca87c2191bee9df6b4e6ea667f0fab1ca44a834\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"200 shots\",\"span\":[39,48],\"unit\":\"shot\",\"value\":200},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[49,58],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[59,72],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan alpha-plan on local with 200 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:720ff41fa97e746397ee06c9fbed33ab2512563b5d3419548a57e7dc191d563f\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:alpha\",\"qpu_seconds\":0,\"shots\":200},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]}"
+   },
+   "request": "Simulate alpha-plan on local with 100 shots, 1 circuit, 0 QPU seconds.",
+   "subset": "quantum",
+   "tags": [
+    "repair-refused",
+    "syntax"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 100
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:alpha"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": "json_unclosed_object"
+   },
+   "id": "eval-q-m17",
+   "note": "",
+   "proposal": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [
+      [
+       "\"}]}",
+       "\"}]"
+      ]
+     ],
+     "replace_all": [],
+     "sets": [],
+     "source": "simulate plan spy on aer with 50 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:spy-research\",\"qpu_seconds\":0,\"shots\":50},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:spy-bits\",\"id\":\"plan:spy-research\",\"max_circuits\":1,\"max_shots\":100,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:spy-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:spy-research\",\"kind\":\"plan\",\"raw\":\"spy\",\"span\":[14,17]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"aer\",\"span\":[21,24]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:87c88fd9a0673c24965146d9fc227cbdc8a4da46d2339f25a70b750b704091ae\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"50 shots\",\"span\":[30,38],\"unit\":\"shot\",\"value\":50},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[39,48],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[49,62],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan spy on aer with 50 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:aa72bcbdab7c575d68a5bac282233a5e67c3d3e1d10fd0395335af3d5d69db25\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:spy-research\",\"qpu_seconds\":0,\"shots\":50},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]"
+   },
+   "recorded_repair": {
+    "kind": "quantum_command_json",
+    "recipe": {
+     "deletes": [],
+     "raw": [],
+     "replace_all": [],
+     "sets": [],
+     "source": "simulate plan spy on aer with 50 shots 1 circuit 0 qpu seconds"
+    },
+    "text": "{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:spy-research\",\"qpu_seconds\":0,\"shots\":50},\"catalog_snapshot\":{\"resources\":{\"backend\":{\"id\":\"local_aer\",\"kind\":\"local\"},\"plan\":{\"admitted_preparation_ref\":\"preparation:spy-bits\",\"id\":\"plan:spy-research\",\"max_circuits\":1,\"max_shots\":100,\"operation_kind\":\"sample\",\"operation_ref\":\"operation:spy-sample\"}},\"version\":\"quantum-catalog/1\"},\"diagnostics\":[],\"effects\":[\"local_simulation\"],\"entities\":[{\"canonical\":\"plan:spy-research\",\"kind\":\"plan\",\"raw\":\"spy\",\"span\":[14,17]},{\"canonical\":\"local_aer\",\"kind\":\"backend\",\"raw\":\"aer\",\"span\":[21,24]}],\"operation\":\"simulate\",\"operation_schema\":\"nano.quantum.operations.v1\",\"plan_digest\":\"sha256:87c88fd9a0673c24965146d9fc227cbdc8a4da46d2339f25a70b750b704091ae\",\"profile\":\"quantum\",\"quantities\":[{\"kind\":\"shots\",\"raw\":\"50 shots\",\"span\":[30,38],\"unit\":\"shot\",\"value\":50},{\"kind\":\"circuits\",\"raw\":\"1 circuit\",\"span\":[39,48],\"unit\":\"circuit\",\"value\":1},{\"kind\":\"qpu_seconds\",\"raw\":\"0 qpu seconds\",\"span\":[49,62],\"unit\":\"qpu_second\",\"value\":0}],\"schema\":\"nano.quantum.command.v1\",\"source\":\"simulate plan spy on aer with 50 shots 1 circuit 0 qpu seconds\",\"source_hash\":\"sha256:aa72bcbdab7c575d68a5bac282233a5e67c3d3e1d10fd0395335af3d5d69db25\",\"steps\":[{\"args\":{\"backend\":\"local_aer\",\"circuits\":1,\"plan_id\":\"plan:spy-research\",\"qpu_seconds\":0,\"shots\":50},\"capability\":\"quantum.simulate\",\"kind\":\"local_simulation\"}]}"
+   },
+   "request": "simulate plan spy on aer with 50 shots 1 circuit 0 qpu seconds",
+   "subset": "quantum",
+   "tags": [
+    "repairable",
+    "syntax"
+   ],
+   "task": {
+    "authorized_effects": [
+     "local_simulation"
+    ],
+    "ceiling": {
+     "circuits": 1,
+     "qpu_seconds": 0,
+     "shots": 50
+    },
+    "domain": "quantum",
+    "evidence": null,
+    "nodes": null,
+    "observation": null,
+    "operation": "simulate",
+    "resources": {
+     "backend": "local_aer",
+     "plan_id": "plan:spy-research"
+    },
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": null,
+    "outcome": "execute",
+    "repair": "nano_missing_rparen"
+   },
+   "id": "eval-n-m01",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Mend { every 1m { if (RSI > 75 { sell(BTC) } } }"
+   },
+   "recorded_repair": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Mend { every 1m { if (RSI > 75 ){ sell(BTC) } } }"
+   },
+   "request": "Every minute, propose selling BTC when RSI is above 75.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum",
+    "repairable"
+   ],
+   "task": {
+    "authorized_effects": [
+     "SELL"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "1m",
+      "type": "Schedule"
+     },
+     {
+      "operator": ">",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 75
+     },
+     {
+      "action": "SELL",
+      "asset": "BTC",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "SYNTAX_ERROR",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-n-m02",
+   "note": "The recorded repair also changes the threshold.",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Bend { every 5m { if (RSI < 30 { observe() } } }"
+   },
+   "recorded_repair": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Bend { every 5m { if (RSI < 20) { observe() } } }"
+   },
+   "request": "Every 5 minutes, observe when RSI is below 30.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum",
+    "repair-refused"
+   ],
+   "task": {
+    "authorized_effects": [
+     "OBSERVE"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "5m",
+      "type": "Schedule"
+     },
+     {
+      "operator": "<",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 30
+     },
+     {
+      "action": "OBSERVE",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  },
+  {
+   "class": "adversarial_or_malformed",
+   "expected": {
+    "category": "task_binding",
+    "outcome": "abstain",
+    "repair": null
+   },
+   "id": "eval-n-m03",
+   "note": "",
+   "proposal": {
+    "kind": "nano_strategy_source",
+    "text": "strategy Near { every 1m { if RSI < 35 { observe() } } }"
+   },
+   "recorded_repair": null,
+   "request": "Every minute, observe when RSI is below 30.",
+   "subset": "nano_strategy",
+   "tags": [
+    "non-quantum",
+    "wrong-threshold"
+   ],
+   "task": {
+    "authorized_effects": [
+     "OBSERVE"
+    ],
+    "ceiling": null,
+    "domain": "nano_strategy",
+    "evidence": null,
+    "nodes": [
+     {
+      "interval": "1m",
+      "type": "Schedule"
+     },
+     {
+      "operator": "<",
+      "signal": "RSI",
+      "type": "Condition",
+      "value": 30
+     },
+     {
+      "action": "OBSERVE",
+      "type": "Intent"
+     }
+    ],
+    "observation": null,
+    "operation": "strategy_rule",
+    "resources": {},
+    "supported": true
+   }
+  }
+ ],
+ "catalog": "catalog.json",
+ "locked": true,
+ "schema": "nano.benchmark.proposal.dataset.v1",
+ "split": "eval"
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "nano.benchmark.proposal.repair-policy.v1",
+  "id": "allowlist-v1",
+  "max_repairs_per_case": 1,
+  "trigger": "Only when the first proposal was rejected by strict JSON decoding (json_syntax) or by Nano schema admission (schema_mismatch), or for a Nano strategy source with a SYNTAX_ERROR diagnostic. Never after a Nano diagnostic abstention, a duplicate-key or nonfinite payload, an encoding failure, or an admitted document.",
+  "gate": "A recorded repair candidate is accepted only if it is identical (strict native JSON types for documents, exact text for strategy source) to the single correction this policy derives mechanically from the first proposal. The policy never reads task expectations, hints or suggestions.",
+  "kinds": {
+    "json_trailing_comma": "Remove exactly one comma, outside strings, that is followed only by whitespace and a closing brace or bracket; the result must strictly decode.",
+    "json_unclosed_object": "Append exactly one closing brace to a payload whose only decode failure is an unterminated top-level object; the result must strictly decode.",
+    "constant_field": "Insert exactly one missing constant field among schema=nano.quantum.command.v1, profile=quantum, operation_schema=nano.quantum.operations.v1. A present field with a stale or different value is never rewritten.",
+    "nano_missing_rparen": "Reuse nano.fuzzing.diagnostic_repair: one missing ')' inserted before the '{' token named by the versioned diagnostic."
+  },
+  "immutable": ["operation", "target resources", "evidence identity", "resource ceiling", "host authority (effects, steps, catalog snapshot)", "source text"],
+  "revalidation": "The accepted candidate is admitted again through Nano and scored by the independent task verifier; a valid but semantically wrong result is a post-repair semantic regression."
+}
