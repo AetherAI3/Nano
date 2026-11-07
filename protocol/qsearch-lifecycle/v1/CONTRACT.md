@@ -201,9 +201,16 @@ removed deliberately:
 * `LifecycleClient` accepts integers above 2^53-1, and maps a non-2xx body that
   exceeds the 2^53-1 or depth-64 rules as a remote error rather than
   `INVALID_RESPONSE`.
+* `LifecycleClient` passes response bytes to `json.loads`, which auto-detects
+  encoding: a UTF-8 BOM, UTF-16 or UTF-32 body is accepted. Section 2.1 requires
+  UTF-8; a strict client refuses those bytes.
 
 Resolved: duplicate member names are refused by the Python client in success and
 error bodies (separate parity patch; previously `json.loads` kept the last one).
 
-Python integers are unbounded, but the service never emits a number above 2^53-1;
-the cap is a portability rule for every client.
+The service does not bound magnitudes itself: `lifecycle.job_state` projects any
+finite, non-negative number from the durable record, and `deadlines.queue_at` is
+`accepted_at + queue_deadline_s`. A value above 2^53-1 can therefore appear only
+from a corrupt record or an implausible deadline configuration. A strict client
+then refuses the whole response with `INVALID_RESPONSE` and
+`MANUAL_RECONCILIATION` (fail closed); it never rounds such a value.
