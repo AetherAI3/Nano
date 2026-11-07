@@ -345,6 +345,12 @@ def _test_report(compiled: Optional[CompiledPackage], outcome: Union[Tuple[CaseR
     }
 
 
+def _printable(line: str) -> str:
+    """One ASCII line: fixture text may hold any Unicode, consoles may not."""
+    escaped = line.encode("ascii", "backslashreplace").decode("ascii")
+    return escaped.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+
+
 def _print_test_text(report: Dict[str, Any], console: Console) -> None:
     for diagnostic in report["diagnostics"]:
         pointer = diagnostic.get("pointer")
@@ -354,7 +360,7 @@ def _print_test_text(report: Dict[str, Any], console: Console) -> None:
         return
     for case in report["cases"]:
         suffix = f": {case['reason']}" if case["status"] == "fail" else ""
-        console.say(f"{case['status'].upper()} {case['name']}{suffix}")
+        console.say(_printable(f"{case['status'].upper()} {case['name']}{suffix}"))
     console.say(f"{report['passed']}/{report['total']} passed")
 
 

@@ -39,6 +39,7 @@ CASES_VERSION = "1.0.0"
 MAX_CASES = 256
 MAX_BARS = 4096
 MAX_CASES_BYTES = 1048576
+MAX_EXACT_INT = 2 ** 53
 ALLOWED_EFFECTS = frozenset({"intent.emit", "log.append"})
 
 # The runner has no actuator; every report asserts this constant.
@@ -253,6 +254,12 @@ def _signals(value: Any, pointer: str, bars: int) -> Mapping[str, Tuple[Any, ...
             if not (_is_number(item) or isinstance(item, bool)):
                 raise FixtureError(
                     _ptr(at, index), "signal value must be a number or boolean"
+                )
+            if _is_int(item) and abs(item) > MAX_EXACT_INT:
+                # The VM reads signals as floats; beyond 2**53 an integer is
+                # either rounded or overflows float() into a traceback.
+                raise FixtureError(
+                    _ptr(at, index), "integer signal value must be within +/-2**53"
                 )
         series[name] = tuple(items)
     return MappingProxyType(series)

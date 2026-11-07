@@ -279,6 +279,48 @@ def test_inference_package_is_refused_before_execution(tmp_path, capsys, run_cal
     assert run_calls == []
 
 
+# -- review findings: no accepted fixture may end in a traceback -------------
+
+
+@pytest.mark.parametrize("value", [10 ** 400, -(10 ** 400), 2 ** 53 + 1])
+def test_integer_outside_exact_float_range_is_a_fixture_error(tmp_path, capsys, run_calls, value):
+    frame = {"timestamps": [0], "signals": {**FRAME["signals"], "evidence_count": [value]}}
+    cases = _write_cases(tmp_path / "cases.json", [
+        {"name": "huge", "frame": frame, "expect": {"proposedIntents": []}}])
+    code, out, _ = _run(_args(EXAMPLE, cases, "--json"), capsys)
+    assert code == 1
+    [diagnostic] = _report(out)["diagnostics"]
+    assert diagnostic["code"] == "FIXTURE_ERROR"
+    assert diagnostic["pointer"] == "/cases/0/frame/signals/evidence_count/0"
+    assert run_calls == []
+
+
+def test_integer_at_exact_float_bound_is_accepted(tmp_path, capsys):
+    frame = {"timestamps": [0], "signals": {**FRAME["signals"], "model_tokens": [2 ** 53]}}
+    cases = _write_cases(tmp_path / "cases.json", [
+        {"name": "bound", "frame": frame,
+         "expect": {"proposedIntents": [{"intent": "EXECUTE", "timestamp": 0}]}}])
+    code, _, err = _run(_args(EXAMPLE, cases), capsys)
+    assert code == 0, err
+
+
+@pytest.mark.parametrize("name", ["café ✓", "\ud800x", "tab\tand\nnewline"])
+def test_text_mode_escapes_case_names_for_any_console(tmp_path, name):
+    cases = tmp_path / "cases.json"
+    cases.write_bytes(json.dumps({"nanoPackageCasesVersion": "1.0.0", "cases": [
+        {"name": name, "frame": FRAME,
+         "expect": {"proposedIntents": [{"intent": "PAUSE", "timestamp": 0}]}}]}).encode("ascii"))
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "PYTHONIOENCODING": "ascii"}
+    completed = subprocess.run(
+        [sys.executable, "-m", "nano.cli", *_args(EXAMPLE, cases)],
+        cwd=tmp_path, env=env, capture_output=True, check=False,
+    )
+    assert completed.returncode == 1, completed.stderr
+    assert b"Traceback" not in completed.stderr
+    lines = completed.stdout.decode("ascii").splitlines()
+    assert len(lines) == 2 and lines[0].startswith("FAIL ") and lines[1] == "0/1 passed"
+
+
 # -- read-only --------------------------------------------------------------
 
 
