@@ -1,0 +1,38 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "actual": "{",
+          "category": "syntax",
+          "code": "SYNTAX_ERROR",
+          "expected": ")",
+          "hint": "Check for the missing ')' before this token.",
+          "message": "Expected ')', got '{'",
+          "severity": "error",
+          "span": {
+            "end": {
+              "column": 42,
+              "line": 1
+            },
+            "start": {
+              "column": 42,
+              "line": 1
+            }
+          }
+        }
+      ],
+      "input": "syntax.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:bcae944703b975e9eb87544363806fc335900b43ed1479f0d3dd4a386db8ffab",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}

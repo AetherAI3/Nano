@@ -1,0 +1,35 @@
+{
+  "schema": "nano.quantum.operations.v1",
+  "operations": [
+    {
+      "id": "prepare",
+      "op": "prepare_bits",
+      "variables": [
+        "x0",
+        "x1",
+        "x2"
+      ],
+      "bits": "100",
+      "packets": []
+    },
+    {
+      "id": "sample",
+      "op": "sample",
+      "preparation_id": "prepare",
+      "backend": "local_ideal",
+      "shots": 2,
+      "limits": {
+        "max_circuits": 1,
+        "max_wall_s": 5,
+        "max_qpu_s": 0
+      },
+      "seed": 0,
+      "result": {
+        "pub_index": 0,
+        "register": "meas",
+        "width": 3,
+        "bit_order": "msb_first"
+      }
+    }
+  ]
+}

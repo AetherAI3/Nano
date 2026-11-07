@@ -1,0 +1,54 @@
+name: Quantum offline contracts
+
+on:
+  pull_request:
+    paths:
+      - 'nano_qsearch/**'
+      - 'nano/cli/main.py'
+      - 'tests/test_quantum*'
+      - 'tests/test_qsearch*'
+      - 'tests/qsearch*'
+      - 'tests/qsearch_fixtures/**'
+      - 'pyproject.toml'
+      - '.github/workflows/quantum-offline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quantum-offline-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: '3.10'
+            sdk: core
+          - python: '3.12'
+            sdk: qiskit-2.3.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install core test tools
+        run: python -m pip install -e . pytest
+      - name: Install only the declared optional compiler
+        if: matrix.sdk == 'qiskit-2.3.1'
+        run: python -m pip install qiskit==2.3.1
+      - name: Check offline provenance, preparation and legacy boundaries
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+        run: >-
+          python -m pytest -q
+          tests/test_qsearch_provenance.py
+          tests/test_quantum_prepare.py
+          tests/test_quantum_prepared_runtime.py
+          tests/test_qsearch_v2_request.py
+          tests/test_qsearch_v2_runtime.py
+          tests/test_qsearch_v2_service.py
+          tests/test_qsearch_accounting.py

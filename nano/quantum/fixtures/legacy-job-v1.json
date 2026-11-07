@@ -1,0 +1,76 @@
+{
+  "source": {
+    "commit": "b6ba6542b2c311d6354948e528bc64f147911178",
+    "path": "tests/qsearch_fixtures/job_4var.json",
+    "sha256": "307b36a72b305a11b2cbb6b6c7d48e384b276985d3e73b0281b082df8efa80ce"
+  },
+  "payload": {
+    "schema": "predator.qsearch.job.v1",
+    "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+    "variables": [
+      "c0",
+      "c1",
+      "c2",
+      "c3"
+    ],
+    "qubo": {
+      "q": [
+        [
+          -1.0,
+          0.45,
+          0.35,
+          0.0
+        ],
+        [
+          0.45,
+          -0.8,
+          0.25,
+          0.0
+        ],
+        [
+          0.35,
+          0.25,
+          -0.6,
+          -0.15
+        ],
+        [
+          0.0,
+          0.0,
+          -0.15,
+          -0.4
+        ]
+      ],
+      "offset": 0.0,
+      "convention": "symmetric_half"
+    },
+    "compile": {
+      "variant": "auto",
+      "p": 1,
+      "gammas": [
+        0.4
+      ],
+      "betas": [
+        0.4
+      ],
+      "opt_level": 3,
+      "seed": 11,
+      "target": "heron_heavy_hex",
+      "training": "none"
+    },
+    "backend": {
+      "kind": "auto",
+      "chi_max": 64,
+      "shots": 1024,
+      "seed": 7
+    },
+    "limits": {
+      "max_variables": 40,
+      "max_wall_s": 120,
+      "max_qpu_s": 0
+    },
+    "audit": {
+      "classical_min_energy": -1.6
+    },
+    "job_digest": "sha256:c51a2a7655b390d289bbb61d12d918c99fa5c817829583c2e62330323ef1b425"
+  }
+}

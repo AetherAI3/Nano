@@ -52,7 +52,7 @@ from ..compiler.ast import (
     StringLit,
     Unary,
 )
-from ..compiler.errors import NanoTypeError
+from ..compiler.errors import NanoCapabilityError, NanoTypeError
 from ..indicators.registry import IndicatorSpec, lookup as lookup_indicator
 from ..ir.schema import (
     ACTUATING_INTENT_ACTIONS,
@@ -276,7 +276,7 @@ class _Checker:
         if required is None:
             return
         if TIERS.index(self.strategy.tier) < TIERS.index(required):
-            raise self._fail(
+            raise NanoCapabilityError(
                 f"{construct!r} requires tier {required!r}, but this module "
                 f"declares tier {self.strategy.tier!r} "
                 f"(add `tier {required}` above the strategy)",

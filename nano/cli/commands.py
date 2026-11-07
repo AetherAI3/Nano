@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Sequence, TextIO
 
+from .. import __version__
 from ..compiler import (
     IRVersionError,
     NanoCompileError,
@@ -41,6 +42,10 @@ from ..compiler import (
 from ..data import FeedError, load_frame, parse_date
 from ..indicators.registry import INDICATORS, names as indicator_names
 from ..ir.schema import SUPPORTED_IR_VERSIONS, IRValidationError
+from ..ir.module import COMPILER_NAME, COMPILER_VERSION
+from ..compiler.diagnostics import (
+    DIAGNOSTIC_SCHEMA_VERSION, CompilerDiagnostic, check_report,
+)
 from ..intent import (
     CatalogError,
     IntentInputError,
@@ -178,14 +183,32 @@ def command_check(args: Any, console: Console) -> int:
     diagnostic — and hid the remaining files from anyone running this over a
     directory.
     """
+    if getattr(args, "json_output", False):
+        return _command_check_json(args, console)
+
     failed = 0
     unreadable = 0
+    wrong_version = 0
 
     for path in args.files:
         source = _read_source(path, console)
         if source is None:
             unreadable += 1
             continue
+        if getattr(args, "ir_version", None) is not None:
+            report = check_report(source, ir_version=args.ir_version)
+            if not report.success:
+                for diagnostic in report.diagnostics:
+                    if diagnostic.span is None:
+                        console.warn(f"{path}: error: {diagnostic.message}")
+                    else:
+                        start = diagnostic.span.start
+                        console.warn(f"{path}:{start.line}:{start.column}: error: {diagnostic.message}")
+                if any(item.category != "version" for item in report.diagnostics):
+                    failed += 1
+                else:
+                    wrong_version += 1
+                continue
         try:
             program = check_source(source)
         except NanoCompileError as error:
@@ -197,18 +220,63 @@ def command_check(args: Any, console: Console) -> int:
                 f"{path}: ok — tier {program.tier}, "
                 f"warmup {program.warmup} bar(s), "
                 f"effects {', '.join(program.effects)}, "
-                f"ir {required_ir_version(program)}"
+                f"ir {getattr(args, 'ir_version', None) or required_ir_version(program)}"
             )
 
-    if failed or unreadable:
+    if failed or unreadable or wrong_version:
         console.warn(
-            f"{failed + unreadable} of {len(args.files)} file(s) failed"
+            f"{failed + unreadable + wrong_version} of {len(args.files)} file(s) failed"
             + (f" ({unreadable} unreadable)" if unreadable else "")
         )
         # A rejected program outranks an unreadable file: the diagnostic is the
         # actionable result, and reporting I/O would bury it.
-        return EXIT_DIAGNOSTICS if failed else EXIT_IO
+        return EXIT_DIAGNOSTICS if failed else (EXIT_USAGE if wrong_version else EXIT_IO)
     return EXIT_OK
+
+
+def _command_check_json(args: Any, console: Console) -> int:
+    """Emit exactly one deterministic document; read failures stay operational."""
+    results = []
+    failed = False
+    wrong_version = False
+    unreadable = False
+    for path in args.files:
+        source = _read_source(path, console)
+        if source is None:
+            unreadable = True
+            diagnostic = CompilerDiagnostic(
+                code="IO_ERROR", category="io", severity="error",
+                message="Input could not be read",
+            )
+            result = {
+                "sourceDigest": None, "success": False,
+                "diagnostics": [diagnostic.to_dict()], "irVersion": None,
+            }
+        else:
+            report = check_report(source, ir_version=getattr(args, "ir_version", None))
+            result = report.to_dict()
+            if not report.success:
+                if any(item.category != "version" for item in report.diagnostics):
+                    failed = True
+                else:
+                    wrong_version = True
+        results.append({"input": str(path), **result})
+
+    envelope = {
+        "schemaVersion": DIAGNOSTIC_SCHEMA_VERSION,
+        "compiler": {
+            "name": COMPILER_NAME, "version": COMPILER_VERSION,
+            "packageVersion": __version__,
+        },
+        "success": all(result["success"] for result in results),
+        "results": results,
+    }
+    console.emit((json.dumps(envelope, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("ascii"))
+    if failed:
+        return EXIT_DIAGNOSTICS
+    if wrong_version:
+        return EXIT_USAGE
+    return EXIT_IO if unreadable else EXIT_OK
 
 
 # ---------------------------------------------------------------------------
@@ -558,22 +626,37 @@ def command_intent(args: Any, console: Console) -> int:
     """Parse, compile, or explain a deterministic natural-language intent."""
 
     try:
+        profile = getattr(args, "profile", "market")
+        catalog_path = getattr(args, "catalog", None)
+        catalog = None
+        if catalog_path is not None:
+            if profile != "quantum":
+                raise ValueError("--catalog requires --profile quantum")
+            try:
+                catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError) as exc:
+                console.warn(f"error: cannot read quantum catalog: {exc}")
+                return EXIT_IO
+        options = {"profile": profile, "quantum_catalog": catalog}
         if args.intent_action == "parse":
             console.say(
                 json.dumps(
-                    parse_intent(args.phrase).to_dict(),
+                    parse_intent(args.phrase, **options).to_dict(),
                     indent=2,
                     ensure_ascii=False,
                 )
             )
             return EXIT_OK
         if args.intent_action == "explain":
-            console.say(explain_intent(args.phrase))
+            console.say(explain_intent(args.phrase, **options))
             return EXIT_OK
 
-        ir = compile_intent(args.phrase)
+        ir = compile_intent(args.phrase, **options)
         if args.json:
-            console.emit(canonical_intent_bytes(ir) + b"\n")
+            if profile == "quantum":
+                console.emit(ir.canonical_bytes() + b"\n")
+            else:
+                console.emit(canonical_intent_bytes(ir) + b"\n")
         else:
             console.say(json.dumps(ir.to_dict(), indent=2, ensure_ascii=False))
         return EXIT_OK

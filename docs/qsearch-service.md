@@ -150,6 +150,9 @@ take precedence over the environment.
 | `NANO_QSEARCH_ATLAS_PATH` | unset | `aether-atlas` directory, used by the engine child (and by the tests). |
 | `NANO_QSEARCH_PYTHON` | the service's own interpreter | Python executable for the engine child. |
 | `NANO_QSEARCH_PURPOSE` | `qsearch` | Child purpose recorded on IBM receipts, `qsearch` or `qcomms`; see [IBM](#ibm-hardware). |
+| `NANO_QSEARCH_BASIS_PREP` | unset (off) | `1`: a strictly diagonal QUBO (no coupling, no zero diagonal entry) compiles to its unique minimiser, `x` on the 1 bits then measure, instead of the QAOA layer; the output then no longer depends on `gammas`/`betas`. Other QUBOs and explicit `joint5` jobs are unchanged. See [Compile options](#compile-options). |
+| `NANO_QSEARCH_LAYOUT` | unset (off) | `target` or `calibration:<snapshot.json>`: a circuit without two-qubit gates on a Fez target (`fake_fez`, `ibm_fez`) puts logical bit `i` on the `i`-th best qubit by readout error plus half the `x` error, ranked from the transpile target's own errors (`target`) or from a calibration snapshot. See [Compile options](#compile-options). |
+| `NANO_QSEARCH_LAYOUT_BACKEND` | the job's target | Snapshot entry (`backends.<name>`) used by `NANO_QSEARCH_LAYOUT=calibration:...`; the only substitution allowed is `ibm_fez` for a `fake_fez` rehearsal of a hardware layout. Set with any other layout mode it is refused. |
 | `AETHER_AQRC_HW_GO` | unset | IBM gate for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_AUTHORITY_KEY_PATH` | unset | Host authority key for `ibm_fez`; see [IBM](#ibm-hardware). |
 | `AETHER_AQRC_LEDGER_PATH` | unset | Campaign ledger (sqlite) for `ibm_fez`; see [IBM](#ibm-hardware). |
@@ -323,6 +326,40 @@ PowerShell with the system Python: importing qiskit segfaults under Git Bash on
 some hosts, and Aer MPS intermittently access-violates, which the retries
 absorb.
 
+## Compile options
+
+`compile_program(job, *, options=None)` takes a `CompileOptions`; with `None`
+it reads `CompileOptions.from_env()` (the three `NANO_QSEARCH_BASIS_PREP` /
+`NANO_QSEARCH_LAYOUT` / `NANO_QSEARCH_LAYOUT_BACKEND` variables above). All
+off is the unchanged compile: same ISA, same record, same
+`compiled_plan_digest`. A malformed value or an unreadable snapshot is a
+`ValueError`, so the IBM runtime answers `REFUSED`, never a silent default.
+
+When an option is on, the compile record (`compile` in the receipt) and the
+plan digest carry a `rewrites` block, for example:
+
+```json
+{"basis_prep": "applied",
+ "layout": {"mode": "calibration", "applied": true, "backend": "ibm_fez",
+            "calibration_sha256": "30d75cc6...", "last_update": "2026-10-31 10:57:39+00:00",
+            "physical": [2, 22, 86, 134, ...]}}
+```
+
+`basis_prep` is `applied`, `not_applicable` (the QUBO has a coupling or a zero
+diagonal entry, or the job asks for `joint5`) or `off`. `layout.applied` is
+false, with a `reason`, for a circuit with two-qubit gates or a target outside
+the Fez register. The snapshot format is one JSON object `{"backends": {name:
+{"num_qubits", "last_update", "readout_error": {"q": e}, "one_qubit_error":
+{"x": {"q": e}, ...}, "t1_s": {"q": s}}}}`; a qubit with a missing or
+out-of-range error or T1 is never chosen, and a snapshot without a
+`num_qubits`-matching entry for the backend (or an entry of another device) is
+refused. With `target`, the record carries `errors_digest`, a digest of the
+error numbers the ranking read, so two compiles that placed differently say
+why. The transpile keeps the
+chosen placement (`initial_layout`); if the transpiler moved it, the compile is
+refused. Use a snapshot fetched shortly before a hardware run: the ranking is
+only as fresh as the calibration it reads.
+
 ## IBM hardware
 
 `NANO_QSEARCH_BACKEND=ibm` (or a job asking for `ibm` while the service is in
@@ -346,11 +383,19 @@ absorb.
   authority key from `AETHER_AQRC_AUTHORITY_KEY_PATH` and the campaign ledger
   from `AETHER_AQRC_LEDGER_PATH`, and calls ATLAS
   `campaign_runtime.submit_qsearch_child`, which re-checks GO, verifies the HMAC
-  authority against the ledger and the 600 s cap, and then stops: the frozen
-  campaign protocol has no reservable q-search stage (lane L4 hand-off in
-  Predator-M `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`). Every
-  outcome on this path is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or
-  `REFUSED ibm: ValueError` (authority does not verify). On either target a
+  authority against the ledger and the 600 s cap. On a frozen
+  `PredatorCampaignV1` ledger it then stops: that protocol has no reservable
+  q-search stage (lane L4 hand-off in Predator-M
+  `docs/superpowers/plans/2026-10-25-l4-hardware-select.md`), and every outcome
+  is `REFUSED ibm: RuntimeError` (gate or BLOCKED) or `REFUSED ibm: ValueError`
+  (authority does not verify). On a `PredatorCampaignV2` ledger (lane HW0) the
+  live context comes from ATLAS `resolve_qsearch_context` (a real
+  `QiskitRuntimeService` only behind `AETHER_AQRC_HW_GO=1` and
+  `AETHER_AQRC_QSEARCH_LIVE=1`), the job is compiled against **that backend's
+  `Target`** (backend name and a target digest are bound into the ISA metadata,
+  the QPY bytes and `compiled_plan_digest`; a plan bound to another target is
+  refused), and the child's `max_execution_time` (provider limit and ledger
+  reservation) is the job's `limits.max_qpu_s`. On either target a
   resource or transport failure during compile or the Sampler run
   (`MemoryError`, `OSError` and its socket/timeout subclasses, urllib and HTTP
   errors) is `NOT_RUN ibm: <Class>`, not a refusal: the job was not run and the
@@ -358,11 +403,187 @@ absorb.
   submitted from the service**, and a recovered IBM job is never resubmitted.
   An `ibm` receipt is sealed with the hardware seal by its `backend.kind` alone;
   one without its `hardware` block is never sealed at all.
+- **`ibm_kingston` and `ibm_marrakesh` (J6 amendment A2) are live targets with
+  exactly `ibm_fez`'s gates** (GO, authority, QPU seconds, LIVE / PACKED flags,
+  live context, device binding, recovery through ATLAS; never a dry run). They
+  compile **only** against their resolved live backend: no fake backend stands
+  in for them, so a job on one of them without a live context is refused
+  (`ValueError`), including on a V1 ledger and on the local MPS / statevector
+  engines. A calibration layout ranks only that backend's own snapshot entry
+  (`backends.ibm_kingston` / `backends.ibm_marrakesh`). `fake_fez` stays the
+  only dry-run target.
 
 The child purpose, `qsearch` (default) or `qcomms`, is a service setting
 (`NANO_QSEARCH_PURPOSE`, or `IbmRuntime(purpose=...)`), not a job field: the
 job schema is frozen. It is passed to the ATLAS child and recorded in
 `hardware.purpose`; any other value is REFUSED.
+
+## Packed requests: `POST /qsearch/v2/submit_request` (lane HW0)
+
+Off unless `NANO_QSEARCH_V2=1`: otherwise the path answers 404
+`{"error": "not found", "code": "NOT_ENABLED"}` before authentication. It uses
+the v1 request auth (the path is part of the MAC). The body is
+
+```json
+{"schema": "predator.qsearch.request.v2",
+ "descriptor": {"schema": "predator.qsearch.request.v2", "request_id": "...", "target": "fake_fez|ibm_fez|ibm_kingston|ibm_marrakesh",
+                "purpose": "qsearch|qcomms", "max_execution_time": 10, "manifest_digest": "sha256:...",
+                "batch_index": 0, "batch_digest": "sha256:...",
+                "blocks": [{"pub_index": 0, "job_digest": "sha256:...",
+                            "recipients": [{"agent_id": "...", "chunk": 0, "slot": 0}],
+                            "n": 4, "shots": 3, "seed": 7, "classical_min_energy": -1.6}]},
+ "jobs": ["<predator.qsearch.job.v1 body>, one per block, in block order"]}
+```
+
+`canonical_digest(descriptor)` is the request digest. Each job must match its
+block (digest, width, shots, backend seed, classical floor), be `backend.kind
+== "ibm"` on the one target, 1..16 blocks, no repeated job or `(agent_id,
+chunk)`; for a live target (`ibm_fez`, `ibm_kingston`, `ibm_marrakesh`) the jobs' `limits.max_qpu_s` must sum to at least
+`max_execution_time`. A failure is 400 with no receipt. Each job is compiled
+(device compile for `ibm_fez`), frozen as an ATLAS child, the children become
+one ATLAS request (`prepare_qsearch_request`) and run once:
+`run_qsearch_request_dry` (FakeFez) or `submit_qsearch_request` (ibm_fez,
+additionally `AETHER_AQRC_QSEARCH_PACKED=1` for more than one PUB, enforced by
+ATLAS). The receipt is `predator.qsearch.receipt.v2`: per block `counts` keyed
+by the raw `msb_first` display strings and an `audit` (`classical_min_energy`,
+`best_sample_energy`, `agree`; every sample re-energised, a best below the
+floor refuses the request), `hardware` (`backend_name`, `provider_job_id`,
+`bit_order`, `register`, `purpose`, `dry_run`, `max_execution_time`,
+`job_tags`) and `usage` (`quantum_seconds`, `usage_pending` true when that is
+null or 0, `provider_sub_jobs`, `provider_metrics`), sealed
+`hmac-sha256+hardware-v2:` over `b"predator.qsearch.hardware-receipt.v2\n"`.
+v2 has no REFUSED status: anything that did not produce every block is
+`NOT_RUN` with `blocks: []`, `backend.kind: "none"` and the `hmac-sha256+v2:`
+seal; a resource or transport failure reads `ibm: <Class>`, a verdict
+`refused: ...`. The request is recorded ACCEPTED before anything is submitted
+and its single attempt is marked immediately before the run; a repeated digest
+returns the stored receipt; a request whose attempt was used is never submitted
+again but re-attached on restart (or repeat) through ATLAS
+`recover_qsearch_submission`, and stays pending (503) until the provider job is
+done. Because ATLAS fingerprints the ISA bytes into the request identity, the
+operator's plan-scoped authority names a `request_sha256` that is only known
+after compiling against the live target (`runtime_ibm.prepare_request_identity`).
+Nano passes the request digest to ATLAS (`client_request_digest`), and the
+receipt's `hardware.job_tags` are ATLAS's effective tags (recovery tag first).
+
+Amendment R3. **Flags first (M3):** an ibm_fez request needs
+`AETHER_AQRC_HW_GO=1`, `AETHER_AQRC_QSEARCH_LIVE=1` and, above one PUB,
+`AETHER_AQRC_QSEARCH_PACKED=1` in Nano's environment before any live context is
+resolved (otherwise NOT_RUN `refused: ibm: <FLAG>=1 is required`; no
+`QiskitRuntimeService` is built). **Submitted means never NOT_RUN (H1):** once
+ATLAS has handed the request to the provider (`QSearchSubmittedPending`, or a
+ledger row with a job id or an ambiguous submission) nothing is sealed: the
+answer is 503, the row stays ACCEPTED, and the request finishes through ATLAS
+recovery as OK or **`FAILED`** (provider ERROR / CANCELLED / max time, or a
+result that does not audit): `blocks: []`, `block_count: 0`, `reason`
+(`provider: <status>` or `refused: ibm: <Class>`), `hardware` with the provider
+job id, `usage`, hardware seal. A reservation ATLAS released (definite provider
+refusal, or an operator release of an ambiguous row) completes as NOT_RUN. **v1
+singletons (H1, L1)** follow the same rule with v1 statuses: a submitted job
+answers 503 until recovery; on a repeat or restart `IbmRuntime.recover_job`
+re-attaches it through ATLAS, recompiles against the live target and requires
+the submitted child's compiled plan digest (else REFUSED); a provider failure
+is REFUSED `ibm: provider job failed`.
+
+**Large requests (J6).** `NANO_QSEARCH_V2_MAX_PUBS` sets the PUBs per v2
+request (default 16, at most 4,096; an invalid value stops the service at
+startup). The count is checked before any job is parsed or compiled, so an
+over-limit request is a 400 that costs nothing. A larger request needs a larger
+`NANO_QSEARCH_MAX_BODY_BYTES` too (a 1,200-job request of 16-variable jobs is a
+few MiB). All jobs of a request compile against one resolved target: the live
+backend's target is read and digested once, a dry run builds one FakeFez, and
+the compile options are read once (`compile.compile_jobs`). ATLAS is given the
+request PUB bound: the ledger's Q-stage cap (`qsearch_max_request_pubs`) for
+ibm_fez, `NANO_QSEARCH_V2_MAX_PUBS` for a FakeFez dry run. The compile seconds,
+the job count and the number of target resolutions are kept in the request
+row's `record_json` and logged on stderr; they are not in the sealed receipt.
+
+**Final usage before a final receipt (accounting gate).** A live request whose
+provider job is DONE or FAILED but whose usage is not final yet (missing or
+zero, which is never a free run) is held: the row stays ACCEPTED, the answer is
+503 `{"code": "ACCOUNTING_PENDING"}`, and nothing is resubmitted. Every repeat
+of the same request (and every restart) drives ATLAS recovery, whose accounting
+read settles the ledger row; Nano merges the row's settled usage into the stored
+ATLAS receipt (same provider job, positive usage only) and only then seals the
+OK or FAILED receipt, once, with `usage_pending: false`. After
+`NANO_QSEARCH_ACCOUNTING_WINDOW_S` (default 900) the 503 code becomes
+`ACCOUNTING_TIMEOUT`, but the request is still held and still settles if
+accounting arrives later; it is never sealed pending and never NOT_RUN. A DONE
+receipt an older version sealed while usage was pending is never served as
+final: on retrieval it is re-derived from the settled row (the results must be
+identical; the replaced seal and usage are kept in `record_json["reseals"]`),
+or answered 503 until accounting settles (`RESEAL_MISMATCH` if the settled
+results would differ). FakeFez dry runs and v1 receipts (which carry no usage)
+are unchanged.
+
+While nothing is sealed the 503 says what the client can record. Outcome not
+known yet: `SUBMITTED_PENDING` with the provider `job_id` when ATLAS named it.
+Results held for accounting: `job_id`, `result` (OK / FAILED),
+`provider_status`, `terminal`, `usage_pending: true` and, for FAILED, `reason`,
+under code `ACCOUNTING_PENDING_TERMINAL` when the provider job ended FAILED
+(cancelled, errored, max time; its usage may stay 0 and is then never reported
+as final), `ACCOUNTING_PENDING` otherwise, `ACCOUNTING_TIMEOUT` after the
+window, and `ACCOUNTING_NEEDS_LIVE_CONTEXT` when the accounting read needs the
+provider but `AETHER_AQRC_HW_GO` / `AETHER_AQRC_QSEARCH_LIVE` are off. Every
+recovery first reads ATLAS's ledger-only `qsearch_receipt_with_settled_usage`
+(no provider call, no flags), so an already settled row (a historical re-seal
+included) completes without a live context; only an unsettled row goes on to
+provider recovery. In a settled receipt `usage.quantum_seconds` is the ledger's
+settled usage while `usage.provider_metrics` is the provider's read at job
+completion and may still show 0 there; `record_json` says so (`usage_note`,
+`provider_usage_at_receipt`).
+
+### Confirmed terminal zero (Nano #58)
+
+Zero from the normal pinned SDK (`qiskit-ibm-runtime==0.46.1`, API
+`2025-05-01`) remains pending. That API does not document billing finality.
+ATLAS's separate, read-only metrics adapter selects API `2026-04-15`, whose
+[Jobs metrics contract](https://quantum.cloud.ibm.com/docs/en/api/qiskit-runtime-rest/tags/jobs#tags__jobs__operations__get_job_metrics_jid)
+defines `usage.status` as `pending` or `complete` and reports charged capacity
+in `usage.qpu_charge_time_seconds`. Only an exact `complete` with explicit zero
+charge and matching job, instance, backend and immutable submission evidence can
+close a cancelled/failed reservation. Missing, unreadable or unfamiliar evidence
+keeps the hold. No cancellation or submission is performed by reconciliation.
+
+The authoritative ATLAS transition retains the ledger row and prior attempt,
+receipt and metrics history. Nano seals its `AqrcQSearchZeroUsageEvidenceV1`
+projection under `usage.zero_usage_evidence`, after checking the provider job,
+backend, ATLAS request fingerprint and client request digest. The receipt remains
+`FAILED`, with `reason: "provider: CANCELLED"` (or `ERROR`), empty blocks, zero
+seconds and `usage_pending: false`. Confirmed zero does not claim that no circuit
+executed. The PUB allowance is retained; only the charged seconds reconcile.
+
+The proof has exactly these fields (extra fields require a reviewed schema
+revision): `schema`, `ledger_id`, `request_id`, `request_sha256`,
+`client_request_digest`, `child_sha`, `plan_sha`, `job_id`, `instance`,
+`backend_name`, `job_tags`, `provider_status`, `usage_status`, `evidence_sha256`,
+`checked_at`, `provider_api_version`, and `evidence_source`.
+`provider_api_version` is `2026-04-15`, `evidence_source` is
+`ibm-runtime-job-metrics`, and `usage_status` is `complete`. The packed ATLAS
+request fingerprint is raw SHA256 hex (`request_sha256 == child_sha == plan_sha`);
+client and audit digests use `sha256:<hex>`. `ledger_id` is 32 hex characters.
+The complete provider evidence is retained by ATLAS; the seal carries its digest
+and exact identity projection. This seal authenticates Nano's assertion under
+the host receipt key, rather than creating a provider-signed attestation.
+
+Compatibility is additive: the existing v2 receipt schema and seal domain are
+unchanged, and positive usage keeps its existing representation. Older ATLAS
+pins cannot supply this evidence and keep zero held; Nano's legacy ledger
+fallback remains positive-only. Older Predator verifiers reject settled zero,
+so deploy the coordinated verifier/journal update before consuming these
+receipts. Unknown zero still produces HTTP 503 after restart. Settled replay
+uses the ledger or stored seal without live flags or provider credentials.
+Historical pending seals are retained in the existing reseal history.
+
+Consumers that already authenticated a stored v2 hardware receipt can use the
+pure `receipt_v2.confirmed_zero_receipt(request, receipt)` predicate to recognize
+this exact zero-proof projection. It reuses the same strict identity/schema
+checks as ATLAS receipt conversion and checks the failed hardware outcome against
+the original parsed request. Call `verify_seal_v2(receipt, receipt_key)` first:
+the predicate has no HMAC key and does not authenticate a MAC. Mutable run-record
+flags or an unauthenticated receipt cannot authorize a zero settlement. The #59
+lifecycle bridge must retain that authentication gate and conservative behavior
+when this predicate is absent.
 
 ## Predator side
 
