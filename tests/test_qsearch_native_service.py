@@ -327,8 +327,22 @@ def test_lost_acknowledgement_stays_held_and_restart_reattaches_without_rerun(tm
         svc.close()
 
 
-def hold_slot(svc):
-    assert svc._slots.acquire(timeout=1)
+def accepted_unclaimed(svc, body):
+    """An ACCEPTED row whose single attempt was never claimed (e.g. the process died before the claim)."""
+    svc.store.begin_request(request_digest(body), body["descriptor"]["request_id"], body_bytes(body).decode())
+
+
+def test_preflight_holds_a_concurrency_slot_and_busy_refusal_stores_nothing(tmp_path):
+    svc, runtime = make(tmp_path, max_concurrent=1, poll_interval_s=0.01)
+    try:
+        assert svc._slots.acquire(timeout=1)
+        code, error = submit(svc, known_bits_request())
+        assert (code, error["code"]) == (503, "SERVICE_BUSY")
+        assert svc.store.pending_requests() == [] and runtime.preflights == runtime.runs == 0
+        svc._slots.release()
+        assert submit(svc, known_bits_request())[0] == 200 and runtime.runs == 1
+    finally:
+        svc.close()
 
 
 def test_restart_never_starts_an_unclaimed_row_and_resubmission_runs_once(tmp_path):
@@ -336,8 +350,7 @@ def test_restart_never_starts_an_unclaimed_row_and_resubmission_runs_once(tmp_pa
     svc, _ = make(tmp_path, runtime=runtime, max_concurrent=1, poll_interval_s=0.01)
     body = known_bits_request()
     try:
-        hold_slot(svc)
-        assert submit(svc, body)[1]["code"] == "NOT_STARTED"
+        accepted_unclaimed(svc, body)
         assert svc.store.get_request(request_digest(body)).attempts == 0
     finally:
         svc.close()
@@ -354,12 +367,10 @@ def test_cancel_before_claim_seals_not_run_and_never_executes(tmp_path):
     body = known_bits_request()
     digest = request_digest(body)
     try:
-        hold_slot(svc)
-        assert submit(svc, body)[1]["code"] == "NOT_STARTED"
+        accepted_unclaimed(svc, body)
         code, state = cancel(svc, digest)
         assert code == 200 and state["execution"]["status"] == "NOT_RUN" and state["cancellation"]["requested"]
         assert state["accounting"]["status"] == "NOT_APPLICABLE"
-        svc._slots.release()
         code, record = submit(svc, body)
         assert code == 200 and record["status"] == "NOT_RUN" and record["effect"] == "none" and runtime.runs == 0
     finally:
@@ -400,9 +411,7 @@ def test_queue_deadline_on_fake_clock_prevents_late_execution(tmp_path):
     body = known_bits_request()
     digest = request_digest(body)
     try:
-        hold_slot(svc)
-        assert submit(svc, body)[1]["code"] == "NOT_STARTED"
-        svc._slots.release()
+        accepted_unclaimed(svc, body)
         clock.now += 60
         assert submit(svc, body, now=int(clock.now))[1]["code"] == "NOT_STARTED"
         state = status(svc, digest, now=int(clock.now))[1]

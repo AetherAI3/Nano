@@ -76,6 +76,11 @@ def _check_claims(record: Mapping[str, Any]) -> None:
         _fail("ACCOUNTING", "a native local result cannot claim provider accounting")
     if record["decoding"] != {"delivery_verdict": "unverified", "optimization_verdict": "not_applicable"}:
         _fail("DECODING", "the service never decides decoded verdicts")
+    status, reason = record["status"], record["reason"]
+    if record["effect"] != ("none" if status == "NOT_RUN" else "local_simulation"):
+        _fail("EFFECT", "native result effect differs from its local execution status")
+    if (reason is not None and not isinstance(reason, str)) or (status == "OK" and reason is not None):
+        _fail("TYPE", "native result reason must be text, and absent on success")
 
 
 def _check_identity(expected: NativeExpectedIdentity, record: Mapping[str, Any]) -> None:
@@ -98,18 +103,19 @@ def _check_mapping(expected: NativeExpectedIdentity, decoded: VerifiedResult) ->
 
 
 def verify_native_result(expected: NativeExpectedIdentity, record: Any, evidence_catalog: Mapping[str, Any], *,
-                         receipt_key: bytes | None = None,
+                         receipt_key: bytes,
                          authenticate: AuthenticationVerifier | None = None) -> NativeVerifiedResult:
     if not isinstance(expected, NativeExpectedIdentity):
         _fail("TYPE", "expected identity must be retained with retain_identity before submission")
     if isinstance(record, Mapping):
         check_schema(record.get("schema"), RESULT_SCHEMA, "native result")
     record = exact(record, _RESULT_KEYS, "native result")
-    if receipt_key is not None:
-        try:
-            verify_native_seal(record, receipt_key)
-        except ValueError:
-            _fail("SEAL", "native result seal does not verify")
+    if not isinstance(receipt_key, (bytes, bytearray)) or not receipt_key:
+        _fail("SEAL", "an explicit receipt key is required; unsealed records are never verified")
+    try:
+        verify_native_seal(record, receipt_key)
+    except (ValueError, TypeError, QuantumValidationError):
+        _fail("SEAL", "native result seal does not verify")
     _check_claims(record)
     _check_identity(expected, record)
     status = record["status"]

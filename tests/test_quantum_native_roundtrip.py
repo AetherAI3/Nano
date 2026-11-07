@@ -1,6 +1,8 @@
 """Cross-boundary native evidence (#61 slice 4): builder -> plan -> artifact -> authenticated local
 service -> local ideal samples -> caller-verified typed records. No IBM, network or paid call."""
 import copy
+import hashlib
+import hmac
 import importlib.util
 import json
 import subprocess
@@ -10,6 +12,7 @@ import urllib.request
 import pytest
 
 from nano.quantum import QuantumValidationError, build_plan, prepare_bits, sample
+from nano.quantum.canonical import canonical_json
 from nano.quantum.conformance import large_mapping_fixture
 from nano_qsearch.native_artifact import prepare_native
 from nano_qsearch.native_policy import seal_native_result
@@ -37,6 +40,14 @@ def catalog(name):
     if name == "large-mapping":
         return {"fixture:large-bank": {"records": [f"record-{i}" for i in range(1200)]}}
     return {"fixture:records": read("evidence-bank")} if name != "known-bits" else {}
+
+
+def forge(record, **change):
+    """What a compromised service holding the receipt key could return."""
+    from nano_qsearch.native_policy import SEAL_DOMAIN, SEAL_PREFIX
+    body = {k: v for k, v in {**record, **change}.items() if k != "seal"}
+    mac = hmac.new(SYNTHETIC_RECEIPT_KEY, SEAL_DOMAIN + canonical_json(body).encode("utf-8"), hashlib.sha256)
+    return {**body, "seal": SEAL_PREFIX + mac.hexdigest()}
 
 
 def auth_bit_is_one(packet, payload, auth):
@@ -176,13 +187,19 @@ def test_hardware_seal_or_accounting_claims_and_partial_records_are_rejected(tmp
               ({"accounting": {"status": "settled", "provider_usage": {"quantum_seconds": 0}}}, "ACCOUNTING"),
               ({"decoding": {"delivery_verdict": "pass", "optimization_verdict": "not_applicable"}}, "DECODING"),
               ({"seal": "hmac-sha256+hardware-v2:" + "0" * 64}, "SEAL")]
+    claims += [({"effect": "submitted"}, "EFFECT"), ({"reason": "explained success"}, "TYPE")]
     for change, code in claims:
+        changed = {**record, **change} if "seal" in change else forge(record, **change)
         with pytest.raises(QuantumValidationError) as exc:
-            verify_native_result(expected, {**record, **change}, evidence)
+            verify_native_result(expected, changed, evidence, receipt_key=SYNTHETIC_RECEIPT_KEY)
         assert exc.value.code == code, change
+    for key in (None, b""):
+        with pytest.raises(QuantumValidationError) as exc:
+            verify_native_result(expected, record, evidence, receipt_key=key)
+        assert exc.value.code == "SEAL"
     partial = copy.deepcopy(record)
     partial["observations"]["pubs"][0]["samples"].pop()
-    failed_with_samples = {**copy.deepcopy(record), "status": "FAILED"}
+    failed_with_samples = forge(copy.deepcopy(record), status="FAILED")
     stale = {"fixture:records": {**read("evidence-bank"), "records": read("evidence-bank")["records"][::-1]}}
     wide = copy.deepcopy(record)
     wide["observations"]["pubs"][0]["samples"] = ["1010", "1010"]
@@ -192,7 +209,8 @@ def test_hardware_seal_or_accounting_claims_and_partial_records_are_rejected(tmp
                                          (record, stale, "DIGEST"), (wide, evidence, "WIDTH"),
                                          (missing, evidence, "PUB")):
         with pytest.raises(QuantumValidationError) as exc:
-            verify_native_result(expected, changed, catalog_value, authenticate=auth_bit_is_one)
+            verify_native_result(expected, forge(changed), catalog_value, receipt_key=SYNTHETIC_RECEIPT_KEY,
+                                 authenticate=auth_bit_is_one)
         assert exc.value.code == code
 
 
@@ -207,11 +225,11 @@ def test_reordered_pubs_are_rejected_by_the_caller(tmp_path):
         record = submit(svc, body)[1]
     finally:
         svc.close()
-    assert record["observations"]["pubs"][0]["samples"] == ["01"] and verify_native_result(expected, record, {})
+    assert record["observations"]["pubs"][0]["samples"] == ["01"] and verify_native_result(expected, record, {}, receipt_key=SYNTHETIC_RECEIPT_KEY)
     reordered = copy.deepcopy(record)
     reordered["observations"]["pubs"].reverse()
     with pytest.raises(QuantumValidationError) as exc:
-        verify_native_result(expected, reordered, {})
+        verify_native_result(expected, forge(reordered), {}, receipt_key=SYNTHETIC_RECEIPT_KEY)
     assert exc.value.code == "PUB"
 
 

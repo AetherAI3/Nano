@@ -119,7 +119,9 @@ Admission order, all before a row is stored or a circuit is allocated:
    field must equal the artifact (`IDENTITY`).
 5. Optional host evidence registry: a stale evidence-bank digest is
    `STALE_EVIDENCE`.
-6. Runtime preflight: the local runtime loads and checks every QPY.
+6. Runtime preflight: the local runtime loads and checks every QPY while
+   holding one of the service's concurrency slots (`SERVICE_BUSY` when none
+   frees within the poll interval).
 
 The request digest is the canonical digest of the descriptor, so a changed
 plan, target, profile, packet map or resource bound is a new identity. The row
@@ -129,12 +131,15 @@ and native routes do not serve v2 rows.
 
 Execution reuses the #58/#59 semantics. `claim_request_attempt` admits one
 attempt, fenced by cancellation and the queue deadline. A repeated identity
-returns the stored record and never executes again. Startup recovery never
+returns the stored record and never executes again; a concurrent duplicate
+while the first is in flight gets a retryable 409 `REQUEST_BUSY`. Startup recovery never
 starts execution: an unclaimed row waits for an authenticated resubmission and
 a claimed row with unknown outcome is re-attached through `runtime.recover`.
 The local runtime cannot recover a lost local outcome, so it stays held
 (`SUBMITTED_UNKNOWN`, accounting `PENDING`, reservation `HELD`) until explicit
 reconciliation. Elapsed time and simulator output never infer zero usage.
+This slice adds no automated route to close such a held local row; an operator
+reconciles it explicitly.
 
 Cancellation persists the fence before anything else. Before a claim it seals
 `NOT_RUN`; during execution it answers 409 `REQUEST_BUSY` with the fence kept
@@ -161,7 +166,9 @@ domain. It is never a hardware seal or provider-final accounting.
 
 `nano_qsearch.native_result.retain_identity(plan, request)` is computed from
 the caller's own plan before submission. `verify_native_result(expected,
-record, evidence_catalog)` compares every identity field with that retained
+record, evidence_catalog, receipt_key=...)` requires the local seal key,
+checks that `effect` matches the status and that no hardware, accounting or
+decoding claim is present, compares every identity field with that retained
 copy, never with the service's stored manifest, and decodes the observations
 against the retained plan with `decode_verified`. Execution status, decoded
 delivery and accounting stay separate fields; hardware qualification is

@@ -58,6 +58,8 @@ def policy_from_env(environ: Mapping[str, str]) -> NativeHostPolicy | None:
 
 
 def is_native_row(row: RequestRecord) -> bool:
+    if '"nano.quantum.native-request.v1"' not in row.request_json:
+        return False                     # cheap exclusion before parsing a possibly large body
     try:
         return is_native_request(json.loads(row.request_json))
     except (ValueError, RecursionError):
@@ -145,7 +147,7 @@ class NativeService:
                 return stored
             row = self._host.store.get_request(request.request_digest)
             if row is None or row.attempts == 0:
-                self._runtime().preflight(request.artifact, expected_digest=request.descriptor["artifact_digest"])
+                self._preflight(request)
         except NativeRefusal as exc:
             return exc.status, lifecycle_error(exc.code, field=exc.field)
         except QuantumValidationError as exc:
@@ -155,6 +157,16 @@ class NativeService:
         except (sqlite3.Error, OSError):
             return 503, lifecycle_error("STORE_UNAVAILABLE", retryable=True, next_action="POLL_STATUS")
         return self._run_once(request, canonical_json(parsed))
+
+    def _preflight(self, request: NativeRequest) -> None:
+        """Load and re-verify the QPY while holding a concurrency slot, so parallel submits stay bounded."""
+        runtime = self._runtime()
+        if not self._host._slots.acquire(timeout=self._host.config.poll_interval_s):
+            raise NativeRefusal(503, "SERVICE_BUSY", None)
+        try:
+            runtime.preflight(request.artifact, expected_digest=request.descriptor["artifact_digest"])
+        finally:
+            self._host._slots.release()
 
     def _run_once(self, request: NativeRequest, body_json: str, *,
                   recovering: bool = False) -> tuple[int, dict[str, Any]]:
@@ -181,6 +193,10 @@ class NativeService:
             return exc.status, lifecycle_error(exc.code, field=exc.field)
         except (sqlite3.Error, OSError):
             return 503, lifecycle_error("STORE_UNAVAILABLE", retryable=True, next_action="POLL_STATUS")
+        except (KeyError, ValueError, TypeError, QuantumValidationError) as exc:
+            # A claimed attempt stays held (attempts > 0); it can never execute again.
+            _log(f"native request {digest} state unavailable: {type(exc).__name__}")
+            return 503, lifecycle_error("STATE_UNAVAILABLE", next_action="MANUAL_RECONCILIATION")
         finally:
             with host._lock:
                 host._inflight.pop(flight, None)
