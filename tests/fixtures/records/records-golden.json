@@ -1,0 +1,60 @@
+{
+  "description": "RFC 0085 executable golden: a non-trading Evidence record imported by two pure-helper modules (Quality, Budget). The inline entry hand-expands both helpers and must compile to the same moduleHash. Sources are written to disk with LF bytes by the test and pinned in a generated lock.",
+  "sources": {
+    "evidence.nano": "module Evidence {\n  record Source { origin: string verified: bool }\n  record Evidence { count: int score: float source: Source }\n  pure fn local(count: int): Evidence {\n    Evidence(count: count, score: 1.0, source: Source(origin: \"local\", verified: true))\n  }\n}\n",
+    "quality.nano": "import Evidence\nmodule Quality {\n  pure fn trusted(e: Evidence): bool { e.source.verified and e.count >= 2 }\n}\n",
+    "budget.nano": "import Evidence\nmodule Budget {\n  pure fn affordable(e: Evidence, tokens: int): bool { e.score >= 0.5 and tokens >= 100 }\n}\n",
+    "agent.nano": "import Evidence\nimport Quality\nimport Budget\nstrategy EvidenceGate {\n  input evidence: Evidence\n  input model_tokens: int\n  every 1m {\n    if trusted(evidence) and affordable(evidence, model_tokens) { execute() }\n    else { pause() }\n  }\n}\n",
+    "inline.nano": "import Evidence\nstrategy EvidenceGate {\n  input evidence: Evidence\n  input model_tokens: int\n  every 1m {\n    if (evidence.source.verified and evidence.count >= 2) and (evidence.score >= 0.5 and model_tokens >= 100) { execute() }\n    else { pause() }\n  }\n}\n"
+  },
+  "manifests": {
+    "imported": {
+      "nanoPackageVersion": "0.1.0",
+      "entry": "agent.nano",
+      "modules": {"Budget": "budget.nano", "Evidence": "evidence.nano", "Quality": "quality.nano"},
+      "effects": ["intent.emit", "log.append"]
+    },
+    "inline": {
+      "nanoPackageVersion": "0.1.0",
+      "entry": "inline.nano",
+      "modules": {"Evidence": "evidence.nano"},
+      "effects": ["intent.emit", "log.append"]
+    }
+  },
+  "recordFields": {
+    "Source": [["origin", "string"], ["verified", "bool"]],
+    "Evidence": [["count", "int"], ["score", "float"], ["source", "Source"]]
+  },
+  "pinned": {
+    "Source": "record:sha256:e05be24b041ebe8552c5969e8cbecf869e16223ce621a4dc53f3a8f4ee25d0c4",
+    "Evidence": "record:sha256:564acb5e0a44f18889ac1ff65df3a63c0121a3ff0cbe030e5ee6f25975b4aa88",
+    "moduleHash": "sha256:94add4b10a7b895721afab4956e9435f78a861428e0579a45d09cef14b14b147",
+    "packageHash": {
+      "imported": "sha256:d1db3da31634861f898cc70c23698e21eaaee48fb17fe59483b52e96ca99859e",
+      "inline": "sha256:2dd9bc774fb5b4767187281d2985db0ef80863e2ea4c8ef165f67b77aa5746ef"
+    }
+  },
+  "frames": [
+    {
+      "id": "qualified-then-rejected",
+      "timestamps": [0, 60, 120, 180, 240],
+      "model_tokens": [100, 100, 99, 100, 100],
+      "evidence": [
+        {"count": 2, "score": 0.5, "origin": "probe", "verified": true},
+        {"count": 1, "score": 0.9, "origin": "probe", "verified": true},
+        {"count": 3, "score": 0.9, "origin": "probe", "verified": true},
+        {"count": 5, "score": 0.49, "origin": "probe", "verified": true},
+        {"count": 5, "score": 0.9, "origin": "probe", "verified": false}
+      ],
+      "intents": ["EXECUTE", "PAUSE", "PAUSE", "PAUSE", "PAUSE"]
+    },
+    {
+      "id": "absent-bar-is-skipped",
+      "timestamps": [0, 60],
+      "model_tokens": [100, 100],
+      "evidence": [null, {"count": 2, "score": 0.75, "origin": "", "verified": true}],
+      "intents": ["EXECUTE"],
+      "warmupBarsSkipped": 1
+    }
+  ]
+}
