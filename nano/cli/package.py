@@ -219,18 +219,43 @@ def _manifest_sources(manifest: Path, compiled: CompiledPackage) -> List[Path]:
     return [root / name for name in names]
 
 
+def _previous_bytes(path: Path) -> Optional[bytes]:
+    """What a destination held before this build, refusing a directory early."""
+    if path.is_dir():
+        raise IsADirectoryError(21, "Is a directory", str(path))
+    return path.read_bytes() if path.exists() else None
+
+
+def _roll_back(committed: Sequence[Tuple[Path, Optional[bytes]]]) -> None:
+    """Restore destinations already replaced when a later one fails."""
+    for path, previous in reversed(committed):
+        if previous is None:
+            _discard(str(path))
+        else:
+            write_bytes_atomic(path, previous)
+
+
 def _write_outputs(planned: Sequence[Tuple[Path, bytes]], console: Console) -> int:
-    """Stage every artifact before replacing any, so a failure writes nothing."""
-    staged: List[Tuple[str, Path]] = []
+    """Stage every artifact, then commit all or restore what was there.
+
+    Every destination is checked and staged before any is replaced; if a later
+    replace still fails, earlier destinations get their previous bytes back
+    (or are removed), so a failed build leaves no partial artifact set.
+    """
+    staged: List[Tuple[str, Path, Optional[bytes]]] = []
+    committed: List[Tuple[Path, Optional[bytes]]] = []
     current: Optional[Path] = None
     try:
         for current, data in planned:
-            staged.append((_write_temporary(current, data), current))
-        for temporary, current in staged:
+            previous = _previous_bytes(current)
+            staged.append((_write_temporary(current, data), current, previous))
+        for temporary, current, previous in staged:
             os.replace(temporary, current)
+            committed.append((current, previous))
     except BaseException as error:
-        for temporary, _ in staged:
+        for temporary, _, _ in staged:
             _discard(temporary)
+        _roll_back(committed)
         if not isinstance(error, OSError):
             raise
         console.warn(f"error: cannot write {current}: {error.strerror or error}")

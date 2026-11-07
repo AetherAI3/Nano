@@ -441,6 +441,42 @@ def test_unwritable_output_exits_3_without_partial_files(tmp_path, capsys):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_directory_as_second_output_leaves_first_output_unwritten(tmp_path, capsys):
+    # Review finding: the second os.replace failing used to leave -o in place.
+    blocked = tmp_path / "md"
+    blocked.mkdir()
+    target = tmp_path / "out.json"
+    argv = ["package", "build", *paths(EXAMPLE), "-o", str(target), "--module-output", str(blocked)]
+    code, out, err = _run(argv, capsys)
+    assert (code, out) == (3, "")
+    assert "error:" in err
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["md"]
+    assert list(blocked.iterdir()) == []
+
+
+def test_failed_second_commit_restores_the_first_output(tmp_path, capsys, monkeypatch):
+    from nano.cli import package as package_cli
+
+    first, second = tmp_path / "out.json", tmp_path / "module.json"
+    first.write_bytes(b"previous\n")
+    real_replace = package_cli.os.replace
+    calls: List[str] = []
+
+    def fail_second(src, dst):
+        calls.append(str(dst))
+        if Path(dst) == second:
+            raise PermissionError(13, "simulated", str(dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(package_cli.os, "replace", fail_second)
+    argv = ["package", "build", *paths(EXAMPLE), "-o", str(first), "--module-output", str(second)]
+    code, out, _ = _run(argv, capsys)
+    assert (code, out) == (3, "")
+    assert first.read_bytes() == b"previous\n"
+    assert not second.exists()
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out.json"]
+
+
 def test_atomic_write_cleans_its_temporary_on_failure(tmp_path, monkeypatch):
     from nano.cli import package as package_cli
 
