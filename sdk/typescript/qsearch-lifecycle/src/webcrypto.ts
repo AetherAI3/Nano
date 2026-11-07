@@ -6,7 +6,7 @@
  * non-extractable `CryptoKey` and the module's private copy is zeroed once
  * the import settles.
  */
-import { lowerHex } from "./bytes.js";
+import { copyUint8Array, lowerHex } from "./bytes.js";
 import { configurationError } from "./errors.js";
 import type { Signer } from "./client.js";
 import { MIN_KEY_BYTES } from "./wire.js";
@@ -19,10 +19,16 @@ const NONCE_BYTES = 16;
  * Without Web Crypto it throws `CLIENT_CONFIGURATION` (field `signer`).
  */
 export function createHmacSha256Signer(key: Uint8Array): Signer {
-  if (!(key instanceof Uint8Array) || key.length < MIN_KEY_BYTES) throw configurationError("request_key");
+  const copy = copyUint8Array(key);
+  if (copy === null || copy.length < MIN_KEY_BYTES) {
+    copy?.fill(0);
+    throw configurationError("request_key");
+  }
   const api = globalThis.crypto?.subtle;
-  if (api === undefined) throw configurationError("signer");
-  const copy = new Uint8Array(key);
+  if (api === undefined) {
+    copy.fill(0);
+    throw configurationError("signer");
+  }
   const cryptoKey = api
     .importKey("raw", copy, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
     .finally(() => copy.fill(0));

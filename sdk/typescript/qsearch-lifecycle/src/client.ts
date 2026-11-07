@@ -12,7 +12,7 @@ import {
   invalidResponse,
   transportUnavailable,
 } from "./errors.js";
-import { isUint8Array, lowerHex } from "./bytes.js";
+import { copyUint8Array, isUint8Array, lowerHex } from "./bytes.js";
 import { parseStrict } from "./json.js";
 import type { JobStateV1 } from "./types.js";
 import { validateJobState } from "./validate.js";
@@ -267,11 +267,19 @@ export class StatusClient {
         return;
       }
       phase = "sign";
-      attempt(() => this.#signer(message)).then((mac) => {
+      attempt(() => this.#signer(message)).then((signed) => {
         if (settled) return;
-        if (!isUint8Array(mac) || mac.length !== MAC_BYTES) return fail(configurationError("signer"));
+        // Everything the signer handed back is read inside this try: a forged or hostile
+        // result is a signer fault, never an unhandled rejection or a transport error.
+        let request: TransportRequest;
+        try {
+          const mac = copyUint8Array(signed);
+          if (mac === null || mac.length !== MAC_BYTES) return fail(configurationError("signer"));
+          request = Object.freeze({ ...build(mac), signal: controller.signal });
+        } catch {
+          return fail(configurationError("signer"));
+        }
         phase = "transport";
-        const request: TransportRequest = Object.freeze({ ...build(mac), signal: controller.signal });
         attempt(() => this.#transport(request)).then(
           (result) => {
             const response = responseParts(result);

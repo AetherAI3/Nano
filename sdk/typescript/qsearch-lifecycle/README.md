@@ -57,6 +57,11 @@ complete runnable example with a fake transport.
 
 ## Wire summary (normative text: CONTRACT.md)
 
+> **Use `https` for anything but loopback.** Plain `http` base URLs are accepted
+> (contract parity with the Python client), but then the MAC header, request
+> digest and job state cross the network in cleartext. The nonce stops replay;
+> it does not provide confidentiality or response integrity.
+
 - One `status(digest)` = exactly one `GET <origin>/qsearch/v2/requests/<digest>`
   with exactly two headers: `X-Aether-Qsearch-Auth: v1 ts=<ts> nonce=<nonce> mac=<mac>`
   and `Accept: application/json`. A malformed digest is refused before any I/O
@@ -91,6 +96,10 @@ complete runnable example with a fake transport.
   `__proto__` member cannot pollute anything.
 - Times and quantum seconds are plain JS numbers (`3600.0` arrives as `3600`).
   Booleans are never numbers and numbers never booleans.
+- Number values are what an IEEE-754 reader yields, exactly as `JSON.parse`
+  would: `-0` stays `-0` (it compares equal to `0`) and a non-zero literal too
+  small for a double (for example `1e-400`) rounds to `0`; the contract bounds
+  magnitude only.
 - `null` usage means **unknown** and is returned as `null`, never `0`.
   `settled_quantum_seconds: 0` is passed through only as server-reported data;
   the client does not derive, check or upgrade zero finality, and has no

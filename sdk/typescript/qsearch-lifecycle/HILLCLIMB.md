@@ -87,8 +87,40 @@ With those temporary Python-derived fixtures present, the whole suite
   candidate-1 assertion still holds except the two deliberate timer-setup
   code changes described above.
 
-## Current totals (`npm test`, no fixtures present)
+## Candidate 3: second independent review (lead), integrated with Python goldens
 
-80 tests: 76 pass, 4 fail, 0 skipped, 0 cancelled. The 4 failures are
-exactly the four golden tests, failing only because
-`protocol/qsearch-lifecycle/v1/fixtures/` has not been merged yet.
+- Inputs: stacked on PR1 `d4d174c` (real Python fixtures). Before this
+  candidate, `npm test` with fixtures: 80 tests, 80 pass, 0 fail, 0 skipped.
+  Held-out set (frozen by the lead before implementation, never shown to the
+  implementer, sha256 `213d0a35...0c0d0e`): 24/24 on candidate 2.
+- Hypothesis M1: a signer result that only *looks* like a Uint8Array (spoofed
+  `Symbol.toStringTag`) throws inside the `.then` callback, producing an
+  unhandled rejection (crashes a default Node process) and, at the deadline,
+  a misleading retryable `TRANSPORT_UNAVAILABLE`. Reproduced first: new test
+  failed (RED).
+- Minimal diff: `bytes.ts` adds `copyUint8Array`, which reads the internal
+  `[[TypedArrayName]]` slot via the `%TypedArray%.prototype[@@toStringTag]`
+  getter (unforgeable, cross-realm) and copies via the typed-array constructor
+  (internal slots only). `client.ts` copies the MAC and builds the request
+  inside one try that maps every failure to `CLIENT_CONFIGURATION(signer)`.
+  `webcrypto.ts` uses the same copy for the key (cross-realm keys accepted;
+  the copy is zeroed on every refusal path).
+- Hypothesis M2: consumers on TypeScript `moduleResolution: node10` cannot
+  resolve the package or its subpaths. Reproduced first: TS2307 for `.` and
+  `./webcrypto` with the old package.json. Diff: top-level `main`, `types`,
+  `typesVersions` for subpaths; ships `LICENSE` (MIT) instead of a path
+  outside the package.
+- README: cleartext warning for `http` base URLs; documents that `-0` and
+  underflow behave as `JSON.parse` (a `-0` normalisation was tried and
+  reverted because it broke the existing JSON.parse-parity test).
+- Commands and results (Node v24.18.0, Windows 10):
+  - `npm test` with fixtures: 81 tests, 81 pass, 0 fail, 0 skipped.
+  - `npm run pack:check`: ok (install outside checkout, example runs).
+  - `tsc --noEmit --strict --target es2022` consumer importing `.`,
+    `./webcrypto`, `./fetch`: node10 exit 0, node16 exit 0, bundler exit 0
+    (node10 exit 2 with the previous package.json).
+- Regression delta vs candidate 2: +1 test, 0 regressions.
+
+## Current totals (`npm test`, fixtures present)
+
+81 tests: 81 pass, 0 fail, 0 skipped, 0 cancelled.

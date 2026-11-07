@@ -590,3 +590,38 @@ test("base URL: an empty port is accepted like Python urlsplit (port None)", asy
   await client.status(DIGEST);
   assert.equal(calls[0].url, `http://h:/qsearch/v2/requests/${DIGEST}`);
 });
+
+test("review M1: a forged signer result is CLIENT_CONFIGURATION(signer); a hostile subclass is read by internal slots only", async () => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    // Spoofed tag: not a typed array at all.
+    const forged = clientWith(respondWith(200, jsonBytes(queued())), {
+      signer: async () => ({ length: 32, [Symbol.toStringTag]: "Uint8Array" }),
+    });
+    const error = await rejection(forged.client.status(DIGEST));
+    assert.ok(error instanceof LifecycleClientError);
+    assert.deepEqual([error.code, error.field, error.retryable, error.nextAction],
+      ["CLIENT_CONFIGURATION", "signer", false, "NONE"]);
+    assert.equal(forged.calls.length, 0);
+
+    // Genuine Uint8Array subclass with hostile getters: the client copies its 32
+    // internal bytes and never calls the getters.
+    let touched = false;
+    class Hostile extends Uint8Array {
+      get length() { touched = true; throw new Error("length secret"); }
+      [Symbol.iterator]() { touched = true; throw new Error("iterator secret"); }
+    }
+    const hostile = clientWith(respondWith(200, jsonBytes(queued())), { signer: async () => new Hostile(32).fill(0xcd) });
+    await hostile.client.status(DIGEST);
+    assert.equal(hostile.calls.length, 1);
+    assert.match(hostile.calls[0].headers["X-Aether-Qsearch-Auth"], new RegExp("mac=" + "cd".repeat(32) + "$"));
+    assert.equal(touched, false);
+    await tick();
+    await tick();
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, []);
+});
