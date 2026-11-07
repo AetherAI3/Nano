@@ -1,0 +1,30 @@
+{
+  "nanoPackageCasesVersion": "1.0.0",
+  "cases": [
+    {
+      "name": "sufficient verified evidence within budget proposes execute",
+      "frame": {"timestamps": [0], "signals": {"evidence_count": [2], "evidence_verified": [true], "model_tokens": [100]}},
+      "expect": {"proposedIntents": [{"intent": "EXECUTE", "timestamp": 0}]}
+    },
+    {
+      "name": "too little evidence proposes pause",
+      "frame": {"timestamps": [0], "signals": {"evidence_count": [1], "evidence_verified": [true], "model_tokens": [100]}},
+      "expect": {"proposedIntents": [{"intent": "PAUSE", "timestamp": 0}]}
+    },
+    {
+      "name": "unverified evidence proposes pause",
+      "frame": {"timestamps": [0], "signals": {"evidence_count": [2], "evidence_verified": [false], "model_tokens": [100]}},
+      "expect": {"proposedIntents": [{"intent": "PAUSE", "timestamp": 0}]}
+    },
+    {
+      "name": "token budget below threshold proposes pause",
+      "frame": {"timestamps": [0], "signals": {"evidence_count": [2], "evidence_verified": [true], "model_tokens": [99]}},
+      "expect": {"proposedIntents": [{"intent": "PAUSE", "timestamp": 0}]}
+    },
+    {
+      "name": "missing host input is a runtime rejection",
+      "frame": {"timestamps": [0], "signals": {"evidence_count": [2], "evidence_verified": [true]}},
+      "expect": {"runtimeError": "Signal 'model_tokens' not present"}
+    }
+  ]
+}
