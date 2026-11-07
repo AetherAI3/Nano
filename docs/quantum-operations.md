@@ -208,3 +208,6 @@ These checks establish contract admission and expected ordering. They do not
 execute circuits, verify delivery, contact IBM or spend money. Subsequent local
 kernel evidence must demonstrate builder → IR → actual local circuit → fixture
 samples → verified decoded records while preserving this frozen contract.
+The [native bridge](quantum-native-bridge.md) carries `prepare_bits`/`sample`
+through a prepared artifact and an opt-in local q-search service route without
+changing this contract or the legacy optimization adapters.

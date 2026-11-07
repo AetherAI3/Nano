@@ -50,8 +50,11 @@ The existing v2 QUBO request adapter binds the coordinated
 The operations contract is owned by #60/#61 and PR #72, inspected at
 `45ea683915ad1b74b19310229df5428981ff8e03`; this adapter introduces
 no additional operation grammar or natural-language frontend. `prepare_bits`,
-`sample`, and unknown operations are explicitly unsupported by this initial
-legacy-request adapter. Their kernels remain deferred to their owning work.
+`sample`, and unknown operations are explicitly unsupported by this
+legacy-request adapter, and `SUPPORTED_OPERATION` stays `optimize_qubo`. Known-bit
+preparation and sampling use the separate native artifact and opt-in local
+service path in [quantum-native-bridge.md](quantum-native-bridge.md); they are
+never wrapped as a QUBO job to fit this adapter.
 
 The compiler declaration is `nano-qsearch`, the installed Nano package version,
 `qiskit_version: "2.3.1"`, and `qiskit_ibm_runtime_version: null`. Normal logical

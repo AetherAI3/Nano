@@ -3,7 +3,9 @@
 The [operations-v1 RFC](quantum-operations.md) is the semantic contract. The
 separate `nano_qsearch.quantum_adapter` module supplies local circuit kernels,
 sample verification, and explicit legacy migration. It has no submission API,
-credentials, IBM runtime, scheduler, or provider receipt writer.
+credentials, IBM runtime, scheduler, or provider receipt writer. The prepared
+artifact and opt-in local service path for the same `prepare_bits`/`sample`
+plans is the [native bridge](quantum-native-bridge.md).
 
 ```python
 from nano.quantum import build_plan, prepare_bits, sample
