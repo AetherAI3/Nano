@@ -1,0 +1,6 @@
+import Evidence
+module Task {
+  pure fn ready(count: int, verified: bool, tokens: int): bool {
+    sufficient(count, verified) and tokens >= 100
+  }
+}

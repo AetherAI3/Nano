@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "id": "record-0",
+      "value": "alpha"
+    },
+    {
+      "id": "record-1",
+      "value": "beta"
+    },
+    {
+      "id": "record-2",
+      "value": "gamma"
+    },
+    {
+      "id": "record-3",
+      "value": "delta"
+    }
+  ]
+}

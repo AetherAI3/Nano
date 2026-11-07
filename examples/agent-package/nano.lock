@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "agent.nano": "sha256:530c2608a1e2bdce90921731c0e9fdd94960470633e5cda922b0c0dd5a1cbe75",
+    "evidence.nano": "sha256:d5ed862903305733af9a5917e22ce69b324e3cabf6b55ca3b8d01cde30a81a1e",
+    "task.nano": "sha256:b91479a901fc96876f73b6e774c289b1096fe35058cd0873c1bfd45ce05fb234"
+  },
+  "nanoLockVersion": "0.1.0"
+}

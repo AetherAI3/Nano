@@ -1,0 +1,26 @@
+{
+  "compiler": {
+    "name": "nnc",
+    "packageVersion": "1.1.0",
+    "version": "1.0.0"
+  },
+  "results": [
+    {
+      "diagnostics": [
+        {
+          "category": "version",
+          "code": "IR_VERSION_ERROR",
+          "message": "Unsupported IR version '99.0.0' (expected one of 0.1.0, 1.0.0)",
+          "severity": "error",
+          "span": null
+        }
+      ],
+      "input": "unsupported-version.nano",
+      "irVersion": null,
+      "sourceDigest": "sha256:19cc797e466f56c9449b8719af905a0878d1be688e8cee9cf5f9b392b49c3bb5",
+      "success": false
+    }
+  ],
+  "schemaVersion": "1.0.0",
+  "success": false
+}

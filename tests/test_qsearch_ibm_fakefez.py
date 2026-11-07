@@ -53,7 +53,9 @@ TIMEOUT_S = 900
 def _compiled():
     return CompiledSearchProblemV1(
         proposal_digest="sha256:" + "a" * 64, candidate_ids=("c0", "c1", "c2", "c3"),
-        linear=(-1.0, -0.8, -0.6, -0.4), quadratic=((0, 1, 0.9), (0, 2, 0.7), (1, 2, 0.5), (2, 3, -0.3)),
+        # A unique minimum: the old -1.0 gave two floating-point near-ties,
+        # which the classical and hardware selectors could order differently.
+        linear=(-1.125, -0.8, -0.6, -0.4), quadratic=((0, 1, 0.9), (0, 2, 0.7), (1, 2, 0.5), (2, 3, -0.3)),
         penalty=4.5, lineage=tuple({"candidate_id": f"c{i}", "prerequisites": [], "exclusions": []} for i in range(4)))
 
 
@@ -107,6 +109,8 @@ def test_fakefez_dry_run_receipt_is_hardware_sealed_and_selects_under_a_grant(tm
     monkeypatch.delenv("AETHER_AQRC_HW_GO", raising=False)          # a dry run needs no GO
     monkeypatch.delenv("AETHER_AQRC_AUTHORITY_PATH", raising=False)
     compiled, grant = _compiled(), _grant()
+    energies = sorted(compiled.energy(tuple((state >> i) & 1 for i in range(4))) for state in range(16))
+    assert energies[1] - energies[0] > 0.1
     job = _job(compiled)
     with _serving(tmp_path) as (svc, endpoint):
         backend = qsearch_backend.NanoRuntimeQSearchBackend(endpoint, key=RECEIPT_KEY, timeout_s=TIMEOUT_S,

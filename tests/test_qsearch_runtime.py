@@ -56,7 +56,11 @@ CRASH_ENGINE = '''
 import os, sys
 marker = os.environ["CRASH_MARKER"]
 n = int(open(marker).read()) if os.path.exists(marker) else 0
-open(marker, "w").write(str(n + 1))
+# A timeout may kill this test child during bookkeeping. Publish the count
+# atomically so the parent sees either the previous count or the complete one.
+with open(marker + ".tmp", "w") as counter:
+    counter.write(str(n + 1))
+os.replace(marker + ".tmp", marker)
 if n < int(os.environ.get("CRASH_TIMES", "99")):
     sys.exit(3)
 '''

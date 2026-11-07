@@ -7,6 +7,10 @@ All notable changes to `aether-nano` are documented here. This project follows
 
 ### Added
 
+- Opt-in pinned local packages and scalar pure typed helpers through
+  `nano.compiler.compile_package`, with dependency/source-map build evidence,
+  fixed admission budgets, and unchanged executable v1 IR. See RFC 0066.
+
 - `nano_qsearch`, the q-search service Predator Drive calls
   (`POST /qsearch/v1/submit`, `nano-qsearch-serve`): signed and replay-protected
   requests, HMAC-sealed `predator.qsearch.receipt.v1` receipts, a durable job

@@ -322,6 +322,41 @@ def test_nothing_in_nano_imports_dynamically():
     assert offenders == []
 
 
+def _is_first_party_quantum_cli_entry(name, tree, module):
+    """Allow one bundled CLI entry point, never a core dependency on adapters.
+
+    nano_qsearch ships in this wheel but its host/SDK execution layer is outside
+    the deterministic core. The CLI may dispatch to its explicit local command;
+    this exception admits no other import and changes no third-party allowance.
+    """
+    if name != "nano/cli/main.py" or module != "nano_qsearch":
+        return False
+    imports = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module and node.module.split(".")[0] == module:
+            imports.append(node)
+        elif isinstance(node, ast.Import) and any(entry.name.split(".")[0] == module for entry in node.names):
+            imports.append(node)
+    return (len(imports) == 1 and isinstance(imports[0], ast.ImportFrom)
+            and imports[0].module == "nano_qsearch.quantum_cli"
+            and len(imports[0].names) == 1 and imports[0].names[0].name == "command_quantum"
+            and imports[0].names[0].asname is None)
+
+
+@pytest.mark.parametrize("name, source, permitted", [
+    ("nano/cli/main.py", "from nano_qsearch.quantum_cli import command_quantum", True),
+    ("nano/runtime/interpreter.py", "from nano_qsearch.quantum_cli import command_quantum", False),
+    ("nano/cli/main.py", "from nano_qsearch.runtime_ibm import IbmRuntime", False),
+    ("nano/cli/main.py", "import nano_qsearch.quantum_cli", False),
+    ("nano/cli/main.py", "from nano_qsearch.quantum_cli import *", False),
+    ("nano/cli/main.py", "from nano_qsearch.quantum_cli import command_quantum as runtime_ibm", False),
+    ("nano/cli/main.py", "from nano_qsearch.quantum_cli import command_quantum, other", False),
+    ("nano/cli/main.py", "from nano_qsearch.quantum_cli import command_quantum\nimport nano_qsearch.runtime_ibm", False),
+])
+def test_quantum_cli_first_party_boundary_is_exact_and_excludes_the_core(name, source, permitted):
+    assert _is_first_party_quantum_cli_entry(name, ast.parse(source), "nano_qsearch") is permitted
+
+
 def test_the_only_third_party_import_is_the_optional_protocol_c_one():
     offenders = []
     for name, tree in _parsed():
@@ -329,6 +364,8 @@ def test_the_only_third_party_import_is_the_optional_protocol_c_one():
             if module in STDLIB or module == "nano":
                 continue
             if OPTIONAL_DEPENDENCIES.get(module) == name:
+                continue
+            if _is_first_party_quantum_cli_entry(name, tree, module):
                 continue
             offenders.append((name, module))
     assert offenders == []

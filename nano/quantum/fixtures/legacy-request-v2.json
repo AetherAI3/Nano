@@ -1,0 +1,278 @@
+{
+  "source": {
+    "commit": "b6ba6542b2c311d6354948e528bc64f147911178",
+    "path": "tests/qsearch_v2_support.py",
+    "sha256": "b01b36a447823a8b2aa6f43718c717a871e4c918049886f5f0d6c8d4d664fc3b",
+    "builder": "request_body(3)",
+    "job_fixture_sha256": "307b36a72b305a11b2cbb6b6c7d48e384b276985d3e73b0281b082df8efa80ce"
+  },
+  "payload": {
+    "schema": "predator.qsearch.request.v2",
+    "descriptor": {
+      "schema": "predator.qsearch.request.v2",
+      "request_id": "req-hw0",
+      "target": "fake_fez",
+      "purpose": "qcomms",
+      "max_execution_time": 10,
+      "manifest_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "batch_index": 0,
+      "batch_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "blocks": [
+        {
+          "pub_index": 0,
+          "job_digest": "sha256:78d2688966cf589e50d9cdf1796ead6e32f4ea7b676bc22e83bcb1e7b38dd68b",
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 0,
+              "slot": 0
+            }
+          ],
+          "n": 4,
+          "shots": 8,
+          "seed": 7,
+          "classical_min_energy": -1.6
+        },
+        {
+          "pub_index": 1,
+          "job_digest": "sha256:c9a9e4d6b7453687ba80a5eeb68fda4f88daf3740e06e963b9772a4c2dd96824",
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 1,
+              "slot": 0
+            }
+          ],
+          "n": 4,
+          "shots": 8,
+          "seed": 8,
+          "classical_min_energy": -1.6
+        },
+        {
+          "pub_index": 2,
+          "job_digest": "sha256:fcab3b8aef449d5213650d0c7acc1a6a4b535baa806a359db1cdc19ac8cc7ff1",
+          "recipients": [
+            {
+              "agent_id": "agent-007",
+              "chunk": 2,
+              "slot": 0
+            }
+          ],
+          "n": 4,
+          "shots": 8,
+          "seed": 9,
+          "classical_min_energy": -1.6
+        }
+      ]
+    },
+    "jobs": [
+      {
+        "schema": "predator.qsearch.job.v1",
+        "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+        "variables": [
+          "c0",
+          "c1",
+          "c2",
+          "c3"
+        ],
+        "qubo": {
+          "q": [
+            [
+              -1.0,
+              0.45,
+              0.35,
+              0.0
+            ],
+            [
+              0.45,
+              -0.8,
+              0.25,
+              0.0
+            ],
+            [
+              0.35,
+              0.25,
+              -0.6,
+              -0.15
+            ],
+            [
+              0.0,
+              0.0,
+              -0.15,
+              -0.4
+            ]
+          ],
+          "offset": 0.0,
+          "convention": "symmetric_half"
+        },
+        "compile": {
+          "variant": "auto",
+          "p": 1,
+          "gammas": [
+            0.4
+          ],
+          "betas": [
+            0.4
+          ],
+          "opt_level": 3,
+          "seed": 11,
+          "target": "fake_fez",
+          "training": "none"
+        },
+        "backend": {
+          "kind": "ibm",
+          "chi_max": 64,
+          "shots": 8,
+          "seed": 7
+        },
+        "limits": {
+          "max_variables": 40,
+          "max_wall_s": 120,
+          "max_qpu_s": 5
+        },
+        "audit": {
+          "classical_min_energy": -1.6
+        },
+        "job_digest": "sha256:78d2688966cf589e50d9cdf1796ead6e32f4ea7b676bc22e83bcb1e7b38dd68b"
+      },
+      {
+        "schema": "predator.qsearch.job.v1",
+        "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+        "variables": [
+          "c0",
+          "c1",
+          "c2",
+          "c3"
+        ],
+        "qubo": {
+          "q": [
+            [
+              -1.0,
+              0.45,
+              0.35,
+              0.0
+            ],
+            [
+              0.45,
+              -0.8,
+              0.25,
+              0.0
+            ],
+            [
+              0.35,
+              0.25,
+              -0.6,
+              -0.15
+            ],
+            [
+              0.0,
+              0.0,
+              -0.15,
+              -0.4
+            ]
+          ],
+          "offset": 0.0,
+          "convention": "symmetric_half"
+        },
+        "compile": {
+          "variant": "auto",
+          "p": 1,
+          "gammas": [
+            0.4
+          ],
+          "betas": [
+            0.4
+          ],
+          "opt_level": 3,
+          "seed": 11,
+          "target": "fake_fez",
+          "training": "none"
+        },
+        "backend": {
+          "kind": "ibm",
+          "chi_max": 64,
+          "shots": 8,
+          "seed": 8
+        },
+        "limits": {
+          "max_variables": 40,
+          "max_wall_s": 120,
+          "max_qpu_s": 5
+        },
+        "audit": {
+          "classical_min_energy": -1.6
+        },
+        "job_digest": "sha256:c9a9e4d6b7453687ba80a5eeb68fda4f88daf3740e06e963b9772a4c2dd96824"
+      },
+      {
+        "schema": "predator.qsearch.job.v1",
+        "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+        "variables": [
+          "c0",
+          "c1",
+          "c2",
+          "c3"
+        ],
+        "qubo": {
+          "q": [
+            [
+              -1.0,
+              0.45,
+              0.35,
+              0.0
+            ],
+            [
+              0.45,
+              -0.8,
+              0.25,
+              0.0
+            ],
+            [
+              0.35,
+              0.25,
+              -0.6,
+              -0.15
+            ],
+            [
+              0.0,
+              0.0,
+              -0.15,
+              -0.4
+            ]
+          ],
+          "offset": 0.0,
+          "convention": "symmetric_half"
+        },
+        "compile": {
+          "variant": "auto",
+          "p": 1,
+          "gammas": [
+            0.4
+          ],
+          "betas": [
+            0.4
+          ],
+          "opt_level": 3,
+          "seed": 11,
+          "target": "fake_fez",
+          "training": "none"
+        },
+        "backend": {
+          "kind": "ibm",
+          "chi_max": 64,
+          "shots": 8,
+          "seed": 9
+        },
+        "limits": {
+          "max_variables": 40,
+          "max_wall_s": 120,
+          "max_qpu_s": 5
+        },
+        "audit": {
+          "classical_min_energy": -1.6
+        },
+        "job_digest": "sha256:fcab3b8aef449d5213650d0c7acc1a6a4b535baa806a359db1cdc19ac8cc7ff1"
+      }
+    ]
+  }
+}

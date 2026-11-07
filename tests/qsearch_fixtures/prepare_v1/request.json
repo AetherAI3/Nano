@@ -1,0 +1,175 @@
+{
+  "schema": "predator.qsearch.request.v2",
+  "descriptor": {
+    "schema": "predator.qsearch.request.v2",
+    "request_id": "req-hw0",
+    "target": "ibm_fez",
+    "purpose": "qcomms",
+    "max_execution_time": 10,
+    "manifest_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "batch_index": 0,
+    "batch_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "blocks": [
+      {
+        "pub_index": 0,
+        "job_digest": "sha256:9973649c26b3bffddae4a850bea124ab0226e147250dd84764df91badf3aeed1",
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 0,
+            "slot": 0
+          }
+        ],
+        "n": 4,
+        "shots": 8,
+        "seed": 7,
+        "classical_min_energy": -4.0
+      },
+      {
+        "pub_index": 1,
+        "job_digest": "sha256:cfdbd7b4b5f0dc1e173b720dec752ee57a2bddc693060b6f6f22f51e24c3dbcc",
+        "recipients": [
+          {
+            "agent_id": "agent-007",
+            "chunk": 1,
+            "slot": 0
+          }
+        ],
+        "n": 3,
+        "shots": 8,
+        "seed": 8,
+        "classical_min_energy": -3.0
+      }
+    ]
+  },
+  "jobs": [
+    {
+      "schema": "predator.qsearch.job.v1",
+      "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+      "variables": [
+        "x0",
+        "x1",
+        "x2",
+        "x3"
+      ],
+      "qubo": {
+        "q": [
+          [
+            -1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            -1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            0.0,
+            -1.0
+          ]
+        ],
+        "offset": 0.0,
+        "convention": "symmetric_half"
+      },
+      "compile": {
+        "variant": "ordinary",
+        "p": 1,
+        "gammas": [
+          0.4
+        ],
+        "betas": [
+          0.4
+        ],
+        "opt_level": 3,
+        "seed": 11,
+        "target": "ibm_fez",
+        "training": "none"
+      },
+      "backend": {
+        "kind": "ibm",
+        "chi_max": 64,
+        "shots": 8,
+        "seed": 7
+      },
+      "limits": {
+        "max_variables": 40,
+        "max_wall_s": 120,
+        "max_qpu_s": 5
+      },
+      "audit": {
+        "classical_min_energy": -4.0
+      },
+      "job_digest": "sha256:9973649c26b3bffddae4a850bea124ab0226e147250dd84764df91badf3aeed1"
+    },
+    {
+      "schema": "predator.qsearch.job.v1",
+      "compiled_search_digest": "sha256:a8f06cba3ed022dd2fd4efc1085510502517152067653b417fcf5bd50b1bc26d",
+      "variables": [
+        "x0",
+        "x1",
+        "x2"
+      ],
+      "qubo": {
+        "q": [
+          [
+            -1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            -1.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -1.0
+          ]
+        ],
+        "offset": 0.0,
+        "convention": "symmetric_half"
+      },
+      "compile": {
+        "variant": "ordinary",
+        "p": 1,
+        "gammas": [
+          0.4
+        ],
+        "betas": [
+          0.4
+        ],
+        "opt_level": 3,
+        "seed": 11,
+        "target": "ibm_fez",
+        "training": "none"
+      },
+      "backend": {
+        "kind": "ibm",
+        "chi_max": 64,
+        "shots": 8,
+        "seed": 8
+      },
+      "limits": {
+        "max_variables": 40,
+        "max_wall_s": 120,
+        "max_qpu_s": 5
+      },
+      "audit": {
+        "classical_min_energy": -3.0
+      },
+      "job_digest": "sha256:cfdbd7b4b5f0dc1e173b720dec752ee57a2bddc693060b6f6f22f51e24c3dbcc"
+    }
+  ]
+}

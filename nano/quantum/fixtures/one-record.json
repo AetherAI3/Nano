@@ -1,0 +1,53 @@
+{
+  "schema": "nano.quantum.operations.v1",
+  "operations": [
+    {
+      "id": "prepare",
+      "op": "prepare_bits",
+      "variables": [
+        "x0",
+        "x1",
+        "x2"
+      ],
+      "bits": "101",
+      "packets": [
+        {
+          "recipient_id": "recipient-a",
+          "chunk": 0,
+          "slot": 0,
+          "evidence_bank": {
+            "reference": "fixture:records",
+            "digest": "sha256:4fbdd35a81329dc50a246c6c53abe1c1428745136c141c2069fae168dfd44047"
+          },
+          "codec": {
+            "name": "evidence_index",
+            "version": 1
+          },
+          "payload_width": 2,
+          "authentication_width": 1,
+          "bit_significance": "lsb_first",
+          "expected_records": 1
+        }
+      ]
+    },
+    {
+      "id": "sample",
+      "op": "sample",
+      "preparation_id": "prepare",
+      "backend": "local_ideal",
+      "shots": 2,
+      "limits": {
+        "max_circuits": 1,
+        "max_wall_s": 5,
+        "max_qpu_s": 0
+      },
+      "seed": 0,
+      "result": {
+        "pub_index": 0,
+        "register": "meas",
+        "width": 3,
+        "bit_order": "msb_first"
+      }
+    }
+  ]
+}
