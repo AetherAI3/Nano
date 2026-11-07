@@ -31,6 +31,18 @@ matches `build.to_dict()["packageHash"]` above. Both commands require both
 paths, never search for files, and refuse to write over the manifest, the lock
 or any pinned source.
 
+`cases.json` holds fixture cases for the same package:
+
+```text
+nano package test --manifest examples/agent-package/nano.json --lock examples/agent-package/nano.lock --cases examples/agent-package/cases.json
+```
+
+Each case supplies a frame of host inputs and asserts the **proposed** intents
+(or a runtime rejection). Nothing is executed: an `EXECUTE` result is an
+intent value for a host gate to authorize, and every report states
+`actionsExecuted: 0`. Packages that need inference, escalation or any other
+handler are refused before a case runs, and an empty case list fails.
+
 The lock pins the three manifest sources by exact bytes. `inline.nano` is only
 the comparison control, outside the package. Preserve LF line endings: byte
 hashes deliberately distinguish CRLF. Changes to package sources require
