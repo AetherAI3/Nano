@@ -237,9 +237,9 @@ objective energy is a mathematical score, **not measured joules**. The example's
 hardware measurement. This subset has no dimension type system; callers must
 name and validate units explicitly. A future record schema can carry them.
 
-CLI orchestration: `nano package check|build|test` is specified in
-[package-cli.md](package-cli.md) (`check` and `build` are implemented; `test`
-lands separately); `nano init` and `fmt` remain deferred.
+CLI orchestration: `nano package check|build|test` is implemented as
+specified in [package-cli.md](package-cli.md); `nano init` and `fmt` remain
+deferred.
 
 Deferred: registry/network resolution, portable host
 clients, records/enums/results execution, and task-graph/fanout syntax. Future

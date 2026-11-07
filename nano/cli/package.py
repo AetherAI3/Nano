@@ -24,9 +24,15 @@ from ..compiler import PackageError, compile_package
 from ..compiler.package import PACKAGE_VERSION, CompiledPackage
 from ..ir.module import COMPILER_VERSION
 from .commands import EXIT_DIAGNOSTICS, EXIT_IO, EXIT_OK, EXIT_USAGE, Console
+from .package_cases import (
+    ACTIONS_EXECUTED, MAX_CASES_BYTES, CaseResult, FixtureError,
+    UnsupportedHandlerError, load_cases, run_cases,
+)
 
 CHECK_SCHEMA_VERSION = "1.0.0"
 CHECK_DOCUMENT_TYPE = "NanoPackageCheck"
+TEST_SCHEMA_VERSION = "1.0.0"
+TEST_DOCUMENT_TYPE = "NanoPackageTestReport"
 COMPILER_NAME = "nnc-package"
 IO_ERROR_CODE = "IO_ERROR"
 IO_CATEGORY = "io"
@@ -156,7 +162,7 @@ def _discard(temporary: str) -> None:
 
 def command_package(args: argparse.Namespace, console: Console) -> int:
     """Dispatch ``nano package <action>``."""
-    handlers = {"check": _command_check, "build": _command_build}
+    handlers = {"check": _command_check, "build": _command_build, "test": _command_test}
     return handlers[args.package_action](args, console)
 
 
@@ -283,8 +289,97 @@ def _command_build(args: argparse.Namespace, console: Console) -> int:
     return status
 
 
+def _fixture_diagnostic(error: Union[FixtureError, UnsupportedHandlerError], path: str) -> Dict[str, Any]:
+    diagnostic = {
+        "category": error.category, "code": error.code, "message": error.message,
+        "path": path, "severity": "error", "span": None,
+    }
+    if isinstance(error, FixtureError):
+        diagnostic["pointer"] = error.pointer
+    return diagnostic
+
+
+def _read_cases(path: Path) -> Union[bytes, PackageRejection]:
+    """Read the fixture once, bounded; an unreadable file is an I/O rejection."""
+    try:
+        with open(path, "rb") as stream:
+            return stream.read(MAX_CASES_BYTES + 1)
+    except OSError as error:
+        return PackageRejection({
+            "category": IO_CATEGORY, "code": IO_ERROR_CODE,
+            "message": f"cannot read fixture: {error.strerror or type(error).__name__}",
+            "path": Path(path).name, "severity": "error", "span": None,
+        }, EXIT_IO)
+
+
+def _evaluate(args: argparse.Namespace, compiled: CompiledPackage) -> Union[Tuple[CaseResult, ...], PackageRejection]:
+    """Validate the fixture and admit the module, then run every case."""
+    raw = _read_cases(args.cases)
+    if isinstance(raw, PackageRejection):
+        return raw
+    try:
+        return run_cases(compiled.module, load_cases(raw))
+    except FixtureError as error:
+        return PackageRejection(_fixture_diagnostic(error, Path(args.cases).name), EXIT_DIAGNOSTICS)
+    except UnsupportedHandlerError as error:
+        return PackageRejection(_fixture_diagnostic(error, compiled.manifest["entry"]), EXIT_DIAGNOSTICS)
+
+
+def _test_report(compiled: Optional[CompiledPackage], outcome: Union[Tuple[CaseResult, ...], PackageRejection]) -> Dict[str, Any]:
+    envelope = compiled.to_dict() if compiled is not None else None
+    rejected = isinstance(outcome, PackageRejection)
+    results = () if rejected else outcome
+    passed = sum(1 for result in results if result.status == "pass")
+    return {
+        "actionsExecuted": ACTIONS_EXECUTED,
+        "cases": [result.to_dict() for result in results],
+        "diagnostics": [outcome.diagnostic] if rejected else [],
+        "failed": len(results) - passed,
+        "moduleHash": envelope["module"]["moduleHash"] if envelope else None,
+        "packageHash": envelope["packageHash"] if envelope else None,
+        "passed": passed,
+        "schemaVersion": TEST_SCHEMA_VERSION,
+        "success": not rejected and bool(results) and passed == len(results),
+        "total": len(results),
+        "type": TEST_DOCUMENT_TYPE,
+    }
+
+
+def _printable(line: str) -> str:
+    """One ASCII line: fixture text may hold any Unicode, consoles may not."""
+    escaped = line.encode("ascii", "backslashreplace").decode("ascii")
+    return escaped.replace("\r", "\\r").replace("\n", "\\n").replace("\t", "\\t")
+
+
+def _print_test_text(report: Dict[str, Any], console: Console) -> None:
+    for diagnostic in report["diagnostics"]:
+        pointer = diagnostic.get("pointer")
+        message = f"{pointer}: {diagnostic['message']}" if pointer else diagnostic["message"]
+        console.warn(format_diagnostic({**diagnostic, "message": message}))
+    if report["diagnostics"]:
+        return
+    for case in report["cases"]:
+        suffix = f": {case['reason']}" if case["status"] == "fail" else ""
+        console.say(_printable(f"{case['status'].upper()} {case['name']}{suffix}"))
+    console.say(f"{report['passed']}/{report['total']} passed")
+
+
+def _command_test(args: argparse.Namespace, console: Console) -> int:
+    built = build_package(args.manifest, args.lock)
+    compiled = None if isinstance(built, PackageRejection) else built
+    outcome = built if compiled is None else _evaluate(args, compiled)
+    report = _test_report(compiled, outcome)
+    if args.json_output:
+        console.emit(canonical_bytes(report))
+    else:
+        _print_test_text(report, console)
+    if isinstance(outcome, PackageRejection):
+        return outcome.exit_code
+    return EXIT_OK if report["success"] else EXIT_DIAGNOSTICS
+
+
 def add_package_parser(subcommands: Any) -> None:
-    """Register ``nano package check | build`` on the top-level subparsers."""
+    """Register ``nano package check | build | test`` on the top-level subparsers."""
     package = subcommands.add_parser(
         "package", help="check or build an explicit, hash-pinned local package"
     )
@@ -303,6 +398,13 @@ def add_package_parser(subcommands: Any) -> None:
     build.add_argument("--module-output", type=Path, metavar="PATH",
                        help="also write the executable module (canonical JSON)")
     build.set_defaults(handler=command_package)
+    test = actions.add_parser("test", help="evaluate a strict local fixture; proposes, never executes")
+    _add_inputs(test)
+    test.add_argument("--cases", type=Path, required=True, metavar="PATH",
+                      help="fixture file, nanoPackageCasesVersion 1.0.0")
+    test.add_argument("--json", dest="json_output", action="store_true",
+                      help="emit one canonical NanoPackageTestReport document")
+    test.set_defaults(handler=command_package)
 
 
 def _add_inputs(parser: argparse.ArgumentParser) -> None:
