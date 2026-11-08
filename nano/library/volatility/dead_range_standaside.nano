@@ -1,0 +1,41 @@
+// Dead-range stand-aside: record that the market is too quiet to trade, so a
+// host can suppress entry rules, without proposing a position or halting
+// anything. ATR_PCTL_INV(120) = 100 minus the percentile rank of ATR(14)/close
+// within its own trailing 120 bars, so 100 is the quietest bar of that history.
+// RANGE_QUIET_COUNT = how many of the 10-, 20- and 50-bar high-low ranges sit in
+// the bottom quintile of their own 120-bar history (0 to 3). Both are published
+// as complements because narrower is the condition of interest and baseline IR
+// cannot carry a negative literal.
+// REGIME: compression with no catalyst - the stretch where most entry rules are
+// trading noise. Do NOT read it as a forecast of a breakout; it says nothing
+// about direction or timing.
+// CONDITIONS: ATR in the quietest tenth of its own recent history AND all three
+// range windows agreeing. Three windows agreeing is the point: a single window
+// can be pinched by one holiday bar or a data gap, three cannot all be.
+// INVALIDATION: any window leaving its bottom quintile, or ATR rising out of the
+// quietest tenth. No latch; the host decides what suppressing entries means.
+// SHAPE: 1h; a flat, coiled tape where every timeframe looks the same.
+// NOT bb_squeeze_breakout: that enters long on one absolute band width plus
+// momentum and bets the squeeze breaks. This proposes no position, measures
+// against the instrument's own history so it travels, and needs three windows
+// to agree. NOT squeeze_release_expansion: that enters on the first bar a single
+// window's squeeze releases; this one speaks only while the range is still
+// dead. NOT atr_regime_halt: that pauses the book on the opposite tail, when
+// volatility explodes; a dead range is not a hazard, so this observes instead.
+// CALIBRATED ON: crypto majors, 1h bars. Both signals are percentile ranks of
+// the instrument against itself, so the 90 and 3 thresholds travel; what does
+// not travel is the 120-bar history length, which assumes a continuous 24-hour
+// session - a session-bound instrument packs fewer regimes into 120 bars.
+strategy DeadRangeStandaside {
+
+    every 1h {
+
+        if ATR_PCTL_INV(120) >= 90 and RANGE_QUIET_COUNT >= 3 {
+
+            observe()
+
+        }
+
+    }
+
+}

@@ -1,0 +1,12 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "DeadRangeStandaside",
+  "effects": ["intent.emit", "log.append"],
+  "nodes": [
+    { "type": "Schedule", "interval": "1h" },
+    { "type": "Condition", "signal": "ATR_PCTL_INV", "operator": ">=", "value": 90 },
+    { "type": "Condition", "signal": "RANGE_QUIET_COUNT", "operator": ">=", "value": 3 },
+    { "type": "Intent", "action": "OBSERVE" }
+  ]
+}

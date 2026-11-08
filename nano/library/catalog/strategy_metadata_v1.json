@@ -3,19 +3,19 @@
   "type": "NanoStrategyCatalog",
   "schemaVersion": 1,
   "metadataVersion": "StrategyMetadataV1",
-  "strategyCount": 62,
+  "strategyCount": 63,
   "categoryCounts": {
     "event_volatility": 11,
     "mean_reversion": 8,
     "momentum": 6,
     "risk": 8,
     "trend": 9,
-    "volatility": 4,
+    "volatility": 5,
     "volume": 4,
     "watchdog": 12
   },
   "irMaturityCounts": {
-    "baseline": 48,
+    "baseline": 49,
     "v1": 14
   },
   "strategies": [
@@ -1358,6 +1358,44 @@
       ],
       "sourcePath": "library/volatility/bb_squeeze_breakout.nano",
       "irPath": "library/volatility/bb_squeeze_breakout_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "volatility/dead_range_standaside",
+      "slug": "dead_range_standaside",
+      "name": "DeadRangeStandaside",
+      "category": "volatility",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "compression with no catalyst - the stretch where most entry rules are trading noise. Do NOT read it as a forecast of a breakout; it says nothing about direction or timing.",
+      "conditions": "ATR in the quietest tenth of its own recent history AND all three range windows agreeing. Three windows agreeing is the point: a single window can be pinched by one holiday bar or a data gap, three cannot all be.",
+      "invalidation": "any window leaving its bottom quintile, or ATR rising out of the quietest tenth. No latch; the host decides what suppressing entries means.",
+      "shape": "1h; a flat, coiled tape where every timeframe looks the same.",
+      "calibratedOn": "crypto majors, 1h bars. Both signals are percentile ranks of the instrument against itself, so the 90 and 3 thresholds travel; what does not travel is the 120-bar history length, which assumes a continuous 24-hour session - a session-bound instrument packs fewer regimes into 120 bars.",
+      "nearestConfused": [
+        {
+          "slug": "bb_squeeze_breakout",
+          "id": "volatility/bb_squeeze_breakout",
+          "distinction": "that enters long on one absolute band width plus momentum and bets the squeeze breaks. This proposes no position, measures against the instrument's own history so it travels, and needs three windows to agree."
+        },
+        {
+          "slug": "squeeze_release_expansion",
+          "id": "volatility/squeeze_release_expansion",
+          "distinction": "that enters on the first bar a single window's squeeze releases; this one speaks only while the range is still dead."
+        },
+        {
+          "slug": "atr_regime_halt",
+          "id": "volatility/atr_regime_halt",
+          "distinction": "that pauses the book on the opposite tail, when volatility explodes; a dead range is not a hazard, so this observes instead."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "ATR_PCTL_INV",
+        "RANGE_QUIET_COUNT"
+      ],
+      "sourcePath": "library/volatility/dead_range_standaside.nano",
+      "irPath": "library/volatility/dead_range_standaside_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",
