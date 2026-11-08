@@ -237,7 +237,11 @@ objective energy is a mathematical score, **not measured joules**. The example's
 hardware measurement. This subset has no dimension type system; callers must
 name and validate units explicitly. A future record schema can carry them.
 
-Deferred: `nano init/check/test/fmt`, registry/network resolution, portable host
+CLI orchestration: `nano package check|build|test` is implemented as
+specified in [package-cli.md](package-cli.md); `nano init` and `fmt` remain
+deferred.
+
+Deferred: registry/network resolution, portable host
 clients, records/enums/results execution, and task-graph/fanout syntax. Future
 fanout must compute per-child and shared-pool limits before host execution and
 reuse Predator qualification/reservation rules. This is not an unbounded agent

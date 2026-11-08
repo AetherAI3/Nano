@@ -1,0 +1,161 @@
+{
+ "cases": [
+  {
+   "body_b64": "eyJjb2RlIjogIk5PVF9FTkFCTEVEIiwgImVycm9yIjogIm5vdCBmb3VuZCJ9",
+   "expected_error": {
+    "code": "NOT_ENABLED",
+    "field": null,
+    "http_status": 404,
+    "next_action": "MANUAL_RECONCILIATION",
+    "retryable": false
+   },
+   "http_status": 404,
+   "name": "not_enabled",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlVOQVVUSE9SSVpFRCIsICJlcnJvciI6ICJqb2IgbGlmZWN5Y2xlIHJlcXVlc3QgZmFpbGVkIiwgImZpZWxkIjogbnVsbCwgIm5leHRfYWN0aW9uIjogIk5PTkUiLCAicmV0cnlhYmxlIjogZmFsc2V9",
+   "expected_error": {
+    "code": "UNAUTHORIZED",
+    "field": null,
+    "http_status": 401,
+    "next_action": "NONE",
+    "retryable": false
+   },
+   "http_status": 401,
+   "name": "unauthorized",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlJFUVVFU1RfTk9UX0ZPVU5EIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiAicmVxdWVzdF9kaWdlc3QiLCAibmV4dF9hY3Rpb24iOiAiTk9ORSIsICJyZXRyeWFibGUiOiBmYWxzZX0=",
+   "expected_error": {
+    "code": "REQUEST_NOT_FOUND",
+    "field": "request_digest",
+    "http_status": 404,
+    "next_action": "NONE",
+    "retryable": false
+   },
+   "http_status": 404,
+   "name": "request_not_found",
+   "request_digest": "sha256:4126b1470682a0f8ab05a688946586145298752e8806a2a289b1ab978dbb30fd"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlNUT1JFX1VOQVZBSUxBQkxFIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiBudWxsLCAibmV4dF9hY3Rpb24iOiAiTk9ORSIsICJyZXRyeWFibGUiOiB0cnVlfQ==",
+   "expected_error": {
+    "code": "STORE_UNAVAILABLE",
+    "field": null,
+    "http_status": 503,
+    "next_action": "NONE",
+    "retryable": true
+   },
+   "http_status": 503,
+   "name": "store_unavailable",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlNUQVRFX1VOQVZBSUxBQkxFIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiBudWxsLCAibmV4dF9hY3Rpb24iOiAiTUFOVUFMX1JFQ09OQ0lMSUFUSU9OIiwgInJldHJ5YWJsZSI6IGZhbHNlfQ==",
+   "expected_error": {
+    "code": "STATE_UNAVAILABLE",
+    "field": null,
+    "http_status": 503,
+    "next_action": "MANUAL_RECONCILIATION",
+    "retryable": false
+   },
+   "http_status": 503,
+   "name": "state_unavailable",
+   "request_digest": "sha256:7b208ed9a88db2f54816155212095691c72e8412da7292fd17c21d8a75d8da17"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIkVNUFRZX0JPRFlfUkVRVUlSRUQiLCAiZXJyb3IiOiAiam9iIGxpZmVjeWNsZSByZXF1ZXN0IGZhaWxlZCIsICJmaWVsZCI6ICJib2R5IiwgIm5leHRfYWN0aW9uIjogIk5PTkUiLCAicmV0cnlhYmxlIjogZmFsc2V9",
+   "expected_error": {
+    "code": "EMPTY_BODY_REQUIRED",
+    "field": "body",
+    "http_status": 400,
+    "next_action": "NONE",
+    "retryable": false
+   },
+   "http_status": 400,
+   "name": "empty_body_required",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIkZVVFVSRV9DT0RFIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiAicmVxdWVzdF9kaWdlc3QiLCAibmV4dF9hY3Rpb24iOiAiUkVDT05DSUxFIiwgInJldHJ5YWJsZSI6IHRydWV9",
+   "expected_error": {
+    "code": "REMOTE_ERROR",
+    "field": "request_digest",
+    "http_status": 409,
+    "next_action": "RECONCILE",
+    "retryable": true
+   },
+   "http_status": 409,
+   "name": "synthetic_unknown_code",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIklOVkFMSURfUkVRVUVTVCIsICJlcnJvciI6ICJqb2IgbGlmZWN5Y2xlIHJlcXVlc3QgZmFpbGVkIiwgImZpZWxkIjogImRlc2NyaXB0b3Iuc2VjcmV0IiwgIm5leHRfYWN0aW9uIjogIk5PTkUiLCAicmV0cnlhYmxlIjogZmFsc2V9",
+   "expected_error": {
+    "code": "INVALID_REQUEST",
+    "field": null,
+    "http_status": 400,
+    "next_action": "NONE",
+    "retryable": false
+   },
+   "http_status": 400,
+   "name": "synthetic_unknown_field",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlBST1ZJREVSX1VOQVZBSUxBQkxFIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiBudWxsLCAibmV4dF9hY3Rpb24iOiAiUkVUUllfTEFURVIiLCAicmV0cnlhYmxlIjogdHJ1ZX0=",
+   "expected_error": {
+    "code": "PROVIDER_UNAVAILABLE",
+    "field": null,
+    "http_status": 503,
+    "next_action": "MANUAL_RECONCILIATION",
+    "retryable": true
+   },
+   "http_status": 503,
+   "name": "synthetic_unknown_next_action",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIlNUT1JFX1VOQVZBSUxBQkxFIiwgImVycm9yIjogImpvYiBsaWZlY3ljbGUgcmVxdWVzdCBmYWlsZWQiLCAiZmllbGQiOiBudWxsLCAibmV4dF9hY3Rpb24iOiAiUE9MTF9TVEFUVVMiLCAicmV0cnlhYmxlIjogInRydWUifQ==",
+   "expected_error": {
+    "code": "STORE_UNAVAILABLE",
+    "field": null,
+    "http_status": 503,
+    "next_action": "POLL_STATUS",
+    "retryable": false
+   },
+   "http_status": 503,
+   "name": "synthetic_retryable_string",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJlcnJvciI6ICJpbnRlcm5hbCJ9",
+   "expected_error": {
+    "code": "REMOTE_ERROR",
+    "field": null,
+    "http_status": 500,
+    "next_action": "MANUAL_RECONCILIATION",
+    "retryable": false
+   },
+   "http_status": 500,
+   "name": "synthetic_minimal_error",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  },
+  {
+   "body_b64": "eyJjb2RlIjogIkxJRkVDWUNMRV9CVVNZIiwgImRldGFpbCI6IHsidG9rZW4iOiAibXVzdC1iZS1kaXNjYXJkZWQifSwgImVycm9yIjogImJ1c3kiLCAiZmllbGQiOiAiam9icyIsICJuZXh0X2FjdGlvbiI6ICJQT0xMX1NUQVRVUyIsICJyZXRyeWFibGUiOiB0cnVlfQ==",
+   "expected_error": {
+    "code": "LIFECYCLE_BUSY",
+    "field": "jobs",
+    "http_status": 429,
+    "next_action": "POLL_STATUS",
+    "retryable": true
+   },
+   "http_status": 429,
+   "name": "synthetic_extra_members",
+   "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
+  }
+ ],
+ "contract": "nano.qsearch.lifecycle-wire.v1"
+}

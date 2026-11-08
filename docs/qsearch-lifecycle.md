@@ -163,3 +163,12 @@ an unexpected schema, or a mismatched request identity yields `INVALID_RESPONSE`
 Socket/transport failure yields `TRANSPORT_UNAVAILABLE`: a status read proposes
 `POLL_STATUS`; an ambiguous control acknowledgement proposes
 `MANUAL_RECONCILIATION`. Neither means the provider job was cancelled.
+
+## Portable wire contract
+
+Other host languages read job state through the language-neutral status contract
+in [`protocol/qsearch-lifecycle/v1/CONTRACT.md`](../protocol/qsearch-lifecycle/v1/CONTRACT.md)
+(`nano.qsearch.lifecycle-wire.v1`, read-only `status`). Its schemas, constants and
+golden fixtures (signing vectors, status histories, error mappings, negative cases)
+are generated from this implementation by `fixtures/regen.py` and pinned by
+`SHA256SUMS`; `tests/test_qsearch_lifecycle_wire_contract.py` keeps them in step.

@@ -1,0 +1,105 @@
+{
+ "contract": "nano.qsearch.lifecycle-wire.v1",
+ "vectors": [
+  {
+   "base_url": "http://127.0.0.1:8798",
+   "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "clock": 1700000000.9,
+   "header": "v1 ts=1700000000 nonce=0123456789abcdef0123456789abcdef mac=b91cab99091722bce63f3031cb890ec2af53f9be59fe8b3899f1f18f610b3d28",
+   "headers": {
+    "Accept": "application/json",
+    "X-Aether-Qsearch-Auth": "v1 ts=1700000000 nonce=0123456789abcdef0123456789abcdef mac=b91cab99091722bce63f3031cb890ec2af53f9be59fe8b3899f1f18f610b3d28"
+   },
+   "key_hex": "6e616e6f38362d73796e74682d6b3136",
+   "mac_hex": "b91cab99091722bce63f3031cb890ec2af53f9be59fe8b3899f1f18f610b3d28",
+   "message_b64": "R0VUCi9xc2VhcmNoL3YyL3JlcXVlc3RzL3NoYTI1NjoyNDE1NzU0MGNmMWRiMDFlMmE1MThkY2ZkNmZjNTQwZWMwZmM1ZTYxMjc4MTVmNzFlYTQ2ZDM5ODY2NDY3NGE2CmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUKMTcwMDAwMDAwMAowMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZg==",
+   "method": "GET",
+   "name": "key16_fractional_clock",
+   "nonce": "0123456789abcdef0123456789abcdef",
+   "path": "/qsearch/v2/requests/sha256:24157540cf1db01e2a518dcfd6fc540ec0fc5e6127815f71ea46d398664674a6",
+   "request_digest": "sha256:24157540cf1db01e2a518dcfd6fc540ec0fc5e6127815f71ea46d398664674a6",
+   "ts": 1700000000,
+   "url": "http://127.0.0.1:8798/qsearch/v2/requests/sha256:24157540cf1db01e2a518dcfd6fc540ec0fc5e6127815f71ea46d398664674a6"
+  },
+  {
+   "base_url": "https://qsearch.example.test/",
+   "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "clock": 1000,
+   "header": "v1 ts=1000 nonce=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 mac=7623b43a4101519177637eaf8a653e4ce2e300fa6e9e2f6ce7219316e6bf33d5",
+   "headers": {
+    "Accept": "application/json",
+    "X-Aether-Qsearch-Auth": "v1 ts=1000 nonce=fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210 mac=7623b43a4101519177637eaf8a653e4ce2e300fa6e9e2f6ce7219316e6bf33d5"
+   },
+   "key_hex": "6e616e6f38362d73796e7468657469632d726571756573742d6b65792d303332",
+   "mac_hex": "7623b43a4101519177637eaf8a653e4ce2e300fa6e9e2f6ce7219316e6bf33d5",
+   "message_b64": "R0VUCi9xc2VhcmNoL3YyL3JlcXVlc3RzL3NoYTI1NjoyNmI2YjMzNGYzMTMwZGZiNWRjNmZlZjRiNzAyYmU0ZmJiZjI2ZjBmNjRhNjJlNGNhZmIxOWU0ZWE0MDA3Zjk0CmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUKMTAwMApmZWRjYmE5ODc2NTQzMjEwZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTBmZWRjYmE5ODc2NTQzMjEw",
+   "method": "GET",
+   "name": "key32_trailing_slash_nonce64",
+   "nonce": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+   "path": "/qsearch/v2/requests/sha256:26b6b334f3130dfb5dc6fef4b702be4fbbf26f0f64a62e4cafb19e4ea4007f94",
+   "request_digest": "sha256:26b6b334f3130dfb5dc6fef4b702be4fbbf26f0f64a62e4cafb19e4ea4007f94",
+   "ts": 1000,
+   "url": "https://qsearch.example.test/qsearch/v2/requests/sha256:26b6b334f3130dfb5dc6fef4b702be4fbbf26f0f64a62e4cafb19e4ea4007f94"
+  },
+  {
+   "base_url": "http://localhost:8798/",
+   "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "clock": 1730000000,
+   "header": "v1 ts=1730000000 nonce=a1b2c3d4e5f60718 mac=35bdcafa21d7ead44e6329fa157780f069bdef4da76e107bfb51c1523c769a0d",
+   "headers": {
+    "Accept": "application/json",
+    "X-Aether-Qsearch-Auth": "v1 ts=1730000000 nonce=a1b2c3d4e5f60718 mac=35bdcafa21d7ead44e6329fa157780f069bdef4da76e107bfb51c1523c769a0d"
+   },
+   "key_hex": "6e616e6f38362d73796e7468657469632d726571756573742d6b65792d3031",
+   "mac_hex": "35bdcafa21d7ead44e6329fa157780f069bdef4da76e107bfb51c1523c769a0d",
+   "message_b64": "R0VUCi9xc2VhcmNoL3YyL3JlcXVlc3RzL3NoYTI1NjphMjQxZWFiZTNjYTg0YjZiMjc0NTVjNjBlODQzMDFhOTVhMTY1MWJiYzExNmM5YTgyYmQ2MWQyZWYwYzFlNzY5CmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUKMTczMDAwMDAwMAphMWIyYzNkNGU1ZjYwNzE4",
+   "method": "GET",
+   "name": "key31_localhost_slash_nonce16",
+   "nonce": "a1b2c3d4e5f60718",
+   "path": "/qsearch/v2/requests/sha256:a241eabe3ca84b6b27455c60e84301a95a1651bbc116c9a82bd61d2ef0c1e769",
+   "request_digest": "sha256:a241eabe3ca84b6b27455c60e84301a95a1651bbc116c9a82bd61d2ef0c1e769",
+   "ts": 1730000000,
+   "url": "http://localhost:8798/qsearch/v2/requests/sha256:a241eabe3ca84b6b27455c60e84301a95a1651bbc116c9a82bd61d2ef0c1e769"
+  },
+  {
+   "base_url": "https://[::1]:8443",
+   "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "clock": 0.5,
+   "header": "v1 ts=0 nonce=00000000000000000000000000000000 mac=2a99f5e594d7c6ecfb7d4233810a17607964d7c86fb4f3bfc46e58a8f53b2c1c",
+   "headers": {
+    "Accept": "application/json",
+    "X-Aether-Qsearch-Auth": "v1 ts=0 nonce=00000000000000000000000000000000 mac=2a99f5e594d7c6ecfb7d4233810a17607964d7c86fb4f3bfc46e58a8f53b2c1c"
+   },
+   "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+   "mac_hex": "2a99f5e594d7c6ecfb7d4233810a17607964d7c86fb4f3bfc46e58a8f53b2c1c",
+   "message_b64": "R0VUCi9xc2VhcmNoL3YyL3JlcXVlc3RzL3NoYTI1NjpmODAzYTk4NzM1YjdkYjAxNzMzNTYyNTIzNTI3YmZjMzZkN2ExZTJlY2YxZWIwZWZhMTkxNmQwZjNlMmFkOTk5CmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUKMAowMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA==",
+   "method": "GET",
+   "name": "key64_ipv6_origin_sub_second_clock",
+   "nonce": "00000000000000000000000000000000",
+   "path": "/qsearch/v2/requests/sha256:f803a98735b7db01733562523527bfc36d7a1e2ecf1eb0efa1916d0f3e2ad999",
+   "request_digest": "sha256:f803a98735b7db01733562523527bfc36d7a1e2ecf1eb0efa1916d0f3e2ad999",
+   "ts": 0,
+   "url": "https://[::1]:8443/qsearch/v2/requests/sha256:f803a98735b7db01733562523527bfc36d7a1e2ecf1eb0efa1916d0f3e2ad999"
+  },
+  {
+   "base_url": "https://qsearch.example.test",
+   "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "clock": 4102444800.25,
+   "header": "v1 ts=4102444800 nonce=9999999999999999999999999999999999999999 mac=56530a9cd201ed1bc32006336eb80826af132108d3dc3a43438f462bb82ad840",
+   "headers": {
+    "Accept": "application/json",
+    "X-Aether-Qsearch-Auth": "v1 ts=4102444800 nonce=9999999999999999999999999999999999999999 mac=56530a9cd201ed1bc32006336eb80826af132108d3dc3a43438f462bb82ad840"
+   },
+   "key_hex": "ffffffffffffffffffffffffffffffff",
+   "mac_hex": "56530a9cd201ed1bc32006336eb80826af132108d3dc3a43438f462bb82ad840",
+   "message_b64": "R0VUCi9xc2VhcmNoL3YyL3JlcXVlc3RzL3NoYTI1Njo1MWRkMWQ3NzhkYzNiM2NhMDcyZGM5MmU4YmZmOTcwMzVlOTQxM2UxZmQwOWI1MGJiNmQyOGIxOGMwODM4NDA1CmUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUKNDEwMjQ0NDgwMAo5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5OTk5",
+   "method": "GET",
+   "name": "key16_far_clock_nonce40",
+   "nonce": "9999999999999999999999999999999999999999",
+   "path": "/qsearch/v2/requests/sha256:51dd1d778dc3b3ca072dc92e8bff97035e9413e1fd09b50bb6d28b18c0838405",
+   "request_digest": "sha256:51dd1d778dc3b3ca072dc92e8bff97035e9413e1fd09b50bb6d28b18c0838405",
+   "ts": 4102444800,
+   "url": "https://qsearch.example.test/qsearch/v2/requests/sha256:51dd1d778dc3b3ca072dc92e8bff97035e9413e1fd09b50bb6d28b18c0838405"
+  }
+ ]
+}
