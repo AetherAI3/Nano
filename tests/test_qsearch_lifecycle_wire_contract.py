@@ -439,8 +439,8 @@ def test_error_body_maps_to_expected_metadata(case):
 # --- negatives -----------------------------------------------------------------------------------
 
 _DISCREPANCY = {
-    "duplicate_key": "CONTRACT.md section 4: LifecycleClient uses json.loads, which keeps the last duplicate member",
-    "error_body": "LifecycleClient maps error bodies without the strict-JSON rules (duplicates, 2^53-1, depth 64)",
+    "error_body": "LifecycleClient maps error bodies without the strict-JSON rules (2^53-1, depth 64)",
+    "encoding": "CONTRACT.md section 4: json.loads auto-detects a UTF-8 BOM, UTF-16 or UTF-32 body",
     "unsafe_integer": "LifecycleClient accepts integers beyond 2^53-1 (CONTRACT.md 2.1 portability cap)",
     "envelope": "CONTRACT.md section 4: LifecycleClient checks only schema, request_digest and next_action",
 }
@@ -449,8 +449,8 @@ _DISCREPANCY = {
 def _reason(name: str) -> str:
     if name.startswith("error_body"):
         return _DISCREPANCY["error_body"]
-    if name.startswith("duplicate_key"):
-        return _DISCREPANCY["duplicate_key"]
+    if name.startswith("encoding_"):
+        return _DISCREPANCY["encoding"]
     if name == "unsafe_integer":
         return _DISCREPANCY["unsafe_integer"]
     return _DISCREPANCY["envelope"]
