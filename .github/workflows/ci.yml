@@ -126,7 +126,7 @@ jobs:
                           "assert baseline_control_frames.__module__ == "
                           "'nano.library.contribution'; "
                           "catalog = load_catalog(); "
-                          "assert catalog['strategyCount'] == 57; "
+                          "assert catalog['strategyCount'] == 60; "
                           "assert catalog_diagnostics() == (); "
                           "import json; from importlib.resources import files; "
                           "from nano.project import ProjectIndex; "

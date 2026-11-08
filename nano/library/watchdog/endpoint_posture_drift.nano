@@ -1,0 +1,34 @@
+// Endpoint posture drift: raise for review when the share of monitored endpoints
+// outside their approved security posture reaches 5 percent. The advisory half
+// of a pair. ENDPOINT_NONCOMPLIANT_PCT is the percentage of in-scope endpoints
+// the host currently measures as out of posture.
+// REGIME: all of them. Fleet posture drifts slowly and continuously; this is the
+// rule that gives the drift a dated record before it becomes an incident.
+// CONDITIONS: none in the rule. The host defines approved posture, decides which
+// endpoints are in scope, and measures compliance. Nano cannot scan or
+// quarantine an endpoint.
+// INVALIDATION: remediation bringing the share back under 5 percent. No latch.
+// SHAPE: 1h; posture changes over hours and days, and a faster cadence only
+// repeats the same reading.
+// NOT endpoint_posture_ceiling: that is the same signal at 15 percent and it
+// proposes a pause. Two rules rather than one because review and hold are
+// different decisions with different owners - a fleet between the two ceilings
+// is drifting and needs attention, not yet a stop.
+// CALIBRATED ON: policy, not data. 5 percent is a placeholder review line for a
+// managed fleet; a percentage travels between fleet sizes where a count would
+// not, but the line itself belongs to whoever owns the posture policy.
+strategy EndpointPostureDrift {
+
+    agent SecurityDesk
+
+    every 1h {
+
+        if ENDPOINT_NONCOMPLIANT_PCT >= 5 {
+
+            observe()
+
+        }
+
+    }
+
+}

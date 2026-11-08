@@ -1,0 +1,33 @@
+// Endpoint posture ceiling: propose a pause when the share of monitored endpoints
+// outside their approved security posture reaches 15 percent. The hold half of a
+// pair. ENDPOINT_NONCOMPLIANT_PCT is the percentage of in-scope endpoints the
+// host currently measures as out of posture.
+// REGIME: all of them, while the fleet is in service.
+// CONDITIONS: none in the rule. The host defines approved posture, decides which
+// endpoints are in scope, measures compliance and does anything about it. Nano
+// cannot scan or quarantine an endpoint, and the pause is a proposal for the
+// host's DecisionGate.
+// INVALIDATION: remediation bringing the share back under 15 percent. No latch;
+// the host decides when the hold ends.
+// SHAPE: 1h, matching the advisory rule so both read the same measurement.
+// NOT endpoint_posture_drift: that is the same signal at 5 percent and it only
+// asks for review. This one says drift has become a fleet-wide condition worth
+// holding work for. Above 15 percent both fire, which is intended: the review
+// record continues alongside the hold.
+// CALIBRATED ON: policy, not data. 15 percent is a placeholder hold line, three
+// times the review line; keep the ratio when a site moves either figure.
+strategy EndpointPostureCeiling {
+
+    agent SecurityDesk
+
+    every 1h {
+
+        if ENDPOINT_NONCOMPLIANT_PCT >= 15 {
+
+            pause()
+
+        }
+
+    }
+
+}

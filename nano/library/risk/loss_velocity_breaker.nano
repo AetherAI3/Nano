@@ -1,0 +1,35 @@
+// Loss-velocity breaker: pause when the book loses money fast, independently of
+// how much it has lost in total. LOSS_VELOCITY_PCT is realised plus unrealised
+// loss over the trailing FIFTEEN-MINUTE window, as a positive percentage of
+// starting equity; zero when flat or profitable over that window.
+// REGIME: all of them. This is a control, not a directional hypothesis.
+// CONDITIONS: none in the rule. The host owns the window boundary, decides what
+// counts as realised versus unrealised, and decides what a pause actually does.
+// Nano cannot flatten a position or halt anything.
+// INVALIDATION: the window rolling past the losses. The rule does not latch;
+// when trading resumes is the host's call.
+// SHAPE: 1m over a 15m trailing window. Shorter is mostly spread and fill noise,
+// which is worse than no rule; much longer smooths the spike away and becomes
+// daily_loss_limit again with extra steps.
+// NOT daily_loss_limit: that measures where the book is - cumulative session
+// loss against a level. This one measures where it is heading: half of that
+// daily figure lost inside a quarter hour fires here while the level is still
+// comfortably inside its limit. Both should be armed.
+// CALIBRATED ON: a session-level policy figure - 1 percent of starting equity in
+// fifteen minutes, half the 2 percent daily limit. It travels with the daily
+// limit: scale both together, never one without the other.
+strategy LossVelocityBreaker {
+
+    agent RiskDesk
+
+    every 1m {
+
+        if LOSS_VELOCITY_PCT >= 1 {
+
+            pause()
+
+        }
+
+    }
+
+}

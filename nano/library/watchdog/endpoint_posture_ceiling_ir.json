@@ -1,0 +1,12 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "EndpointPostureCeiling",
+  "effects": ["intent.emit", "log.append"],
+  "nodes": [
+    { "type": "Schedule", "interval": "1h" },
+    { "type": "Condition", "signal": "ENDPOINT_NONCOMPLIANT_PCT", "operator": ">=", "value": 15 },
+    { "type": "Intent", "action": "PAUSE" },
+    { "type": "Agent", "name": "SecurityDesk" }
+  ]
+}
