@@ -50,6 +50,7 @@ from typing import (
 from ..indicators import evaluate as evaluate_indicator
 from ..indicators.registry import lookup as lookup_indicator
 from ..ir.module import IRNode, NanoModule
+from ..ir.records import RecordValue, RecordValueError, admit_record_inputs
 from ..ir.schema import validate_integer_magnitude
 from .effects import Intent, LogEntry
 from .interpreter import MarketFrame, RuntimeError_
@@ -76,6 +77,19 @@ class ReasoningProvider(Protocol):
     def infer(
         self, signature: str, inputs: Mapping[str, Cell], *, timestamp: int
     ) -> Mapping[str, Cell]: ...
+
+
+class RecordInputError(RuntimeError_):
+    """A host record input was rejected before any node ran (RFC 0085).
+
+    ``code`` is a stable ``RECORD_INPUT_*`` code and ``path`` is
+    ``<input>/<bar>/<field>...``. The message never contains host values.
+    """
+
+    def __init__(self, code: str, path: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.path = path
 
 
 @dataclass(frozen=True)
@@ -279,6 +293,19 @@ class _Machine:
         # The risk block's whole runtime lives in `.risk`; a module without one
         # gets an inert gate that adds no decision and no log entry.
         self.risk = RiskGate.for_module(self.module, self.frame)
+        # IR 1.1.0: every declared record input is admitted strictly, within
+        # fixed ceilings, before any node (rule or helper result) is evaluated.
+        self._records = self._admit_records()
+
+    def _admit_records(self) -> Dict[str, Series]:
+        if not self.module.records:
+            return {}
+        try:
+            return admit_record_inputs(
+                self.module.records, self.module.inputs, self.frame.signals
+            )
+        except RecordValueError as exc:
+            raise RecordInputError(exc.code, exc.path, str(exc)) from None
 
     # -- stage 1: derive every series --------------------------------------
 
@@ -343,6 +370,10 @@ class _Machine:
             return self._evaluate_infer(node)
         if op == "record.field":
             return self._evaluate_record_field(node)
+        if op == "record.input":
+            return self._records[node.attrs["name"]]
+        if op == "record.get":
+            return self._evaluate_record_get(node)
 
         # schedule / block / rule / route / intent.emit / llmre.escalate / agent /
         # ai.signature / risk.limits carry no series value: they are control flow,
@@ -472,6 +503,16 @@ class _Machine:
         field_name = node.attrs["field"]
         target = _as_series(self._operands(node)[0], self.length)
         return tuple(_field_of(cell, field_name) for cell in target)
+
+    def _evaluate_record_get(self, node: IRNode) -> Series:
+        """Read one field of an admitted record; an absent bar stays absent."""
+        field_name = node.attrs["field"]
+        out: List[Any] = []
+        for cell in _as_series(self._operands(node)[0], self.length):
+            if cell is not None and not isinstance(cell, RecordValue):
+                raise RuntimeError_(f"record.get {node.id!r} received an unadmitted value")
+            out.append(None if cell is None else cell.get(field_name))
+        return tuple(out)
 
     # -- stage 2: walk the schedule ----------------------------------------
 

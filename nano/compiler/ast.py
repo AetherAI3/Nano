@@ -108,6 +108,28 @@ class Binary(Expr):
     right: Expr
 
 
+@dataclass(frozen=True)
+class RecordFieldInit:
+    """One `field: value` of a record construction (package sources only)."""
+
+    line: int
+    column: int
+    name: str
+    value: Expr
+
+
+@dataclass(frozen=True)
+class RecordLit(Expr):
+    """`Evidence(count: 2, verified: true)` — a compile-time record value.
+
+    Only the package compiler parses it (RFC 0085). Construction is never
+    materialized at run time: field access projects the field's expression.
+    """
+
+    record: str
+    fields: Tuple[RecordFieldInit, ...]
+
+
 # ---------------------------------------------------------------------------
 # Statements
 # ---------------------------------------------------------------------------

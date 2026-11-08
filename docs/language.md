@@ -20,8 +20,10 @@ separate, opt-in `compile_package(manifest_path, lock_path=...)` API. Ordinary
 single-source compilation keeps its existing grammar. See
 [RFC 0066](rfc-0066-hermetic-packages.md) and the
 [offline agent example](../examples/agent-package/README.md) for the shipped
-subset, source maps, byte pins and fixed expansion limits. Reusable records,
-enums and results are proposals, not accepted syntax.
+subset, source maps, byte pins and fixed expansion limits. Immutable records
+are accepted only by that package API (see [Package records](#package-records)
+and [RFC 0085](rfc-0085-immutable-records.md)); enums and results are
+proposals, not accepted syntax.
 
 ## A complete v1 example
 
@@ -555,6 +557,38 @@ reproducibility evidence, not proof of who produced it. Runs containing `infer`
 are reproducible only given the same provider behavior;
 `identity.reasoningRequired` records that qualification. See
 [Run receipts](receipts.md) for the complete byte contract.
+
+## Package records
+
+Package modules (never single-source programs) may declare immutable,
+nominal records and use them in pure helpers and the entry strategy:
+
+```text
+module Evidence {
+  record Evidence { count: int verified: bool }
+  pure fn sufficient(e: Evidence): bool { e.count >= 2 and e.verified }
+}
+```
+
+- Fields are `int`, `float`, `bool`, `string` or an earlier/imported record;
+  at most 32 fields and nesting depth 8. Types match exactly: no widening,
+  bool-as-int or series lifting.
+- `Evidence(count: c, verified: v)` constructs a compile-time value; `e.count`
+  is the only record operation. Field access on a construction projects the
+  field's expression, so construction emits no IR and unused fields are never
+  evaluated. There is no assignment, equality, arithmetic or history on records.
+- `input evidence: Evidence` is host-supplied. Its IR is revision `1.1.0`
+  (`records` table, `record.input`, `record.get`); programs without record
+  inputs keep emitting `1.0.0` bytes unchanged.
+- Each bar is `None` or `{"recordType": <id>, "fields": {...}}`. The VM rejects
+  wrong envelopes, stale ids, hidden or missing fields, coerced numbers,
+  bool-as-int, non-finite floats, integers beyond ±(2^53 − 1), cyclic values
+  and frames over 4,096 materialized field values or 262,144 string bytes with
+  `RecordInputError` before any rule runs.
+
+Record ids commit to the defining module, name and ordered fields. See
+[RFC 0085](rfc-0085-immutable-records.md) for identity hashing, loader rules,
+diagnostic codes and deferred work (enums, results, matching).
 
 ## Deliberate non-features and truth boundaries
 
