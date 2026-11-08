@@ -183,3 +183,10 @@ Production defaults: native disabled; when enabled, `max_pubs` 16,
 400-recipient/1,200-PUB round trip uses explicit test caps only:
 `max_pubs=1200`, `max_body_bytes=8 MiB`; the defaults are unchanged and tests
 prove the defaults refuse it.
+
+Tests that spawn the local runtime use non-golden copies of the fixture plans
+built with the same builders and `max_wall_s` 60 (the default policy deadline),
+because child startup counts against the declared bound. The frozen goldens keep
+their 5 s bound and stay covered by the contract and artifact tests. Deadline
+enforcement is proven separately and load-independently: a 1 s bound kills a
+child that sleeps 60 s and the request is sealed `FAILED`.

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +37,11 @@ class LocalNativeRuntime:
     kind = LOCAL_RUNTIME_KIND
     qiskit_version = PINNED_QISKIT
 
+    def __init__(self, worker_command: Sequence[str] | None = None) -> None:
+        # The default worker is this module; a host or test may substitute a command, never the deadline.
+        self._command = (list(worker_command) if worker_command is not None
+                         else [sys.executable, "-m", "nano_qsearch.native_runtime", "--native-worker"])
+
     def preflight(self, artifact: NativeArtifact, *, expected_digest: str) -> None:
         load_native_circuits(artifact, expected_digest=expected_digest)
 
@@ -44,8 +49,7 @@ class LocalNativeRuntime:
         deadline = artifact.resources["deadline_s"]
         envelope = {"artifact": artifact.to_payload(), "expected_digest": expected_digest}
         try:
-            process = subprocess.run([sys.executable, "-m", "nano_qsearch.native_runtime", "--native-worker"],
-                                     input=canonical_json(envelope), capture_output=True, text=True,
+            process = subprocess.run(self._command, input=canonical_json(envelope), capture_output=True, text=True,
                                      encoding="utf-8", timeout=deadline, cwd=str(Path(__file__).resolve().parents[1]))
         except subprocess.TimeoutExpired:
             raise NativeRuntimeError("DEADLINE", "local sampler exceeded the declared wall bound; child killed") from None

@@ -16,8 +16,9 @@ from nano_qsearch.native_policy import SEAL_PREFIX, parse_native_policy, verify_
 from nano_qsearch.native_request import build_native_request, request_digest
 from nano_qsearch.native_service import NATIVE_REQUEST_PREFIX, NATIVE_SUBMIT_PATH
 from nano_qsearch.service import QSearchService, ServiceConfig, serve_in_thread
-from native_bridge_support import (SYNTHETIC_RECEIPT_KEY, Clock, FakeRuntime, body_bytes, headers, ideal_observations,
-                                   native_policy, plan, profile_payload, read, service_config, target_payload)
+from native_bridge_support import (SYNTHETIC_RECEIPT_KEY, Clock, FakeRuntime, body_bytes, e2e_plan, headers,
+                                   ideal_observations, native_policy, plan, profile_payload, read, service_config,
+                                   target_payload)
 
 qiskit_test = pytest.mark.skipif(importlib.util.find_spec("qiskit") is None, reason="requires the pinned quantum extra")
 JOB_STATE_KEYS = {"schema", "request", "lineage", "state", "provider", "execution", "accounting", "usage",
@@ -467,7 +468,7 @@ def test_http_routes_with_the_actual_local_runtime(tmp_path):
     disabled = QSearchService(service_config(tmp_path / "off", native_policy=None))
     servers = [serve_in_thread(svc), serve_in_thread(disabled)]
     try:
-        body = request_for(plan("one-record"), request_id="native-http")
+        body = request_for(e2e_plan("one-record"), request_id="native-http")
         raw = body_bytes(body)
         url = f"http://127.0.0.1:{servers[0][0].server_port}"
         req = urllib.request.Request(url + NATIVE_SUBMIT_PATH, data=raw, method="POST",
@@ -490,3 +491,48 @@ def test_http_routes_with_the_actual_local_runtime(tmp_path):
             thread.join()
         svc.close()
         disabled.close()
+
+
+@qiskit_test
+def test_declared_wall_bound_kills_a_slow_local_child_and_seals_failed(tmp_path):
+    """Deadline enforcement, independent of machine load: a 1 s bound against a child that sleeps 60 s."""
+    import time
+    from nano_qsearch.native_artifact import parse_native_artifact
+    from nano_qsearch.native_runtime import LocalNativeRuntime, NativeRuntimeError
+    value = build_plan([prepare_bits("1"), sample("prepare", expected_width=1, shots=1, max_circuits=1,
+                                                  max_wall_s=1, max_qpu_s=0)])
+    body = request_for(value, request_id="native-deadline")
+    slow = LocalNativeRuntime(worker_command=[sys.executable, "-c", "import time; time.sleep(60)"])
+    artifact = parse_native_artifact(body["artifact"])
+    start = time.monotonic()
+    with pytest.raises(NativeRuntimeError) as exc:
+        slow.run(artifact, expected_digest=artifact.artifact_digest, record={})
+    assert exc.value.code == "DEADLINE" and time.monotonic() - start < 30
+    svc = QSearchService(service_config(tmp_path), clock=Clock(), native_runtime_factory=lambda: slow)
+    try:
+        start = time.monotonic()
+        code, record = submit(svc, body)
+        assert time.monotonic() - start < 45                     # killed long before the child would finish
+        assert code == 200 and record["status"] == "FAILED" and record["reason"] == "local runtime: DEADLINE"
+        assert record["observations"] is None and record["hardware"] is None
+        state = status(svc, request_digest(body))[1]
+        assert state["execution"]["status"] == "FAILED" and state["accounting"]["status"] == "NOT_APPLICABLE"
+        assert submit(svc, body)[1] == record and svc.store.get_request(request_digest(body)).attempts == 1
+    finally:
+        svc.close()
+
+
+def test_runtime_deadline_error_is_sealed_failed_on_a_fake_runtime(tmp_path):
+    from nano_qsearch.native_runtime import NativeRuntimeError
+
+    class Late(FakeRuntime):
+        def run(self, artifact, *, expected_digest, record):
+            self.runs += 1
+            raise NativeRuntimeError("DEADLINE", "synthetic deadline")
+    svc, runtime = make(tmp_path, runtime=Late())
+    try:
+        code, record = submit(svc, known_bits_request())
+        assert (code, record["status"], record["reason"]) == (200, "FAILED", "local runtime: DEADLINE")
+        assert runtime.runs == 1
+    finally:
+        svc.close()

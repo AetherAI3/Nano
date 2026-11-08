@@ -34,6 +34,25 @@ def plan(name: str):
     return large_mapping_fixture() if name == "large-mapping" else parse_plan(read(name))
 
 
+E2E_WALL_S = 60   # within the default policy max_deadline_s; frozen goldens keep their declared 5 s
+
+
+def e2e_plan(name: str):
+    """A non-golden plan for tests that spawn the local runtime: same builders, a 60 s wall bound.
+
+    Child-process startup counts against the declared bound, so the frozen 5 s goldens are
+    load-sensitive end to end. Deadline enforcement is proven separately and deterministically.
+    """
+    from nano.quantum import build_plan, prepare_bits, sample
+    if name == "large-mapping":
+        return large_mapping_fixture()   # already declares 60 s
+    preparation = read(name)["operations"][0]
+    return build_plan([prepare_bits(preparation["bits"], operation_id=preparation["id"],
+                                    variables=preparation["variables"], packets=preparation["packets"]),
+                       sample(preparation["id"], expected_width=len(preparation["bits"]), shots=2, max_circuits=1,
+                              max_wall_s=E2E_WALL_S, max_qpu_s=0)])
+
+
 def target_payload() -> dict:
     return local_target(16)
 

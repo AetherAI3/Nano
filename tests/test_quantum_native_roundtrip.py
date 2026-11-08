@@ -20,8 +20,8 @@ from nano_qsearch.native_request import build_native_request
 from nano_qsearch.native_result import retain_identity, verify_native_result
 from nano_qsearch.native_service import NATIVE_SUBMIT_PATH
 from nano_qsearch.service import QSearchService, serve_in_thread
-from native_bridge_support import (ROOT, SYNTHETIC_RECEIPT_KEY, Clock, body_bytes, headers, native_policy, plan,
-                                   profile_payload, read, service_config, target_payload)
+from native_bridge_support import (E2E_WALL_S, ROOT, SYNTHETIC_RECEIPT_KEY, Clock, body_bytes, e2e_plan, headers,
+                                   native_policy, plan, profile_payload, read, service_config, target_payload)
 
 qiskit_test = pytest.mark.skipif(importlib.util.find_spec("qiskit") is None, reason="requires the pinned quantum extra")
 TEST_MAX_BODY_BYTES = 8 * 1024 * 1024        # explicit host test cap; the production default stays 1 MiB
@@ -66,11 +66,13 @@ def submit(svc, body, *, now=1000):
     return svc.native.submit("POST", NATIVE_SUBMIT_PATH, raw, headers("POST", NATIVE_SUBMIT_PATH, raw, now=now), now=now)
 
 
-def builder_plan(name):
-    if name == "known-bits":
-        return build_plan([prepare_bits("100"), sample("prepare", expected_width=3, shots=2, max_circuits=1,
-                                                       max_wall_s=5, max_qpu_s=0)])
-    return plan(name)
+def golden_except_wall_bound(name, value):
+    """The E2E plan equals the frozen golden except its declared wall bound."""
+    golden = read(name)
+    for operation in golden["operations"]:
+        if operation["op"] == "sample":
+            operation["limits"]["max_wall_s"] = E2E_WALL_S
+    return value.to_payload() == golden and value.plan_digest != plan(name).plan_digest
 
 
 @qiskit_test
@@ -79,8 +81,8 @@ def builder_plan(name):
 def test_native_source_to_verified_records_through_artifact_and_local_service(tmp_path, monkeypatch, name, expected):
     monkeypatch.setitem(sys.modules, "qiskit_ibm_runtime", None)
     monkeypatch.setitem(sys.modules, "aether_atlas", None)
-    value = builder_plan(name)
-    assert value.plan_digest == read("native-goldens")["plans"][name]["plan_digest"]
+    value = e2e_plan(name)
+    assert golden_except_wall_bound(name, value)
     body, expected_identity = caller_side(value, f"native-{name}")
     assert not QUBO_KEYS & keys(body["artifact"]["plan"]) and not QUBO_KEYS & keys(body["descriptor"])
     svc = QSearchService(service_config(tmp_path), clock=Clock())
@@ -143,8 +145,8 @@ def test_400_recipients_1200_pubs_survive_artifact_load_and_http_local_service(t
 
 @qiskit_test
 def test_caller_retained_identity_rejects_substitution_even_when_service_records_agree(tmp_path):
-    body_a, expected_a = caller_side(plan("one-record"), "native-a")
-    body_b, expected_b = caller_side(plan("packed-records"), "native-b")
+    body_a, expected_a = caller_side(e2e_plan("one-record"), "native-a")
+    body_b, expected_b = caller_side(e2e_plan("packed-records"), "native-b")
     svc = QSearchService(service_config(tmp_path), clock=Clock())
     try:
         record_a, record_b = submit(svc, body_a)[1], submit(svc, body_b)[1]
@@ -168,13 +170,13 @@ def test_caller_retained_identity_rejects_substitution_even_when_service_records
             verify_native_result(expected_a, changed, evidence, receipt_key=SYNTHETIC_RECEIPT_KEY)
         assert exc.value.code == code
     with pytest.raises(QuantumValidationError) as exc:
-        retain_identity(plan("packed-records"), body_a)
+        retain_identity(e2e_plan("packed-records"), body_a)
     assert exc.value.code == "IDENTITY"
 
 
 @qiskit_test
 def test_hardware_seal_or_accounting_claims_and_partial_records_are_rejected(tmp_path):
-    body, expected = caller_side(plan("one-record"), "native-claims")
+    body, expected = caller_side(e2e_plan("one-record"), "native-claims")
     svc = QSearchService(service_config(tmp_path), clock=Clock())
     try:
         record = submit(svc, body)[1]
@@ -217,7 +219,7 @@ def test_hardware_seal_or_accounting_claims_and_partial_records_are_rejected(tmp
 @qiskit_test
 def test_reordered_pubs_are_rejected_by_the_caller(tmp_path):
     value = build_plan([prepare_bits("10", operation_id="a"), prepare_bits("01", operation_id="b"),
-                        *(sample(p, operation_id=f"s{p}", expected_width=2, shots=1, max_circuits=2, max_wall_s=5,
+                        *(sample(p, operation_id=f"s{p}", expected_width=2, shots=1, max_circuits=2, max_wall_s=E2E_WALL_S,
                                  max_qpu_s=0, pub_index=i) for i, p in enumerate("ab"))])
     body, expected = caller_side(value, "native-reorder")
     svc = QSearchService(service_config(tmp_path), clock=Clock())
