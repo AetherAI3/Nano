@@ -1639,9 +1639,9 @@
       "calibratedOn": "nothing numeric to calibrate - the threshold is the host's own binary. What does not travel is the definition of \"trusted\", which is site-specific and belongs to whoever operates the network.",
       "nearestConfused": [
         {
-          "slug": "endpoint_posture_ceiling",
-          "id": null,
-          "distinction": "that counts how many endpoints are out of policy while the system still works. This one says the path itself is gone."
+          "slug": "credential_age_alert",
+          "id": "watchdog/credential_age_alert",
+          "distinction": "that warns ahead of a breakage and proposes review while the system still works. This one says the path itself is gone."
         }
       ],
       "provenance": null,

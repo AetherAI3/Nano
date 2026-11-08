@@ -320,7 +320,18 @@ def test_multiple_nearest_confused_entries_resolve_when_a_slug_exists():
 
     assert confused
     assert all(item["id"] == known_ids.get(item["slug"]) for item in confused)
-    assert any(item["id"] is None for item in confused)
+    # Issue #26: the contribution check refuses a NOT line naming no entry, so
+    # every neighbour in the checked-in corpus resolves to a real ID.
+    assert all(item["id"] is not None for item in confused)
+
+
+def test_unresolved_nearest_confused_slug_is_catalogued_with_a_null_id(tmp_path):
+    # The catalog schema still tolerates an unresolved slug; policy lives in the
+    # contribution check, so the projection itself must keep representing it.
+    document = build_catalog(_tiny_library(tmp_path / "library"))
+    [item] = _strategy(document, "catalog_fixture")["nearestConfused"]
+    assert item["slug"] == "other_strategy"
+    assert item["id"] is None
 
 
 def test_contribution_entry_check_surfaces_catalog_parser_diagnostics(monkeypatch):
