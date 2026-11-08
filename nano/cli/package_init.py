@@ -21,6 +21,10 @@ from typing import Optional, Tuple
 
 from .commands import EXIT_IO, EXIT_OK, EXIT_USAGE, Console
 
+# Win32 FILE_ATTRIBUTE_REPARSE_POINT (symlinks and junctions). A literal, not
+# getattr(stat, ...): the determinism guards forbid string access to modules.
+FILE_ATTRIBUTE_REPARSE_POINT = 0x400
+
 RULES_SOURCE = b"""module Rules {
   pure fn ready(count: int, verified: bool): bool { count >= 2 and verified }
 }
@@ -90,8 +94,8 @@ def _is_link(path: Path) -> bool:
         info = os.lstat(path)
     except OSError:
         return False
-    reparse = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
-    return stat.S_ISLNK(info.st_mode) or bool(getattr(info, "st_file_attributes", 0) & reparse)
+    attributes = getattr(info, "st_file_attributes", 0)  # Windows-only stat field
+    return stat.S_ISLNK(info.st_mode) or bool(attributes & FILE_ATTRIBUTE_REPARSE_POINT)
 
 
 def _refusal(target: Path) -> Optional[str]:
