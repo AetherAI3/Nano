@@ -68,7 +68,7 @@ def _nodes(args: argparse.Namespace) -> List[str]:
     if args.no_node:
         return []
     if args.node:
-        return list(args.node)
+        return [shutil.which(node) or node for node in args.node]
     found = shutil.which("node")
     return [found] if found else []
 

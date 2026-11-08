@@ -87,7 +87,9 @@ LIFECYCLE_REQUIRED_TESTS = (
     "tests/test_qsearch_lifecycle_wire_contract.py::test_regen_check_reproduces_committed_fixtures_byte_for_byte",
     "tests/test_qsearch_lifecycle_wire_contract.py::test_sha256sums_cover_every_v1_file_and_verify",
     "tests/test_qsearch_lifecycle_wire_contract.py::test_signing_vector_reproduces_python_client_bytes_and_verifies",
-    "tests/test_qsearch_lifecycle_wire_contract.py::test_python_client_refuses_negative_as_the_contract_requires",
+    "tests/test_qsearch_lifecycle_wire_contract.py::test_history_validates_and_python_client_parses_it_field_by_field",
+    "tests/test_qsearch_lifecycle_wire_contract.py::test_error_body_maps_to_expected_metadata",
+    "tests/test_qsearch_lifecycle_wire_contract.py::test_negative_expected_error_is_what_the_contract_mandates",
 )
 TS = "sdk/typescript/qsearch-lifecycle/"
 

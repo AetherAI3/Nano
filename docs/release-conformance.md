@@ -116,7 +116,7 @@ commits and both trees.
 | `cap.records.pytest` | core | yes | `tests/test_records*.py` |
 | `cap.lifecycle_wire.sha256sums` | core | yes | every file under `protocol/qsearch-lifecycle/v1/` is listed in its `SHA256SUMS`, sorted, and matches; nothing listed is missing |
 | `cap.lifecycle_wire.regen_check` | core | yes | `python -B protocol/qsearch-lifecycle/v1/fixtures/regen.py --check` exits 0 (fixtures regenerate byte for byte) |
-| `cap.lifecycle_wire.pytest` | core | yes | `tests/test_qsearch_lifecycle_wire_contract.py`, `tests/test_qsearch_lifecycle_client.py`; regen, SHA256SUMS, signing-vector and negative-refusal tests are required IDs |
+| `cap.lifecycle_wire.pytest` | core | yes | `tests/test_qsearch_lifecycle_wire_contract.py`, `tests/test_qsearch_lifecycle_client.py`; regen, SHA256SUMS, signing-vector, history, error-mapping and negative-expectation tests are required IDs; the 26 strict xfails (contract refusals the Python client still accepts) count as executed, and an XPASS fails the suite |
 | `cap.ts_client.build` | core | no | in `sdk/typescript/qsearch-lifecycle`: `npm ci --offline --ignore-scripts` from `--npm-cache` (the installed TypeScript must equal the lockfile pin), then `tsc -p tsconfig.json` |
 | `cap.ts_client.node.primary` / `.secondary` | core | no | the package's own `node --test` (default patterns) against the built `dist/`, with the JUnit reporter, one row per runtime |
 | `cap.proposal_benchmark.pytest` | core | yes | `tests/test_proposal_benchmark*.py`, which replay the committed reports byte for byte |
