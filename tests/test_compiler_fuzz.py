@@ -83,11 +83,11 @@ def test_resource_fuzz_retains_stack_exceptions_and_source_reproducers(monkeypat
 def test_catalog_corpus_exercises_contribution_controls_and_both_ir_versions():
     audit = audit_catalog_corpus()
 
-    assert audit.strategy_count == 62
-    assert audit.baseline_ir_count == 48
+    assert audit.strategy_count == 63
+    assert audit.baseline_ir_count == 49
     assert audit.v1_ir_count == 14
     assert audit.watchdog_count == 12
-    assert audit.control_cases == 62
+    assert audit.control_cases == 63
     assert audit.defects == ()
 
 

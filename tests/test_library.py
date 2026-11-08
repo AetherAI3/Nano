@@ -842,6 +842,27 @@ def test_vwap_reclaim_requires_a_held_reclaim_after_a_real_dip():
     assert [(i.action, i.timestamp) for i in result.intents] == [("BUY", 600), ("BUY", 900)]
 
 
+def test_dead_range_standaside_is_not_a_squeeze_entry():
+    # Issue #22. On bar 0 bb_squeeze_breakout fires (tight band, positive
+    # momentum) while only one window is quiet, so the stand-aside stays
+    # silent. Once all three windows agree it observes - and never trades.
+    standaside = _load("volatility/dead_range_standaside.nano")
+    squeeze = _load("volatility/bb_squeeze_breakout.nano")
+    frame = MarketFrame(
+        timestamps=(0, 3600, 7200, 10800),
+        signals={
+            "BB_WIDTH": (3.0, 3.0, 3.0, 6.0),
+            "MOM": (5.0, -1.0, -1.0, -1.0),
+            "ATR_PCTL_INV": (95.0, 89.0, 92.0, 97.0),
+            "RANGE_QUIET_COUNT": (1.0, 3.0, 3.0, 3.0),
+        },
+    )
+    assert [(i.action, i.timestamp) for i in execute(squeeze, frame).intents] == [("BUY", 0)]
+    observed = [(i.action, i.timestamp) for i in execute(standaside, frame).intents]
+    assert observed == [("OBSERVE", 7200), ("OBSERVE", 10800)]
+    assert all(i.asset is None for i in execute(standaside, frame).intents)
+
+
 def test_watchdog_rules_never_propose_a_direction():
     """Every watchdog is a control, so none of them may emit a trade.
 

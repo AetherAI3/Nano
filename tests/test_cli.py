@@ -397,7 +397,7 @@ def test_library_list_is_stable_and_complete(capsys):
     assert code == EXIT_OK
     assert err == ""
     assert lines[0] == "ID\tIR\tHOST SIGNALS"
-    assert len(lines) == 63
+    assert len(lines) == 64
     assert lines[1].startswith("event_volatility/cpi_impulse_pullback_long\t0.1.0\t")
     assert lines[-1].startswith("watchdog/unsigned_artifact_hold\t0.1.0\t")
 
@@ -475,8 +475,8 @@ def test_library_check_regenerates_byte_identically(capsys):
 
     assert code == EXIT_OK
     assert err == ""
-    assert "62 strategies" in out
-    assert "48 baseline + 14 v1" in out
+    assert "63 strategies" in out
+    assert "49 baseline + 14 v1" in out
 
 
 # -- nano indicators / version / help ----------------------------------------
