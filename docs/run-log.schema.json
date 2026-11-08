@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AetherAI3/Nano/docs/run-log.schema.json",
+  "x-runLogVersion": 1,
+  "title": "Nano run log v1 (nano replay --report json)",
+  "description": "Shape of the document `nano replay --report json` writes. Prose, ordering and byte rules live in docs/run-log.md; JSON Schema cannot express key order, array order or byte layout. This is the human/tool audit view of one run. The versioned, digestable artifact is the receipt (docs/receipts.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "strategy", "moduleHash", "sourceHash", "bars", "rowsRead", "rowsFiltered",
+    "warmupDeclared", "replayVerified", "intents", "escalations", "log",
+    "warmup_bars_skipped"
+  ],
+  "properties": {
+    "strategy": {"type": "string", "minLength": 1, "description": "Module name, from the `strategy` declaration."},
+    "moduleHash": {"$ref": "#/$defs/sha256", "description": "NanoModule.content_hash(): content address of the executable IR. Equal to the receipt's identity.moduleHash."},
+    "sourceHash": {"$ref": "#/$defs/sha256", "description": "sha256 of the .nano source text after UTF-8 decoding and newline normalisation. Equal to the receipt's provenance.sourceHash."},
+    "bars": {"type": "integer", "minimum": 1, "description": "Bars in the frame that ran, after any --date filter. A frame with no bars is refused before a report is written."},
+    "rowsRead": {"type": "integer", "minimum": 1, "description": "Rows read from the data file before the --date filter."},
+    "rowsFiltered": {"type": "integer", "minimum": 0, "description": "Rows dropped by the --date filter. rowsRead == bars + rowsFiltered."},
+    "warmupDeclared": {"type": "integer", "minimum": 0, "description": "The module's declared warm-up, in bars."},
+    "replayVerified": {"type": "boolean", "description": "true only when --verify ran the module twice and the two receipts were byte-identical. false means 'not checked', not 'failed': a failed verification writes no report."},
+    "intents": {"type": "array", "items": {"$ref": "#/$defs/intent"}, "description": "Proposals that survived the risk gate, in emission order."},
+    "escalations": {"type": "array", "items": {"$ref": "#/$defs/escalation"}, "description": "Hand-offs to a reasoning layer, in emission order."},
+    "log": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/logEntry"}, "description": "The ordered audit log. Always starts with module.loaded."},
+    "warmup_bars_skipped": {"type": "integer", "minimum": 0, "description": "Scheduled top-level rule evaluations skipped because the condition had no value yet; equals the number of condition.unwarmed entries. Summed over rules, so it can exceed bars."}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "timestamp": {"type": "integer", "description": "Integer epoch seconds copied from the injected frame. Never a wall-clock reading. May be negative (pre-1970 bars)."},
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intent", "timestamp"],
+      "properties": {
+        "intent": {"enum": ["BUY", "SELL", "EXECUTE", "PAUSE", "OBSERVE"]},
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "asset": {"type": "string", "minLength": 1, "description": "Omitted, never null, when the action names no asset."},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1, "description": "The literal from source, as written: 1 and 1.0 are different bytes. Omitted, never null, when absent."}
+      }
+    },
+    "escalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["escalate", "timestamp", "isAgent", "reason"],
+      "properties": {
+        "escalate": {"type": "string", "minLength": 1, "description": "Declared agent name (isAgent true) or quoted host target (isAgent false)."},
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "isAgent": {"type": "boolean"},
+        "reason": {"type": "string", "minLength": 1, "description": "Informative prose; see docs/run-log.md section 3."}
+      }
+    },
+    "logEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event", "timestamp", "detail"],
+      "properties": {
+        "event": {
+          "type": "string",
+          "pattern": "^[a-z][a-z_]*(\\.[a-z][a-z_]*)+$",
+          "description": "Dotted event name. An OPEN set: consumers must tolerate names not in #/$defs/knownEvent."
+        },
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "detail": {"type": "string", "description": "Human-facing prose. Byte-stable for identical inputs within one Nano version, but not a parse target across versions."}
+      }
+    },
+    "knownEvent": {
+      "description": "Every event the VM (run_module) emits in run log v1. infer.called, infer.invalid and infer.failed need a reasoning provider, which `nano replay` never supplies. Informative: not referenced by the root schema, because a new event is an allowed minor change. tests/test_run_log_schema.py keeps this list equal to the emitters and to docs/run-log.md.",
+      "enum": [
+        "module.loaded",
+        "risk.armed",
+        "risk.unenforced",
+        "infer.skipped",
+        "infer.invalid",
+        "infer.failed",
+        "infer.called",
+        "condition.unwarmed",
+        "condition.evaluated",
+        "intent.emitted",
+        "risk.violation",
+        "intent.suppressed",
+        "llmre.escalated",
+        "route.executed"
+      ]
+    }
+  }
+}

@@ -1,0 +1,252 @@
+{
+  "strategy": "RunLogAudit",
+  "moduleHash": "sha256:773c52d57fa11b12c407e3b2f908b6dc8aa5b9a2b97c546da892f12f172a3db4",
+  "sourceHash": "sha256:273ad58e958e0b3701b33f14e6a3e5f28af00ae3c93340f4e059e5f22ab15af0",
+  "bars": 6,
+  "rowsRead": 6,
+  "rowsFiltered": 0,
+  "warmupDeclared": 2,
+  "replayVerified": true,
+  "intents": [
+    {
+      "intent": "BUY",
+      "timestamp": 120,
+      "asset": "BTC",
+      "confidence": 0.7
+    },
+    {
+      "intent": "OBSERVE",
+      "timestamp": 180
+    },
+    {
+      "intent": "OBSERVE",
+      "timestamp": 300
+    }
+  ],
+  "escalations": [
+    {
+      "escalate": "ops-review",
+      "timestamp": 120,
+      "isAgent": false,
+      "reason": "rule body"
+    },
+    {
+      "escalate": "ops-review",
+      "timestamp": 240,
+      "isAgent": false,
+      "reason": "rule body"
+    },
+    {
+      "escalate": "Desk",
+      "timestamp": 0,
+      "isAgent": true,
+      "reason": "route Trusted: guard has no value"
+    },
+    {
+      "escalate": "Desk",
+      "timestamp": 60,
+      "isAgent": true,
+      "reason": "route Trusted: guard has no value"
+    },
+    {
+      "escalate": "Desk",
+      "timestamp": 180,
+      "isAgent": true,
+      "reason": "route Trusted: guard not satisfied"
+    },
+    {
+      "escalate": "Desk",
+      "timestamp": 300,
+      "isAgent": true,
+      "reason": "route Trusted: guard not satisfied"
+    }
+  ],
+  "log": [
+    {
+      "event": "module.loaded",
+      "timestamp": 0,
+      "detail": "RunLogAudit tier=nano+ effects=['intent.emit', 'llm.call', 'llmre.escalate', 'log.append'] warmup=2"
+    },
+    {
+      "event": "risk.armed",
+      "timestamp": 0,
+      "detail": "max_drawdown <= 0.05, min_confidence >= 0.6; measurements: risk.drawdown"
+    },
+    {
+      "event": "risk.unenforced",
+      "timestamp": 0,
+      "detail": "max_position_size 0.5: not enforced by Nano \u2014 a Nano intent carries no order size, so the runtime cannot tell whether accepting one would breach a size cap \u2014 the host applies this limit where the size exists"
+    },
+    {
+      "event": "infer.skipped",
+      "timestamp": 0,
+      "detail": "Review: no reasoning provider supplied"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 0,
+      "detail": "n11 has no value at bar 0"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 60,
+      "detail": "n11 has no value at bar 1"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 120,
+      "detail": "n11 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 120,
+      "detail": "BUY asset=BTC"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 180,
+      "detail": "n11 -> False"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 180,
+      "detail": "OBSERVE asset=None"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 240,
+      "detail": "n11 -> True"
+    },
+    {
+      "event": "risk.violation",
+      "timestamp": 240,
+      "detail": "max_drawdown 0.05: drawdown observed 0.08 (allowed <= 0.05)"
+    },
+    {
+      "event": "intent.suppressed",
+      "timestamp": 240,
+      "detail": "BUY asset=BTC confidence=0.7 withheld by risk limits: max_drawdown"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 300,
+      "detail": "n11 -> False"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 300,
+      "detail": "OBSERVE asset=None"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 0,
+      "detail": "n19 -> False"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 120,
+      "detail": "n19 -> True"
+    },
+    {
+      "event": "risk.violation",
+      "timestamp": 120,
+      "detail": "min_confidence 0.6: the intent's declared confidence observed 0.5 (allowed >= 0.6)"
+    },
+    {
+      "event": "intent.suppressed",
+      "timestamp": 120,
+      "detail": "SELL asset=ETH confidence=0.5 withheld by risk limits: min_confidence"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 120,
+      "detail": "ops-review: rule body"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 240,
+      "detail": "n19 -> True"
+    },
+    {
+      "event": "risk.violation",
+      "timestamp": 240,
+      "detail": "max_drawdown 0.05: drawdown observed 0.08 (allowed <= 0.05)"
+    },
+    {
+      "event": "risk.violation",
+      "timestamp": 240,
+      "detail": "min_confidence 0.6: the intent's declared confidence observed 0.5 (allowed >= 0.6)"
+    },
+    {
+      "event": "intent.suppressed",
+      "timestamp": 240,
+      "detail": "SELL asset=ETH confidence=0.5 withheld by risk limits: max_drawdown, min_confidence"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 240,
+      "detail": "ops-review: rule body"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 0,
+      "detail": "n27 has no value at bar 0"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 60,
+      "detail": "n27 has no value at bar 1"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 120,
+      "detail": "n27 has no value at bar 2"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 180,
+      "detail": "n27 has no value at bar 3"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 240,
+      "detail": "n27 has no value at bar 4"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 300,
+      "detail": "n27 has no value at bar 5"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 0,
+      "detail": "Desk: route Trusted: guard has no value"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 60,
+      "detail": "Desk: route Trusted: guard has no value"
+    },
+    {
+      "event": "route.executed",
+      "timestamp": 120,
+      "detail": "Trusted -> live_path"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 180,
+      "detail": "Desk: route Trusted: guard not satisfied"
+    },
+    {
+      "event": "route.executed",
+      "timestamp": 240,
+      "detail": "Trusted -> live_path"
+    },
+    {
+      "event": "llmre.escalated",
+      "timestamp": 300,
+      "detail": "Desk: route Trusted: guard not satisfied"
+    }
+  ],
+  "warmup_bars_skipped": 8
+}

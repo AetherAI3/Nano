@@ -1,0 +1,64 @@
+{
+  "strategy": "ConsecutiveLossCircuit",
+  "moduleHash": "sha256:3b7e9914373b5c6d115988927e09161db2c2fb37c5211c3dcb16d8d46f6cfdf7",
+  "sourceHash": "sha256:8e3cc46c747eead69bcaaf5cc79e128602ebc767e21dddc5212859d9e5af839a",
+  "bars": 5,
+  "rowsRead": 5,
+  "rowsFiltered": 0,
+  "warmupDeclared": 0,
+  "replayVerified": false,
+  "intents": [
+    {
+      "intent": "PAUSE",
+      "timestamp": 300
+    },
+    {
+      "intent": "PAUSE",
+      "timestamp": 900
+    }
+  ],
+  "escalations": [],
+  "log": [
+    {
+      "event": "module.loaded",
+      "timestamp": 0,
+      "detail": "ConsecutiveLossCircuit tier=nano effects=['intent.emit', 'log.append'] warmup=0"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 0,
+      "detail": "n5 -> False"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 300,
+      "detail": "n5 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 300,
+      "detail": "PAUSE asset=None"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 600,
+      "detail": "n5 has no value at bar 2"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 900,
+      "detail": "n5 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 900,
+      "detail": "PAUSE asset=None"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 1200,
+      "detail": "n5 -> False"
+    }
+  ],
+  "warmup_bars_skipped": 1
+}

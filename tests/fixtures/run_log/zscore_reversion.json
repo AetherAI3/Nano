@@ -1,0 +1,68 @@
+{
+  "strategy": "ZscoreReversion",
+  "moduleHash": "sha256:96e6afc8724f3a64f31bde3cf36218723816387ca898c855a12cfbf38a147a0a",
+  "sourceHash": "sha256:4b724cccde5a9affd86972f62430fb91471a6d7956b8df9e51d07ae4ac7b34f2",
+  "bars": 5,
+  "rowsRead": 5,
+  "rowsFiltered": 0,
+  "warmupDeclared": 0,
+  "replayVerified": false,
+  "intents": [
+    {
+      "intent": "BUY",
+      "timestamp": 14400,
+      "asset": "ETHUSD",
+      "confidence": 0.7
+    },
+    {
+      "intent": "BUY",
+      "timestamp": 43200,
+      "asset": "ETHUSD",
+      "confidence": 0.7
+    }
+  ],
+  "escalations": [],
+  "log": [
+    {
+      "event": "module.loaded",
+      "timestamp": 0,
+      "detail": "ZscoreReversion tier=nano effects=['intent.emit', 'log.append'] warmup=0"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 0,
+      "detail": "n4 -> False"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 14400,
+      "detail": "n4 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 14400,
+      "detail": "BUY asset=ETHUSD"
+    },
+    {
+      "event": "condition.unwarmed",
+      "timestamp": 28800,
+      "detail": "n4 has no value at bar 2"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 43200,
+      "detail": "n4 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 43200,
+      "detail": "BUY asset=ETHUSD"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 57600,
+      "detail": "n4 -> False"
+    }
+  ],
+  "warmup_bars_skipped": 1
+}
