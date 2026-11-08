@@ -249,6 +249,28 @@ def test_metadata_depth_is_positioned(tmp_path):
         build(root)
 
 
+def test_metadata_depth_boundary_does_not_rely_on_recursion_errors(tmp_path):
+    from nano.compiler.package import MAX_METADATA_DEPTH, PackageResourceError
+
+    root = package(tmp_path)
+    at_limit = "[" * MAX_METADATA_DEPTH + "]" * MAX_METADATA_DEPTH
+    (root / "nano.lock").write_bytes(at_limit.encode())
+    with pytest.raises(PackageError, match="unsupported lock format"):
+        build(root)
+    over = "\n" + "[" * (MAX_METADATA_DEPTH + 1) + "]" * (MAX_METADATA_DEPTH + 1)
+    (root / "nano.lock").write_bytes(over.encode())
+    with pytest.raises(PackageResourceError, match="metadata depth budget") as caught:
+        build(root)
+    assert (caught.value.line, caught.value.column) == (2, MAX_METADATA_DEPTH + 1)
+
+
+def test_metadata_depth_ignores_brackets_inside_strings():
+    from nano.compiler.package import MAX_METADATA_DEPTH, _check_metadata_depth
+
+    noisy = '"' + "[{" * (MAX_METADATA_DEPTH * 4) + '\\"' + '"'
+    _check_metadata_depth(("[" + noisy + "]").encode(), "nano.lock")
+
+
 def test_source_symlink_cannot_escape_root(tmp_path):
     root = package(tmp_path / "package")
     outside = tmp_path / "outside.nano"

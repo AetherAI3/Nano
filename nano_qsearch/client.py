@@ -74,6 +74,16 @@ def _reject_constant(value: str) -> None:
     raise ValueError("non-finite JSON")
 
 
+def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Refuse duplicate member names (wire contract v1 section 2.1) instead of keeping the last."""
+    members: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in members:
+            raise ValueError("duplicate JSON member")
+        members[key] = value
+    return members
+
+
 class LifecycleClient:
     """Explicit status/cancel/refresh/replace calls with no automatic retry or polling.
 
@@ -166,7 +176,7 @@ class LifecycleClient:
             else:
                 if not isinstance(raw, (bytes, str)) or len(raw) > _MAX_RESPONSE_BYTES:
                     raise ValueError()
-                payload = json.loads(raw, parse_constant=_reject_constant)
+                payload = json.loads(raw, parse_constant=_reject_constant, object_pairs_hook=_reject_duplicates)
             if not isinstance(payload, dict):
                 raise ValueError()
             canonical_json(payload)

@@ -1,2 +1,4 @@
 nano/library/catalog/strategy_metadata_v1.json text eol=lf
 examples/agent-package/*.nano text eol=lf
+protocol/** text eol=lf
+sdk/** text eol=lf

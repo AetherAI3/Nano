@@ -15,6 +15,8 @@ actually asks while writing a strategy:
     nano visualize strategy.nano             what does the graph look like?
     nano indicators [NAME]                   what can I compute, and how long is
                                              its warm-up?
+    nano package check --manifest nano.json --lock nano.lock
+                                             does this pinned package build?
 
 Nothing here acts on a market. `replay` reads recorded data and prints proposed
 intents; there is no `nano trade`, and there will not be one, because emitting an
@@ -43,6 +45,7 @@ from .commands import (
     command_version,
     command_visualize,
 )
+from .package import add_package_parser
 from .render import FORMATS
 from ..project.cli import command_project
 
@@ -51,7 +54,7 @@ exit codes:
   0  success
   1  the source or the run was rejected (diagnostics printed to stderr)
   2  the command was used wrongly
-  3  an input could not be read
+  3  an input could not be read (or a package output could not be written)
 
 examples:
   nano check src/*.nano
@@ -62,6 +65,9 @@ examples:
   nano library search trend
   nano library show ema_pullback_continuation
   nano intent compile "when is spy earnings" --json
+  nano package check --manifest nano.json --lock nano.lock --json
+  nano package build --manifest nano.json --lock nano.lock -o package.json
+  nano package test --manifest nano.json --lock nano.lock --cases cases.json
 """
 
 
@@ -275,6 +281,9 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--artifact", action="store_true", help="check a prepared artifact rather than a request")
         command.add_argument("-o", "--output", type=Path, help="write JSON to this local file")
         command.set_defaults(handler=_command_quantum)
+
+    # Explicit manifest + lock only; see docs/package-cli.md.
+    add_package_parser(subcommands)
 
     version = subcommands.add_parser("version", help="print component versions")
     version.set_defaults(handler=command_version)

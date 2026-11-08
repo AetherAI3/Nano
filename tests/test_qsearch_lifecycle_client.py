@@ -232,3 +232,23 @@ def test_replacement_requires_descriptor_before_transport():
     with pytest.raises(LifecycleClientError) as caught:
         client.replace(DIGEST, {})
     assert (caught.value.code, caught.value.field) == ("INVALID_REQUEST", "replacement")
+
+
+@pytest.mark.parametrize("status,raw", [
+    (200, b'{"schema":"nano.qsearch.job-state.v1","request":{"request_digest":"' + DIGEST.encode()
+          + b'"},"next_action":"NONE","next_action":"POLL_STATUS"}'),
+    (200, b'{"schema":"nano.qsearch.job-state.v1","request":{"request_digest":"' + NEW_DIGEST.encode()
+          + b'","request_digest":"' + DIGEST.encode() + b'"},"next_action":"POLL_STATUS"}'),
+    (503, b'{"code":"NOT_FOUND","code":"STORE_UNAVAILABLE","retryable":true}'),
+])
+def test_duplicate_member_names_are_refused_not_last_wins(status, raw):
+    # Wire contract v1 section 2.1: a duplicate member name at any depth is INVALID_RESPONSE,
+    # in success and error bodies alike, so two clients cannot read different values.
+    calls = []
+    client = LifecycleClient("https://example.invalid", KEY,
+                             transport=lambda *args: calls.append(args) or (status, raw))
+    with pytest.raises(LifecycleClientError) as caught:
+        client.status(DIGEST)
+    assert (caught.value.code, caught.value.next_action, caught.value.http_status) == (
+        "INVALID_RESPONSE", "MANUAL_RECONCILIATION", status)
+    assert len(calls) == 1
