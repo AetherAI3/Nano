@@ -780,6 +780,40 @@ def test_auth_failure_burst_pauses_at_the_ceiling_not_below_it():
     ]
 
 
+def test_endpoint_posture_pair_stacks_observe_below_pause():
+    # Issue #25. Between the two ceilings only the advisory fires; above the
+    # upper one both do. Each no-fire sits on the same frame as a positive.
+    drift = _load("watchdog/endpoint_posture_drift.nano")
+    ceiling = _load("watchdog/endpoint_posture_ceiling.nano")
+    assert [a.name for a in drift.agents] == [a.name for a in ceiling.agents] == ["SecurityDesk"]
+    frame = MarketFrame(
+        # Hourly bars: both rules run `every 1h`, like credential_age_alert's
+        # daily frame is spaced a day apart.
+        timestamps=(0, 3600, 7200, 10800, 14400),
+        signals={"ENDPOINT_NONCOMPLIANT_PCT": (4.9, 5.0, 14.9, 15.0, 40.0)},
+    )
+    observed = [(i.action, i.timestamp) for i in execute(drift, frame).intents]
+    paused = [(i.action, i.timestamp) for i in execute(ceiling, frame).intents]
+    assert observed == [("OBSERVE", 3600), ("OBSERVE", 7200), ("OBSERVE", 10800), ("OBSERVE", 14400)]
+    assert paused == [("PAUSE", 10800), ("PAUSE", 14400)]
+
+
+def test_loss_velocity_breaker_pauses_on_rate_not_level():
+    # Issue #21. 0.9 percent in the window is NOT >= 1; 1.0 is. The rule reads
+    # only the trailing-window rate, so a deep but slow session stays quiet.
+    graph = _load("risk/loss_velocity_breaker.nano")
+    assert [a.name for a in graph.agents] == ["RiskDesk"]
+    frame = MarketFrame(
+        timestamps=(0, 60, 120, 180),
+        signals={"LOSS_VELOCITY_PCT": (0.9, 1.0, 2.5, 0.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 60),
+        ("PAUSE", 120),
+    ]
+
+
 def test_watchdog_rules_never_propose_a_direction():
     """Every watchdog is a control, so none of them may emit a trade.
 

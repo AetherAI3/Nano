@@ -3,19 +3,19 @@
   "type": "NanoStrategyCatalog",
   "schemaVersion": 1,
   "metadataVersion": "StrategyMetadataV1",
-  "strategyCount": 57,
+  "strategyCount": 60,
   "categoryCounts": {
     "event_volatility": 11,
     "mean_reversion": 7,
     "momentum": 6,
-    "risk": 7,
+    "risk": 8,
     "trend": 8,
     "volatility": 4,
     "volume": 4,
-    "watchdog": 10
+    "watchdog": 12
   },
   "irMaturityCounts": {
-    "baseline": 43,
+    "baseline": 46,
     "v1": 14
   },
   "strategies": [
@@ -855,6 +855,33 @@
     },
     {
       "metadataVersion": "StrategyMetadataV1",
+      "id": "risk/loss_velocity_breaker",
+      "slug": "loss_velocity_breaker",
+      "name": "LossVelocityBreaker",
+      "category": "risk",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "all of them. This is a control, not a directional hypothesis.",
+      "conditions": "none in the rule. The host owns the window boundary, decides what counts as realised versus unrealised, and decides what a pause actually does. Nano cannot flatten a position or halt anything.",
+      "invalidation": "the window rolling past the losses. The rule does not latch; when trading resumes is the host's call.",
+      "shape": "1m over a 15m trailing window. Shorter is mostly spread and fill noise, which is worse than no rule; much longer smooths the spike away and becomes daily_loss_limit again with extra steps.",
+      "calibratedOn": "a session-level policy figure - 1 percent of starting equity in fifteen minutes, half the 2 percent daily limit. It travels with the daily limit: scale both together, never one without the other.",
+      "nearestConfused": [
+        {
+          "slug": "daily_loss_limit",
+          "id": "risk/daily_loss_limit",
+          "distinction": "that measures where the book is - cumulative session loss against a level. This one measures where it is heading: half of that daily figure lost inside a quarter hour fires here while the level is still comfortably inside its limit. Both should be armed."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "LOSS_VELOCITY_PCT"
+      ],
+      "sourcePath": "library/risk/loss_velocity_breaker.nano",
+      "irPath": "library/risk/loss_velocity_breaker_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
       "id": "risk/max_drawdown_breaker",
       "slug": "max_drawdown_breaker",
       "name": "MaxDrawdownBreaker",
@@ -1650,6 +1677,60 @@
       ],
       "sourcePath": "library/watchdog/credential_age_alert.nano",
       "irPath": "library/watchdog/credential_age_alert_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "watchdog/endpoint_posture_ceiling",
+      "slug": "endpoint_posture_ceiling",
+      "name": "EndpointPostureCeiling",
+      "category": "watchdog",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "all of them, while the fleet is in service.",
+      "conditions": "none in the rule. The host defines approved posture, decides which endpoints are in scope, measures compliance and does anything about it. Nano cannot scan or quarantine an endpoint, and the pause is a proposal for the host's DecisionGate.",
+      "invalidation": "remediation bringing the share back under 15 percent. No latch; the host decides when the hold ends.",
+      "shape": "1h, matching the advisory rule so both read the same measurement.",
+      "calibratedOn": "policy, not data. 15 percent is a placeholder hold line, three times the review line; keep the ratio when a site moves either figure.",
+      "nearestConfused": [
+        {
+          "slug": "endpoint_posture_drift",
+          "id": "watchdog/endpoint_posture_drift",
+          "distinction": "that is the same signal at 5 percent and it only asks for review. This one says drift has become a fleet-wide condition worth holding work for. Above 15 percent both fire, which is intended: the review record continues alongside the hold."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "ENDPOINT_NONCOMPLIANT_PCT"
+      ],
+      "sourcePath": "library/watchdog/endpoint_posture_ceiling.nano",
+      "irPath": "library/watchdog/endpoint_posture_ceiling_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "watchdog/endpoint_posture_drift",
+      "slug": "endpoint_posture_drift",
+      "name": "EndpointPostureDrift",
+      "category": "watchdog",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "all of them. Fleet posture drifts slowly and continuously; this is the rule that gives the drift a dated record before it becomes an incident.",
+      "conditions": "none in the rule. The host defines approved posture, decides which endpoints are in scope, and measures compliance. Nano cannot scan or quarantine an endpoint.",
+      "invalidation": "remediation bringing the share back under 5 percent. No latch.",
+      "shape": "1h; posture changes over hours and days, and a faster cadence only repeats the same reading.",
+      "calibratedOn": "policy, not data. 5 percent is a placeholder review line for a managed fleet; a percentage travels between fleet sizes where a count would not, but the line itself belongs to whoever owns the posture policy.",
+      "nearestConfused": [
+        {
+          "slug": "endpoint_posture_ceiling",
+          "id": "watchdog/endpoint_posture_ceiling",
+          "distinction": "that is the same signal at 15 percent and it proposes a pause. Two rules rather than one because review and hold are different decisions with different owners - a fleet between the two ceilings is drifting and needs attention, not yet a stop."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "ENDPOINT_NONCOMPLIANT_PCT"
+      ],
+      "sourcePath": "library/watchdog/endpoint_posture_drift.nano",
+      "irPath": "library/watchdog/endpoint_posture_drift_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",

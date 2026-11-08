@@ -99,17 +99,17 @@ def test_checked_in_catalog_is_byte_identical_and_counts_the_landed_corpus():
     assert first.startswith("{\n\n")
     assert first.endswith("}\n")
     assert catalog_path(LIBRARY).read_bytes() == first.encode("utf-8")
-    assert document["strategyCount"] == 57
-    assert document["irMaturityCounts"] == {"baseline": 43, "v1": 14}
+    assert document["strategyCount"] == 60
+    assert document["irMaturityCounts"] == {"baseline": 46, "v1": 14}
     assert document["categoryCounts"] == {
         "event_volatility": 11,
         "mean_reversion": 7,
         "momentum": 6,
-        "risk": 7,
+        "risk": 8,
         "trend": 8,
         "volatility": 4,
         "volume": 4,
-        "watchdog": 10,
+        "watchdog": 12,
     }
     assert catalog_diagnostics(LIBRARY) == ()
 
@@ -121,7 +121,7 @@ def test_ids_slugs_and_serialized_order_are_stable_and_unambiguous():
     slugs = [row["slug"] for row in rows]
 
     assert ids == sorted(ids)
-    assert len(ids) == len(set(ids)) == len(set(slugs)) == 57
+    assert len(ids) == len(set(ids)) == len(set(slugs)) == 60
     assert all(row["metadataVersion"] == "StrategyMetadataV1" for row in rows)
 
 

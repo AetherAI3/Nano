@@ -1,0 +1,12 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "LossVelocityBreaker",
+  "effects": ["intent.emit", "log.append"],
+  "nodes": [
+    { "type": "Schedule", "interval": "1m" },
+    { "type": "Condition", "signal": "LOSS_VELOCITY_PCT", "operator": ">=", "value": 1 },
+    { "type": "Intent", "action": "PAUSE" },
+    { "type": "Agent", "name": "RiskDesk" }
+  ]
+}
