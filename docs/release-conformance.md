@@ -255,8 +255,7 @@ repository on every test run.
 | Platform / interpreter | Status |
 | --- | --- |
 | Windows 10, CPython 3.13.5, qiskit 2.3.1 / qiskit-aer 0.17.2, Node v24.18.0 and v22.19.0, TypeScript 5.8.3 | local reference platform for this milestone. The acceptance check is two fresh full runs with byte-identical `evidence.canonical.json`; the run evidence records the result. |
-| Linux, CPython 3.11, qiskit 2.3.1 / qiskit-aer 0.17.2, no Node | CI: the Release conformance workflow on the self-hosted Linux runner. Each run's job summary records the gate and canonical evidence hash; the TypeScript client row is not executed there (`--no-node`, optional capability). |
-| Linux, CPython 3.10, 3.12, 3.13 | **UNVERIFIED** for the full harness. The harness's own tests run on all four in the main CI matrix. |
+| Linux, CPython 3.10, 3.11, 3.12 and 3.13, qiskit 2.3.1 / qiskit-aer 0.17.2, no Node | CI: the Release conformance workflow runs the full harness once per interpreter on the self-hosted Linux runner. Each run's job summary records the gate and canonical evidence hash; the TypeScript client row is not executed there (`--no-node`, optional capability). |
 
 ## Fault-injection controls
 
