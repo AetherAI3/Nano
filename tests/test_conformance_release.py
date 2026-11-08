@@ -330,6 +330,11 @@ def test_this_source_lifecycle_sums_verify():
     assert sha256sums_problems(ROOT / "protocol" / "qsearch-lifecycle" / "v1") == []
 
 
+def test_this_source_lifecycle_v2_sums_verify():
+    from rc_checks import sha256sums_problems
+    assert sha256sums_problems(ROOT / "protocol" / "qsearch-lifecycle" / "v2") == []
+
+
 def test_schema_document_names_both_versioned_record_types():
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     assert schema["properties"]["schema"]["const"] == EVIDENCE_SCHEMA

@@ -122,7 +122,10 @@ commits and both trees.
 | `cap.records.pytest` | core | yes | `tests/test_records*.py` |
 | `cap.lifecycle_wire.sha256sums` | core | yes | every file under `protocol/qsearch-lifecycle/v1/` is listed in its `SHA256SUMS`, sorted, and matches; nothing listed is missing |
 | `cap.lifecycle_wire.regen_check` | core | yes | `python -B protocol/qsearch-lifecycle/v1/fixtures/regen.py --check` exits 0 (fixtures regenerate byte for byte) |
-| `cap.lifecycle_wire.pytest` | core | yes | `tests/test_qsearch_lifecycle_wire_contract.py`, `tests/test_qsearch_lifecycle_client.py`; regen, SHA256SUMS, signing-vector, history, error-mapping and negative-expectation tests are required IDs; the 26 strict xfails (contract refusals the Python client still accepts) count as executed, and an XPASS fails the suite |
+| `cap.lifecycle_wire.pytest` | core | yes | `tests/test_qsearch_lifecycle_wire_contract.py`, `tests/test_qsearch_lifecycle_client.py`; regen, SHA256SUMS, signing-vector, history, error-mapping and negative-expectation tests are required IDs; any strict xfail counts as executed, and an XPASS fails the suite |
+| `cap.lifecycle_wire_v2.sha256sums` | core | yes | the same check for `protocol/qsearch-lifecycle/v2/` |
+| `cap.lifecycle_wire_v2.regen_check` | core | yes | `python -B protocol/qsearch-lifecycle/v2/fixtures/regen.py --check` exits 0 |
+| `cap.lifecycle_wire_v2.pytest` | core | yes | `tests/test_qsearch_lifecycle_wire_v2.py`; regen, SHA256SUMS, canonical-vector, signing-vector, history, error-mapping, negative-expectation and recorded-discrepancy tests are required IDs |
 | `cap.ts_client.build` | core | no | in `sdk/typescript/qsearch-lifecycle`: `npm ci --offline --ignore-scripts` from `--npm-cache` (the installed TypeScript must equal the lockfile pin), then `tsc -p tsconfig.json` |
 | `cap.ts_client.node.primary` / `.secondary` | core | no | the package's own `node --test` (default patterns) against the built `dist/`, with the JUnit reporter, one row per runtime |
 | `cap.proposal_benchmark.pytest` | core | yes | `tests/test_proposal_benchmark*.py`, which replay the committed reports byte for byte |
@@ -137,6 +140,7 @@ A capability's status comes from its suites:
 | `package_cli` | #84 | yes | `cap.package_cli.pytest`, `wheel.package_cli` |
 | `records` | #85 | yes | `cap.records.pytest` |
 | `lifecycle_wire` | #86 | yes | `cap.lifecycle_wire.sha256sums`, `.regen_check`, `.pytest` |
+| `lifecycle_wire_v2` | #101 | yes | `cap.lifecycle_wire_v2.sha256sums`, `.regen_check`, `.pytest` |
 | `ts_client` | #86 | no | `cap.ts_client.build` and the Node rows |
 | `proposal_benchmark` | #87 | yes | `cap.proposal_benchmark.pytest` |
 | `qubo_artifact` | #88 | yes | `qiskit.local_compile` |
