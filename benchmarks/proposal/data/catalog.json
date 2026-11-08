@@ -1,0 +1,120 @@
+{
+ "backends": {
+  "aer": {
+   "id": "local_aer",
+   "kind": "local"
+  },
+  "ibm-kyiv": {
+   "id": "ibm_kyiv",
+   "kind": "hardware"
+  },
+  "kyiv": {
+   "id": "ibm_kyiv",
+   "kind": "hardware"
+  },
+  "local": {
+   "id": "local_aer",
+   "kind": "local"
+  },
+  "torino": {
+   "id": "ibm_torino",
+   "kind": "hardware"
+  }
+ },
+ "banks": {
+  "bank-a": {
+   "digest": "sha256:9522f328d9c15188074b03ba0037da549a525db95c75d7d58f8434d63660a998",
+   "id": "evidence-bank:a",
+   "schema_version": "evidence-bank/1"
+  },
+  "bank-b": {
+   "digest": "sha256:eef8807308b34c1c306179948b0c2f1c2b58520ad3a4cbfe28113be8cbe9c84e",
+   "id": "evidence-bank:b",
+   "schema_version": "evidence-bank/1"
+  }
+ },
+ "jobs": {
+  "job-c": {
+   "id": "job:c",
+   "plan_id": "plan:alpha",
+   "state": "cancelled"
+  },
+  "job-f": {
+   "id": "job:f",
+   "plan_id": "plan:beta",
+   "state": "failed"
+  },
+  "job-p": {
+   "id": "job:p",
+   "plan_id": "plan:beta",
+   "state": "accounting-pending"
+  },
+  "job-q": {
+   "id": "job:q",
+   "plan_id": "plan:alpha",
+   "state": "queued"
+  },
+  "job-v": {
+   "id": "job:v",
+   "plan_id": "plan:alpha",
+   "state": "verified"
+  }
+ },
+ "plans": {
+  "alpha": {
+   "admitted_preparation_ref": "preparation:alpha-bits",
+   "id": "plan:alpha",
+   "max_circuits": 4,
+   "max_shots": 2000,
+   "operation_kind": "sample",
+   "operation_ref": "operation:alpha-sample"
+  },
+  "alpha-plan": {
+   "admitted_preparation_ref": "preparation:alpha-bits",
+   "id": "plan:alpha",
+   "max_circuits": 4,
+   "max_shots": 2000,
+   "operation_kind": "sample",
+   "operation_ref": "operation:alpha-sample"
+  },
+  "beta-plan": {
+   "admitted_preparation_ref": "preparation:beta-bits",
+   "id": "plan:beta",
+   "max_circuits": 2,
+   "max_shots": 500,
+   "operation_kind": "optimize_qubo",
+   "operation_ref": "operation:beta-qubo"
+  },
+  "gamma-plan": {
+   "admitted_preparation_ref": "preparation:gamma-bits",
+   "id": "plan:gamma",
+   "max_circuits": 1,
+   "max_shots": 1,
+   "operation_kind": "prepare_bits",
+   "operation_ref": "operation:gamma-prepare"
+  },
+  "spy": {
+   "admitted_preparation_ref": "preparation:spy-bits",
+   "id": "plan:spy-research",
+   "max_circuits": 1,
+   "max_shots": 100,
+   "operation_kind": "sample",
+   "operation_ref": "operation:spy-sample"
+  }
+ },
+ "receipts": {
+  "rcpt-p": {
+   "id": "receipt:p",
+   "job_id": "job:p",
+   "plan_id": "plan:beta",
+   "state": "accounting-pending"
+  },
+  "rcpt-v": {
+   "id": "receipt:v",
+   "job_id": "job:v",
+   "plan_id": "plan:alpha",
+   "state": "verified"
+  }
+ },
+ "version": "quantum-catalog/1"
+}
