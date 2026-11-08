@@ -72,7 +72,10 @@ Five fields, all required, all checked by
 
 A `NOT <other_entry>:` line is the convention for the near-neighbour problem:
 name the existing entry yours is most likely to be confused with, and say what
-distinguishes them. Every current entry carries one.
+distinguishes them. Every current entry carries one. `scripts/check_contribution.py`
+requires the named entry to exist somewhere under `nano/library/` (any
+category — a cross-category contrast is often the useful one), and rejects a
+`NOT` line that names the entry itself.
 
 Signals get documented too. If your rule uses a signal already in the tables
 below, the table is its definition. If it introduces a new one, define it in
