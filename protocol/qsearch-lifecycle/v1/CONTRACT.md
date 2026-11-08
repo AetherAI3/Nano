@@ -191,12 +191,11 @@ response body.
 
 ## 4. Known Python discrepancies
 
-Recorded as failing compatibility tests in `tests/test_qsearch_lifecycle_wire_contract.py`
-(`xfail(strict=True)`), so fixing one turns the suite red until the marker is
-removed deliberately:
-
-None. Every negative fixture is refused by `LifecycleClient` exactly as this
-contract mandates.
+None remain. Every negative fixture is refused by `LifecycleClient` exactly as
+this contract mandates. Any future discrepancy must be recorded as a failing
+compatibility test in `tests/test_qsearch_lifecycle_wire_contract.py`
+(`xfail(strict=True)` plus an explicit entry in its discrepancy table), so fixing
+one turns the suite red until the marker is removed deliberately.
 
 Resolved: duplicate member names are refused by the Python client in success and
 error bodies (separate parity patch; previously `json.loads` kept the last one).
@@ -206,6 +205,13 @@ body is refused), numbers beyond 2^53-1 and nesting deeper than 64 are refused.
 On success it validates the closed `job-state.v1.schema.json` envelope in full
 (members, types, enums, patterns, nullability, amounts and invariants I1-I8) with
 a stdlib validator whose accept/reject decisions are tested against jsonschema.
+Two inputs are excluded from that differential because python-jsonschema itself
+deviates from the schema's ECMA-262 dialect: NaN (it passes `minimum`/`maximum`;
+the strict-JSON layer refuses it first) and a trailing newline in a patterned
+string (its `re.search` lets `$` match before a final `\n`). Both are pinned by
+dedicated tests instead. A decoded mapping supplied by an injected transport
+(offline tests only) is canonicalised and parsed by the same strict path, so
+nested mapping types are normalised and the byte cap applies to its UTF-8 form.
 
 The service does not bound magnitudes itself: `lifecycle.job_state` projects any
 finite, non-negative number from the durable record, and `deadlines.queue_at` is

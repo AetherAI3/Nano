@@ -116,12 +116,15 @@ def _parse_strict(raw: Any) -> dict[str, Any]:
     mapping from an injected transport passes the same structural rules.
     """
     if isinstance(raw, Mapping):
-        payload: Any = dict(raw)
-    else:
-        if not isinstance(raw, (bytes, str)) or len(raw) > _MAX_RESPONSE_BYTES:
-            raise ValueError("invalid response body")
-        text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
-        payload = json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_reject_duplicates)
+        # Canonicalise, then parse like bytes: nested Mappings become dicts, and NaN,
+        # non-string keys and cycles (RecursionError) are refused on one code path.
+        raw = canonical_json(raw)
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")       # the cap counts UTF-8 bytes; lone surrogates are refused
+    if not isinstance(raw, bytes) or len(raw) > _MAX_RESPONSE_BYTES:
+        raise ValueError("invalid response body")
+    payload: Any = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant,
+                              object_pairs_hook=_reject_duplicates)
     if not isinstance(payload, dict):
         raise ValueError("top-level JSON value must be an object")
     _check_strict_value(payload)
@@ -185,6 +188,22 @@ class LifecycleClient:
 
     def _call(self, method: str, request_digest: str, *, action: str | None = None,
               body: bytes = b"", expected_response_digest: str | None = None) -> dict[str, Any]:
+        try:
+            return self._call_once(method, request_digest, action=action, body=body,
+                                   expected_response_digest=expected_response_digest)
+        except LifecycleClientError as exc:
+            error = exc
+        # Re-raise outside the handler with a fresh traceback: ``raise ... from None`` only hides
+        # the chain from display, while ``__context__`` (e.g. a JSONDecodeError whose ``.doc`` is
+        # the whole response body) and frame locals (raw bytes, URL, transport exception) would
+        # otherwise stay reachable from the public error.
+        error.__cause__ = None
+        error.__context__ = None
+        error.__suppress_context__ = True
+        raise error.with_traceback(None)
+
+    def _call_once(self, method: str, request_digest: str, *, action: str | None,
+                   body: bytes, expected_response_digest: str | None) -> dict[str, Any]:
         try:
             validate_digest(request_digest, field="request_digest")
         except ValueError:

@@ -472,3 +472,76 @@ def test_write_operation_responses_are_validated_as_closed_envelopes(operation):
             _assert_invalid(exc, 200)
         else:
             assert accepted and result == payload
+
+
+# --- review follow-ups (parity lane) -------------------------------------------
+
+def test_nested_non_dict_mappings_from_an_injected_transport_are_normalised():
+    import types
+    from collections import OrderedDict
+    payload = response()
+    nested = {key: (types.MappingProxyType(dict(value)) if isinstance(value, dict) else value)
+              for key, value in payload.items()}
+    for body in (types.MappingProxyType(nested), OrderedDict(nested)):
+        client = LifecycleClient("https://example.invalid", KEY, transport=lambda *args, body=body: (200, body))
+        result = client.status(DIGEST)
+        assert result == payload and type(result["request"]) is dict
+
+
+def test_a_str_body_is_capped_by_its_utf8_byte_length():
+    from nano_qsearch.client import _MAX_RESPONSE_BYTES
+    # Error bodies are open (mapped through allowlists), so only the cap can refuse this.
+    head = '{"code": "STORE_UNAVAILABLE", "retryable": true, "error": "'
+    chars = (_MAX_RESPONSE_BYTES - len(head) - 2) // 2 + 1       # each U+00E9 is 2 UTF-8 bytes
+    text = head + "\u00e9" * chars + '"}'
+    small = head + "\u00e9" * 10 + '"}'
+    assert len(text) <= _MAX_RESPONSE_BYTES < len(text.encode("utf-8"))
+    for body, expected in ((small, "STORE_UNAVAILABLE"), (text, "INVALID_RESPONSE")):
+        client = LifecycleClient("https://example.invalid", KEY, transport=lambda *args, body=body: (503, body))
+        with pytest.raises(LifecycleClientError) as caught:
+            client.status(DIGEST)
+        assert caught.value.code == expected
+
+
+def test_validator_never_raises_on_huge_integers():
+    from nano_qsearch._job_state_v1 import is_valid_job_state
+    payload = response()
+    payload["usage"] = dict(payload["usage"], held_quantum_seconds=10 ** 400)
+    assert is_valid_job_state(payload) is False
+
+
+@pytest.mark.parametrize("path", [("request", "request_id"), ("request", "request_digest"), ("request", "target"),
+                                  ("provider", "job_id"), ("lineage", "replaces_request_digest"),
+                                  ("lineage", "replacement_request_digest")])
+def test_validator_refuses_a_trailing_newline_in_every_patterned_field(path):
+    from nano_qsearch._job_state_v1 import is_valid_job_state
+    payload = json.loads(json.dumps(response()))
+    current = payload[path[0]][path[1]]
+    payload[path[0]][path[1]] = (current or "sha256:" + "0" * 64) + "\n"
+    assert is_valid_job_state(payload) is False
+
+
+def _frames_locals(error):
+    """Locals of the client's own frames still reachable from the raised error's traceback."""
+    tb = error.__traceback__
+    while tb is not None:
+        if "nano_qsearch" in tb.tb_frame.f_code.co_filename:
+            yield from tb.tb_frame.f_locals.values()
+        tb = tb.tb_next
+
+
+@pytest.mark.parametrize("failure", ["transport", "body"])
+def test_client_errors_carry_no_hidden_exception_context_or_body(failure):
+    secret = "token-secret-in-body"
+
+    def transport(*args):
+        if failure == "transport":
+            raise OSError("https://example.invalid/?" + secret)
+        return 200, ('{"' + secret + '":').encode()
+
+    client = LifecycleClient("https://example.invalid", KEY, transport=transport)
+    with pytest.raises(LifecycleClientError) as caught:
+        client.status(DIGEST)
+    error = caught.value
+    assert error.__context__ is None and error.__cause__ is None
+    assert all(secret not in repr(value) for value in _frames_locals(error))

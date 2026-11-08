@@ -72,8 +72,11 @@ def _one_of(allowed: frozenset[str], value: Any) -> bool:
 
 
 def _amount(value: Any) -> bool:
-    return (not isinstance(value, bool) and isinstance(value, (int, float))
-            and math.isfinite(value) and 0 <= value <= _MAX_AMOUNT)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    if isinstance(value, float) and not math.isfinite(value):   # ints are exact: isfinite would overflow
+        return False
+    return 0 <= value <= _MAX_AMOUNT
 
 
 def _nullable_amount(value: Any) -> bool:
