@@ -352,9 +352,10 @@ explicit act that means `receiptVersion` has to move.
 - **Node ids** (`n6`) appearing inside those strings. They are compiler output.
 - **The set of `event` names.** New events may be added at any time.
 - **`host`.** It is whatever the caller passed.
-- **Anything in `nano replay --report json`.** That is a separate, older,
-  unversioned CLI convenience; it is not the receipt and carries no stability
-  promise.
+- **Anything in `nano replay --report json` as part of the receipt.** That
+  report is not the receipt. It now has its own, narrower contract — run log v1,
+  documented in [run-log.md](run-log.md) — but nothing in this document depends
+  on it.
 - **Receipt digests comparing equal across Nano versions.** A version bump may
   legitimately change the bytes. Compare digests within a version, and compare
   `identity` across versions.

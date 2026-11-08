@@ -1,0 +1,37 @@
+{
+  "strategy": "GoldenCross",
+  "moduleHash": "sha256:26a2dc4e093c6b24095a9cd5de766b7ba2fe658dbe7391b6233d19d51c6c920e",
+  "sourceHash": "sha256:60de5fbf9b4b1a7f952e8926442395867db1b8849838d26dab936a7a1da987ef",
+  "bars": 1,
+  "rowsRead": 4,
+  "rowsFiltered": 3,
+  "warmupDeclared": 0,
+  "replayVerified": false,
+  "intents": [
+    {
+      "intent": "BUY",
+      "timestamp": 1767744000,
+      "asset": "SPY",
+      "confidence": 0.9
+    }
+  ],
+  "escalations": [],
+  "log": [
+    {
+      "event": "module.loaded",
+      "timestamp": 1767744000,
+      "detail": "GoldenCross tier=nano effects=['intent.emit', 'log.append'] warmup=0"
+    },
+    {
+      "event": "condition.evaluated",
+      "timestamp": 1767744000,
+      "detail": "n4 -> True"
+    },
+    {
+      "event": "intent.emitted",
+      "timestamp": 1767744000,
+      "detail": "BUY asset=SPY"
+    }
+  ],
+  "warmup_bars_skipped": 0
+}

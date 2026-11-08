@@ -16,6 +16,7 @@ For questions about what Nano does today, start with the reference documents bel
 | [Immutable records](rfc-0085-immutable-records.md) | Package-only typed records, executable IR 1.1.0, strict host-input validation and fixed ceilings. |
 | [Native quantum bridge](quantum-native-bridge.md) | Opt-in, local-only prepare/sample path: pinned-Qiskit prepared artifact, `/qsearch/native/v1` routes, caller-retained verification. |
 | [Proposal benchmark](proposal-benchmark.md) | Frozen offline proposal-and-repair benchmark: dataset, metrics, locked split and replay command. |
+| [Run log](run-log.md) | Run log v1 from `nano replay --report json`: guaranteed members, event list, byte rules, timestamp rule, versioning, and its link to receipts ([schema](run-log.schema.json)). |
 | [Run receipts](receipts.md) | The versioned run artifact: canonical bytes, executable identity, and what external consumers may depend on. |
 | [Q-search service](qsearch-service.md) | `nano-qsearch-serve`, the host-side `nano_qsearch` package (beside `nano/`, not part of the deterministic engine) that serves sealed q-search receipts to Predator Drive: configuration, auth, caps, recovery. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |

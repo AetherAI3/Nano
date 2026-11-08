@@ -1,0 +1,3 @@
+# Golden run logs are compared byte for byte. Never let a checkout rewrite
+# line endings in this directory.
+* -text

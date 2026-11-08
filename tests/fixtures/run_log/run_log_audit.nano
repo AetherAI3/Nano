@@ -1,0 +1,50 @@
+// Run-log fixture for docs/run-log.md: one strategy that reaches every event the
+// VM can emit on the `nano replay` path -- warm-up, risk arming, an unenforced
+// limit, a suppressed intent, a rule-body escalation, a route that both executes
+// and escalates, and an infer call with no provider.
+tier nano+
+strategy RunLogAudit {
+  input close: series<float>
+
+  let z = ZSCORE(close, 3)
+
+  signature Review {
+    input score: float range [0, 100]
+    output confidence: confidence range [0, 1]
+  }
+  let verdict = infer(Review, close)
+
+  agent Desk { role validation }
+
+  risk {
+    max_drawdown 0.05
+    max_position_size 0.5
+    min_confidence 0.6
+  }
+
+  route Trusted {
+    execute live_path when z > 0
+    otherwise { escalate Desk }
+  }
+
+  every 1m {
+    if z > 0 {
+      buy(BTC, 0.7)
+    } else {
+      observe()
+    }
+  }
+
+  every 2m {
+    if close > 100 {
+      sell(ETH, 0.5)
+      escalate "ops-review"
+    }
+  }
+
+  every 1m {
+    if verdict.confidence >= 0.5 {
+      observe()
+    }
+  }
+}
