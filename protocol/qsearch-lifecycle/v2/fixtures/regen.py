@@ -791,7 +791,9 @@ def _duplicate(base: dict[str, Any], path: tuple[str, ...], first: Any) -> bytes
 
 
 def _invalid(status: int) -> dict[str, Any]:
-    return {"code": "INVALID_RESPONSE", "field": None, "retryable": False, "next_action": "MANUAL_RECONCILIATION",
+    # ``field`` is deliberately unspecified for INVALID_RESPONSE (v1 convention, CONTRACT v1 2.4):
+    # clients may report null or a static schema path, never response content.
+    return {"code": "INVALID_RESPONSE", "retryable": False, "next_action": "MANUAL_RECONCILIATION",
             "http_status": status}
 
 
@@ -851,7 +853,7 @@ def python_outcome(name: str, case: dict[str, Any], status: int, raw: bytes, exp
     _, error = invoke(replay(status, raw), case["operation"], case["request_digest"], replacement)
     if error is None:
         return "accepts"
-    if error_fields(error) == expected:
+    if {key: error_fields(error)[key] for key in expected} == expected:
         return "agrees"
     raise RuntimeError(f"negative {name}: unexpected Python outcome {error_fields(error)}")
 

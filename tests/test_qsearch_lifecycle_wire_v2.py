@@ -772,7 +772,9 @@ def test_negative_cases_cover_the_required_classes():
 
 @pytest.mark.parametrize("case", NEGATIVES["cases"], ids=lambda c: c["name"])
 def test_negative_expected_error_is_what_the_contract_mandates(case):
-    assert contract_outcome(case, case["http_status"], _body(case)) == case["expected_error"]
+    # Negatives specify only the keys the contract mandates (``field`` is unspecified for INVALID_RESPONSE).
+    outcome = contract_outcome(case, case["http_status"], _body(case))
+    assert {key: outcome[key] for key in case["expected_error"]} == case["expected_error"]
 
 
 @pytest.mark.parametrize("case", list(_negative_params()))
@@ -780,7 +782,8 @@ def test_python_client_refuses_negative_as_the_contract_requires(case):
     result, error, calls = _call(case, case["http_status"], _body(case))
     assert len(calls) == 1
     assert result is None and error is not None
-    assert _error_fields(error) == case["expected_error"]
+    actual = _error_fields(error)
+    assert {key: actual[key] for key in case["expected_error"]} == case["expected_error"]
 
 
 # --- side effects (CONTRACT.md section 4) ----------------------------------------------------------
