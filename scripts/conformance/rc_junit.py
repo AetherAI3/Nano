@@ -10,7 +10,7 @@ import re
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
-from pathlib import PurePath
+from pathlib import PurePath, PurePosixPath, PureWindowsPath
 from typing import Mapping, Optional, Sequence, Tuple
 
 from rc_common import canonical_sha256, redact
@@ -55,13 +55,21 @@ class JUnitError(ValueError):
     """The report is missing or is not a JUnit document."""
 
 
+def _pure(path: str) -> PurePath:
+    """Parse a path by its own spelling, not the host OS, so reports and tests
+    produced on Windows relativize identically on Linux and vice versa."""
+    if "\\" in path or (len(path) > 1 and path[1] == ":"):
+        return PureWindowsPath(path)
+    return PurePosixPath(path)
+
+
 def _classname(element: ET.Element, root: Optional[str]) -> str:
     file_attr = element.get("file")
     if file_attr and root is not None:
         try:
-            return PurePath(file_attr).relative_to(PurePath(root)).as_posix()
+            return _pure(file_attr).relative_to(_pure(root)).as_posix()
         except ValueError:
-            return PurePath(file_attr).name
+            return _pure(file_attr).name
     return element.get("classname", "")
 
 

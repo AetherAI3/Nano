@@ -59,7 +59,8 @@ The `run` exit code is 0 only when the chosen gate is `PASS`. Other codes:
 6. Runs the selected suites, re-checks cleanliness, and evaluates the results.
 
 Children get a scrubbed environment. Only the names in `ENV_ALLOWLIST` pass
-through, such as `PATH`, `SYSTEMROOT` and `USERNAME`. `HOME`, `USERPROFILE`,
+through, such as `PATH`, `SYSTEMROOT`, `USERNAME` and, on Linux,
+`LD_LIBRARY_PATH` (shared-library CPython builds need it). `HOME`, `USERPROFILE`,
 `TEMP` and `TMP` point at empty directories under `OUT`, so user
 configuration and credential files are not found. `PYTHONHASHSEED=0`,
 `PYTHONNOUSERSITE=1` and `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` are set. The

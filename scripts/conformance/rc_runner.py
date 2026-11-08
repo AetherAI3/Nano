@@ -17,9 +17,13 @@ from rc_common import redact_argv, sha256_bytes
 from rc_evaluate import Execution
 from rc_junit import JUnitError, JUnitSummary, parse_junit
 
+# LD_LIBRARY_PATH is required on Linux by shared-library CPython builds such as
+# the actions/setup-python toolcache interpreters; without it the test
+# interpreter cannot start. Only its name is recorded in evidence.
 ENV_ALLOWLIST = (
-    "COMSPEC", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME", "NUMBER_OF_PROCESSORS", "PATH", "PATHEXT",
-    "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT", "TZ", "USER", "USERNAME", "WINDIR",
+    "COMSPEC", "LANG", "LC_ALL", "LC_CTYPE", "LD_LIBRARY_PATH", "LOGNAME", "NUMBER_OF_PROCESSORS",
+    "PATH", "PATHEXT", "PROCESSOR_ARCHITECTURE", "SYSTEMDRIVE", "SYSTEMROOT", "TZ", "USER",
+    "USERNAME", "WINDIR",
 )
 HARNESS_ENV = {
     "PYTHONHASHSEED": "0",
