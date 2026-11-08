@@ -1,0 +1,54 @@
+name: SDK TypeScript (lifecycle status client)
+
+# Builds and tests sdk/typescript/qsearch-lifecycle against the frozen
+# protocol/qsearch-lifecycle/v1 goldens, then proves the packed tarball installs
+# and runs outside the checkout. Offline: no network beyond actions and the
+# pinned devDependency (typescript) from the lockfile. No secrets are used.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sdk/typescript/**'
+      - 'protocol/qsearch-lifecycle/**'
+      - '.github/workflows/sdk-typescript.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sdk/typescript/**'
+      - 'protocol/qsearch-lifecycle/**'
+      - '.github/workflows/sdk-typescript.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-typescript-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qsearch-lifecycle:
+    name: qsearch-lifecycle (node ${{ matrix.node }})
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # engines floor and current only: each Node version adds ~115 MB of
+        # toolcache on the shared self-hosted runner (22 verified in #100's first run).
+        node: ['20', '24']
+    defaults:
+      run:
+        working-directory: sdk/typescript/qsearch-lifecycle
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Install pinned devDependencies from the lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Build and test (includes Python-derived goldens)
+        run: npm test
+      - name: Packed tarball installs and runs outside the checkout
+        run: npm run pack:check
