@@ -3,19 +3,19 @@
   "type": "NanoStrategyCatalog",
   "schemaVersion": 1,
   "metadataVersion": "StrategyMetadataV1",
-  "strategyCount": 60,
+  "strategyCount": 62,
   "categoryCounts": {
     "event_volatility": 11,
-    "mean_reversion": 7,
+    "mean_reversion": 8,
     "momentum": 6,
     "risk": 8,
-    "trend": 8,
+    "trend": 9,
     "volatility": 4,
     "volume": 4,
     "watchdog": 12
   },
   "irMaturityCounts": {
-    "baseline": 46,
+    "baseline": 48,
     "v1": 14
   },
   "strategies": [
@@ -511,6 +511,34 @@
       ],
       "sourcePath": "library/mean_reversion/volatility_percentile_reclaim.nano",
       "irPath": "library/mean_reversion/volatility_percentile_reclaim_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "mean_reversion/vwap_reclaim",
+      "slug": "vwap_reclaim",
+      "name": "VwapReclaim",
+      "category": "mean_reversion",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "an intraday session that sold off into value and is being bought back. Do NOT fire in chop that oscillates across VWAP every few bars - the hold count and the depth term are both there to reject it.",
+      "conditions": "three consecutive closes above session VWAP (fifteen minutes of holding, not a wick through the level) after a dip that reached at least 0.3 percent below it.",
+      "invalidation": "a close back below session VWAP, which resets the hold count to zero and ends the proposal.",
+      "shape": "5m; a flush below value, a reclaim, and three bars of acceptance above it.",
+      "calibratedOn": "US equity index ETF, regular session, 5m bars. The VWAP is anchored at the regular-session open and resets every session; anchored, session and rolling VWAP are three different levels and the rule cannot tell them apart, so the host must publish exactly this one. The 0.3 percent depth is absolute and does not travel to instruments with a different intraday range.",
+      "nearestConfused": [
+        {
+          "slug": "vwap_band_reversion",
+          "id": "volume/vwap_band_reversion",
+          "distinction": "that uses a rolling twenty-bar VWAP with no session anchor and buys into a narrowing discount while price is still below it. This one uses an anchored session VWAP and waits for price to reclaim and hold above it before proposing anything."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "VWAP_DIP_DEPTH_PCT",
+        "VWAP_RECLAIM_HOLD_BARS"
+      ],
+      "sourcePath": "library/mean_reversion/vwap_reclaim.nano",
+      "irPath": "library/mean_reversion/vwap_reclaim_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",
@@ -1139,6 +1167,34 @@
       ],
       "sourcePath": "library/trend/macd_zero_line_reclaim.nano",
       "irPath": "library/trend/macd_zero_line_reclaim_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "trend/opening_range_breakout",
+      "slug": "opening_range_breakout",
+      "name": "OpeningRangeBreakout",
+      "category": "trend",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "a session with a decisive opening auction that then trends. Do NOT fire on a quiet tape where price drifts into the level - that is why the participation term exists.",
+      "conditions": "a 5m close at or above the range high, with volume at least 1.5x its twenty-bar average behind it. The closing bar is the hold; a wick through the high that closes back inside does not count.",
+      "invalidation": "a close back inside the opening range. A failed opening break usually reverses through the other side of the range.",
+      "shape": "5m; fast enough to catch the break, and no faster than the host can publish a closed bar against a fixed range.",
+      "calibratedOn": "US equity index ETF, regular session, 30-minute opening range. ORB_POS is scale-free so the threshold travels; the session itself does not. The host owns where the session starts, the window length, holidays and half days, and what \"the session\" means for a 24-hour instrument. Nano has no clock and no session concept, so without that boundary this rule is meaningless.",
+      "nearestConfused": [
+        {
+          "slug": "donchian_breakout",
+          "id": "trend/donchian_breakout",
+          "distinction": "that breaks a rolling N-period channel that keeps moving with every bar. This range is anchored to a session boundary the host defines, stops growing when the range window closes, and is the same level for every participant that day."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "ORB_POS",
+        "VOL_RATIO"
+      ],
+      "sourcePath": "library/trend/opening_range_breakout.nano",
+      "irPath": "library/trend/opening_range_breakout_ir.json"
     },
     {
       "metadataVersion": "StrategyMetadataV1",

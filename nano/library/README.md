@@ -15,7 +15,7 @@ The library holds two kinds of entry, and the difference is worth understanding 
 
 | | **Baseline entries** | **v1 entries** |
 | --- | --- | --- |
-| Count | 46 | 14 |
+| Count | 48 | 14 |
 | Source shape | one `every`, one `if`, AND-chained comparisons of a named signal against a literal | `param`/`input`/`let` declarations, arithmetic, `else`, offsets |
 | Where the numbers come from | the **host** computes every indicator and injects it as a named series | the host supplies **OHLCV**; Nano computes the indicators |
 | Compiled IR | `0.1.0`, byte-stable | `1.0.0`, carries `sourceHash` and `moduleHash` |
@@ -27,7 +27,7 @@ The practical difference for a host is the size of the contract. A baseline entr
 
 ## Learn, compare, contribute
 
-The current library contains 60 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 46 baseline and 14 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 62 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 48 baseline and 14 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
@@ -44,8 +44,8 @@ python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
 | Category | Strategies |
 | --- | --- |
 | `momentum/` | `rsi_oversold_reversal`, `stochastic_oversold`, `williams_r_reversal`, `roc_momentum`, `absolute_momentum_filter`†, `stochastic_reclaim`† |
-| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme`, `bollinger_lower_reclaim`†, `zscore_fade_trend_filtered`†, `opening_gap_fade`†, `volatility_percentile_reclaim`† |
-| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long`, `ema_pullback_continuation`†, `macd_zero_line_reclaim`†, `donchian_high_breakout`†, `volume_confirmed_channel_breakout`† |
+| `mean_reversion/` | `bollinger_band_touch`, `zscore_reversion`, `cci_extreme`, `vwap_reclaim`, `bollinger_lower_reclaim`†, `zscore_fade_trend_filtered`†, `opening_gap_fade`†, `volatility_percentile_reclaim`† |
+| `trend/` | `golden_cross`, `macd_histogram_flip`, `donchian_breakout`, `supertrend_flip_long`, `opening_range_breakout`, `ema_pullback_continuation`†, `macd_zero_line_reclaim`†, `donchian_high_breakout`†, `volume_confirmed_channel_breakout`† |
 | `volatility/` | `atr_volatility_halt`, `bb_squeeze_breakout`, `squeeze_release_expansion`†, `atr_regime_halt`† |
 | `volume/` | `volume_spike_confirmation`, `obv_trend`, `volume_climax_reversal`†, `vwap_band_reversion`† |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit`, `loss_velocity_breaker` |
@@ -121,6 +121,9 @@ Baseline entries compare **host-provided named signal series** with numeric lite
 | `ta.crossover(sma50, sma200)` | `SMA_SPREAD(50)` | `SMA(50) - SMA(200)` |
 | MACD histogram | `MACD_HIST(9)` | MACD line minus signal line |
 | Donchian breakout | `DONCHIAN_POS(20)` | `(close - lower) / (upper - lower)` |
+| opening range breakout | `ORB_POS` | `(close - range_low) / (range_high - range_low)` against the host's session opening range; absent until the range window closes |
+| session VWAP reclaim hold | `VWAP_RECLAIM_HOLD_BARS` | Consecutive closed bars above anchored session VWAP since the last close below it; 0 if none this session |
+| session VWAP dip depth | `VWAP_DIP_DEPTH_PCT` | Lowest close of the preceding dip below anchored session VWAP, as a positive percentage of VWAP |
 | `ta.atr(14) / close` | `ATR_PCT(14)` | ATR as a percentage of price |
 | SuperTrend flip up | `SUPERTREND_FLIP_BULL(10)` | 1 on the bar `SUPERTREND_DIR` turned bullish, else 0 |
 | planned stop distance | `STOP_DISTANCE_ATR(10)` | `(entry - protective stop) / ATR(10)` |

@@ -1,0 +1,40 @@
+// Opening range breakout. ORB_POS = (close - range_low) / (range_high -
+// range_low) against the session's opening range: the high and low of the
+// first 30 minutes after the host's session open. At or above 1 means the
+// close broke above the range high. The host publishes ORB_POS only once the
+// range window has closed - before that the range is still growing and the
+// signal is absent, not zero. VOL_RATIO(20) is the existing volume / sma(volume,
+// 20) convention.
+// REGIME: a session with a decisive opening auction that then trends. Do NOT
+// fire on a quiet tape where price drifts into the level - that is why the
+// participation term exists.
+// CONDITIONS: a 5m close at or above the range high, with volume at least 1.5x
+// its twenty-bar average behind it. The closing bar is the hold; a wick through
+// the high that closes back inside does not count.
+// INVALIDATION: a close back inside the opening range. A failed opening break
+// usually reverses through the other side of the range.
+// SHAPE: 5m; fast enough to catch the break, and no faster than the host can
+// publish a closed bar against a fixed range.
+// NOT donchian_breakout: that breaks a rolling N-period channel that keeps
+// moving with every bar. This range is anchored to a session boundary the host
+// defines, stops growing when the range window closes, and is the same level
+// for every participant that day.
+// CALIBRATED ON: US equity index ETF, regular session, 30-minute opening range.
+// ORB_POS is scale-free so the threshold travels; the session itself does not.
+// The host owns where the session starts, the window length, holidays and half
+// days, and what "the session" means for a 24-hour instrument. Nano has no
+// clock and no session concept, so without that boundary this rule is
+// meaningless.
+strategy OpeningRangeBreakout {
+
+    every 5m {
+
+        if ORB_POS >= 1 and VOL_RATIO(20) >= 1.5 {
+
+            buy(SPY, 0.65)
+
+        }
+
+    }
+
+}
