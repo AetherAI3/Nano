@@ -1,0 +1,12 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "VwapReclaim",
+  "effects": ["intent.emit", "log.append"],
+  "nodes": [
+    { "type": "Schedule", "interval": "5m" },
+    { "type": "Condition", "signal": "VWAP_RECLAIM_HOLD_BARS", "operator": ">=", "value": 3 },
+    { "type": "Condition", "signal": "VWAP_DIP_DEPTH_PCT", "operator": ">=", "value": 0.3 },
+    { "type": "Intent", "action": "BUY", "asset": "SPY", "confidence": 0.6 }
+  ]
+}

@@ -814,6 +814,34 @@ def test_loss_velocity_breaker_pauses_on_rate_not_level():
     ]
 
 
+def test_opening_range_breakout_needs_the_break_and_the_participation():
+    # Issue #19. Inside the range (ORB_POS < 1) or a break on thin volume does
+    # not fire; a break with participation does. Positive control on the frame.
+    graph = _load("trend/opening_range_breakout.nano")
+    frame = MarketFrame(
+        timestamps=(0, 300, 600, 900),
+        signals={"ORB_POS": (0.9, 1.2, 1.2, 1.0), "VOL_RATIO": (2.0, 1.4, 1.5, 3.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [("BUY", 600), ("BUY", 900)]
+    assert {i.asset for i in result.intents} == {"SPY"}
+
+
+def test_vwap_reclaim_requires_a_held_reclaim_after_a_real_dip():
+    # Issue #20. Two held bars is a touch, not a hold; a three-bar hold after a
+    # shallow dip is chop. Only a three-bar hold after a real dip fires.
+    graph = _load("mean_reversion/vwap_reclaim.nano")
+    frame = MarketFrame(
+        timestamps=(0, 300, 600, 900),
+        signals={
+            "VWAP_RECLAIM_HOLD_BARS": (2.0, 3.0, 3.0, 5.0),
+            "VWAP_DIP_DEPTH_PCT": (0.8, 0.2, 0.3, 1.1),
+        },
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [("BUY", 600), ("BUY", 900)]
+
+
 def test_watchdog_rules_never_propose_a_direction():
     """Every watchdog is a control, so none of them may emit a trade.
 

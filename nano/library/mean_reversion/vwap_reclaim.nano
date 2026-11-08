@@ -1,0 +1,39 @@
+// Session VWAP reclaim. Price trades below the anchored session VWAP, then
+// reclaims it and holds. VWAP_RECLAIM_HOLD_BARS is the number of consecutive
+// closed 5m bars that have closed above session VWAP since the most recent close
+// below it; the host publishes 0 when no close below VWAP has occurred this
+// session. VWAP_DIP_DEPTH_PCT is how far below session VWAP the lowest close of
+// that dip reached, as a positive percentage of VWAP.
+// REGIME: an intraday session that sold off into value and is being bought
+// back. Do NOT fire in chop that oscillates across VWAP every few bars - the
+// hold count and the depth term are both there to reject it.
+// CONDITIONS: three consecutive closes above session VWAP (fifteen minutes of
+// holding, not a wick through the level) after a dip that reached at least
+// 0.3 percent below it.
+// INVALIDATION: a close back below session VWAP, which resets the hold count to
+// zero and ends the proposal.
+// SHAPE: 5m; a flush below value, a reclaim, and three bars of acceptance above
+// it.
+// NOT vwap_band_reversion: that uses a rolling twenty-bar VWAP with no session
+// anchor and buys into a narrowing discount while price is still below it.
+// This one uses an anchored session VWAP and waits for price to reclaim and
+// hold above it before proposing anything.
+// CALIBRATED ON: US equity index ETF, regular session, 5m bars. The VWAP is
+// anchored at the regular-session open and resets every session; anchored,
+// session and rolling VWAP are three different levels and the rule cannot tell
+// them apart, so the host must publish exactly this one. The 0.3 percent depth
+// is absolute and does not travel to instruments with a different intraday
+// range.
+strategy VwapReclaim {
+
+    every 5m {
+
+        if VWAP_RECLAIM_HOLD_BARS >= 3 and VWAP_DIP_DEPTH_PCT >= 0.3 {
+
+            buy(SPY, 0.6)
+
+        }
+
+    }
+
+}
