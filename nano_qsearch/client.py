@@ -11,12 +11,17 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from ._job_state_v1 import is_valid_job_state
 from .auth import AUTH_HEADER, MIN_KEY_BYTES, sign_request
 from .canonical import canonical_digest, canonical_json, validate_digest
 from .lifecycle import JOB_STATE_SCHEMA, NEXT_ACTIONS
 
 _PREFIX = "/qsearch/v2/requests/"
 _MAX_RESPONSE_BYTES = 1_048_576
+# Wire contract v1 section 2.1: every number exactly representable as an IEEE-754 double
+# (magnitude <= 2^53-1) and at most 64 nested containers, the top-level value counting as 1.
+_MAX_SAFE_NUMBER = 2**53 - 1
+_MAX_JSON_DEPTH = 64
 _REMOTE_CODES = frozenset({
     "NOT_FOUND", "NOT_ENABLED", "EMPTY_BODY_REQUIRED", "UNAUTHORIZED", "STORE_UNAVAILABLE",
     "STATE_UNAVAILABLE", "REQUEST_NOT_FOUND", "INVALID_REQUEST", "INVALID_JSON", "JSON", "IDENTITY",
@@ -84,6 +89,49 @@ def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return members
 
 
+def _check_strict_value(value: Any) -> None:
+    """Refuse nesting deeper than 64 containers and numbers beyond 2^53-1 (iterative, no recursion)."""
+    pending = [(value, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, Mapping):
+            children = item.values()
+        elif isinstance(item, (list, tuple)):
+            children = item
+        else:
+            if (not isinstance(item, bool) and isinstance(item, (int, float))
+                    and not abs(item) <= _MAX_SAFE_NUMBER):      # also refuses NaN
+                raise ValueError("unsafe JSON number")
+            continue
+        if depth > _MAX_JSON_DEPTH:
+            raise ValueError("JSON nesting too deep")
+        pending.extend((child, depth + 1) for child in children)
+
+
+def _parse_strict(raw: Any) -> dict[str, Any]:
+    """Strict JSON (wire contract v1 section 2.1) for success AND error bodies.
+
+    Bytes must be UTF-8 (strictly decoded: no surrogates; a BOM is then refused by
+    ``json.loads``) so UTF-16/UTF-32 auto-detection never applies. Text or a decoded
+    mapping from an injected transport passes the same structural rules.
+    """
+    if isinstance(raw, Mapping):
+        # Canonicalise, then parse like bytes: nested Mappings become dicts, and NaN,
+        # non-string keys and cycles (RecursionError) are refused on one code path.
+        raw = canonical_json(raw)
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")       # the cap counts UTF-8 bytes; lone surrogates are refused
+    if not isinstance(raw, bytes) or len(raw) > _MAX_RESPONSE_BYTES:
+        raise ValueError("invalid response body")
+    payload: Any = json.loads(raw.decode("utf-8"), parse_constant=_reject_constant,
+                              object_pairs_hook=_reject_duplicates)
+    if not isinstance(payload, dict):
+        raise ValueError("top-level JSON value must be an object")
+    _check_strict_value(payload)
+    canonical_json(payload)
+    return payload
+
+
 class LifecycleClient:
     """Explicit status/cancel/refresh/replace calls with no automatic retry or polling.
 
@@ -141,6 +189,22 @@ class LifecycleClient:
     def _call(self, method: str, request_digest: str, *, action: str | None = None,
               body: bytes = b"", expected_response_digest: str | None = None) -> dict[str, Any]:
         try:
+            return self._call_once(method, request_digest, action=action, body=body,
+                                   expected_response_digest=expected_response_digest)
+        except LifecycleClientError as exc:
+            error = exc
+        # Re-raise outside the handler with a fresh traceback: ``raise ... from None`` only hides
+        # the chain from display, while ``__context__`` (e.g. a JSONDecodeError whose ``.doc`` is
+        # the whole response body) and frame locals (raw bytes, URL, transport exception) would
+        # otherwise stay reachable from the public error.
+        error.__cause__ = None
+        error.__context__ = None
+        error.__suppress_context__ = True
+        raise error.with_traceback(None)
+
+    def _call_once(self, method: str, request_digest: str, *, action: str | None,
+                   body: bytes, expected_response_digest: str | None) -> dict[str, Any]:
+        try:
             validate_digest(request_digest, field="request_digest")
         except ValueError:
             raise LifecycleClientError("IDENTITY", field="request_digest") from None
@@ -171,15 +235,7 @@ class LifecycleClient:
         if 300 <= status < 400:
             raise LifecycleClientError("UNEXPECTED_REDIRECT", http_status=status)
         try:
-            if isinstance(raw, Mapping):
-                payload = dict(raw)
-            else:
-                if not isinstance(raw, (bytes, str)) or len(raw) > _MAX_RESPONSE_BYTES:
-                    raise ValueError()
-                payload = json.loads(raw, parse_constant=_reject_constant, object_pairs_hook=_reject_duplicates)
-            if not isinstance(payload, dict):
-                raise ValueError()
-            canonical_json(payload)
+            payload = _parse_strict(raw)
         except (ValueError, TypeError, UnicodeDecodeError, RecursionError):
             raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION",
                                        http_status=status) from None
@@ -199,6 +255,9 @@ class LifecycleClient:
         if (not isinstance(request, Mapping)
                 or request.get("request_digest") != (expected_response_digest or request_digest)
                 or not isinstance(next_action, str) or next_action not in NEXT_ACTIONS):
+            raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION", http_status=status)
+        if not is_valid_job_state(payload):
+            # Closed v1 envelope (wire contract section 2.2): exact members, types, enums and I1-I8.
             raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION", http_status=status)
         if action == "replace":
             lineage = payload.get("lineage")
