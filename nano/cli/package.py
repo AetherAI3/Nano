@@ -24,6 +24,7 @@ from ..compiler import PackageError, compile_package
 from ..compiler.package import PACKAGE_VERSION, CompiledPackage
 from ..ir.module import COMPILER_VERSION
 from .commands import EXIT_DIAGNOSTICS, EXIT_IO, EXIT_OK, EXIT_USAGE, Console
+from .package_init import command_init
 from .package_cases import (
     ACTIONS_EXECUTED, MAX_CASES_BYTES, CaseResult, FixtureError,
     UnsupportedHandlerError, load_cases, run_cases,
@@ -162,7 +163,10 @@ def _discard(temporary: str) -> None:
 
 def command_package(args: argparse.Namespace, console: Console) -> int:
     """Dispatch ``nano package <action>``."""
-    handlers = {"check": _command_check, "build": _command_build, "test": _command_test}
+    handlers = {
+        "check": _command_check, "build": _command_build,
+        "test": _command_test, "init": command_init,
+    }
     return handlers[args.package_action](args, console)
 
 
@@ -405,6 +409,10 @@ def add_package_parser(subcommands: Any) -> None:
     test.add_argument("--json", dest="json_output", action="store_true",
                       help="emit one canonical NanoPackageTestReport document")
     test.set_defaults(handler=command_package)
+    init = actions.add_parser("init", help="create a pinned example in a new or empty directory")
+    init.add_argument("--directory", type=Path, required=True, metavar="PATH",
+                      help="destination; must not exist or be empty (never overwritten)")
+    init.set_defaults(handler=command_package)
 
 
 def _add_inputs(parser: argparse.ArgumentParser) -> None:

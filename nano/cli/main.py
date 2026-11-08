@@ -68,6 +68,7 @@ examples:
   nano package check --manifest nano.json --lock nano.lock --json
   nano package build --manifest nano.json --lock nano.lock -o package.json
   nano package test --manifest nano.json --lock nano.lock --cases cases.json
+  nano package init --directory my-agent
 """
 
 

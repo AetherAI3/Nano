@@ -2,8 +2,8 @@
 
 Status: **contract frozen for issue #84** (roadmap #67). Implements the CLI
 orchestration RFC 0066 deferred. It adds no language semantics, registry
-resolution, lock refresh or formatter. `nano package init` and formatting are
-out of scope and deferred to a later PR.
+resolution, lock refresh or formatter. `nano package init` was added in a
+separate follow-up (see its section); formatting remains deferred.
 
 Every operation is a thin adapter over the shipped public API:
 `compile_package(manifest, lock_path=lock)` builds; the existing v1 VM
@@ -18,9 +18,10 @@ imports model, Qiskit or QPU code.
 nano package check --manifest PATH --lock PATH [--json] [-v]
 nano package build --manifest PATH --lock PATH [-o PATH] [--module-output PATH]
 nano package test  --manifest PATH --lock PATH --cases PATH [--json]
+nano package init  --directory PATH
 ```
 
-`--manifest` and `--lock` are **required on every operation**; there is no
+`--manifest` and `--lock` are **required on every build operation**; there is no
 default filename and no discovery. A missing required argument or a bare
 `nano package` is an argparse usage error (exit 2).
 
@@ -178,6 +179,36 @@ Text mode prints `PASS <name>` / `FAIL <name>: <reason>` lines and a final
 Build or fixture rejection yields the same document shape with `success:false`,
 `cases: []`, totals 0 and the diagnostic.
 
+## `init --directory PATH`
+
+Creates one minimal, already-pinned example package so a new user can run
+`check`, `build` and `test` immediately. It is a fixed template, not a
+generator: it never reads, discovers, repins or rewrites any existing project.
+
+* `--directory` is required. The destination must **not exist**, or be an
+  **existing empty directory**. Anything else (a non-empty directory, a file,
+  or a symlink/junction at that path) is refused with exit 2 before any write.
+  The parent must already exist; a missing parent is an I/O failure (exit 3).
+  No parent search, no `-p`-style creation of intermediate directories.
+* It writes exactly five files, with LF line endings and fixed bytes:
+  `nano.json`, `nano.lock`, `agent.nano`, `rules.nano` and `cases.json`. The
+  lock pins the two sources by SHA-256 of those exact bytes, computed from the
+  template, never by reading files back from disk. Repeated runs into fresh
+  destinations produce byte-identical files and the same `packageHash`.
+* The scaffold is written to a temporary sibling directory and renamed into
+  place when the destination does not exist. For an existing empty directory,
+  each file is created exclusively (it must not appear concurrently) and any
+  file already created is removed if a later one fails. A failed `init` leaves
+  no partial scaffold. The destination is re-checked before every file, but
+  like the package build API this is not an OS sandbox: a concurrent local
+  process that can rename entries in the parent could still race the check.
+* stdout stays empty; one `created <PATH> (5 files)` note goes to stderr.
+  Exit 0 on success.
+
+The scaffold's entry imports one pure helper module, declares only
+`intent.emit` and `log.append`, and its `cases.json` has a passing positive
+and negative case, so `nano package test` on a fresh scaffold exits 0.
+
 ## Acceptance evidence mapping
 
 | Issue requirement | Where it is proved |
@@ -189,3 +220,4 @@ Build or fixture rejection yields the same document shape with `success:false`,
 | fixture strictness, handlers, intent vs action, empty sets | `tests/test_package_cases.py` |
 | single-source `check`/`compile`, v0.1.0 and v1 fixtures unchanged | existing `tests/test_cli.py`, `tests/test_conformance.py`, goldens |
 | installed wheel outside the repository, no quantum extras | PR evidence (fresh venv, copied example) |
+| `init` only into a new/empty destination, refuses overwrite, never rewrites pins | `tests/test_package_init.py` |
