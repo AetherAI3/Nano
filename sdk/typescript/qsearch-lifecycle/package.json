@@ -1,0 +1,52 @@
+{
+  "name": "@nano/qsearch-lifecycle",
+  "version": "0.1.0",
+  "description": "Read-only TypeScript status client for the Nano q-search lifecycle wire contract v1.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "webcrypto": [
+        "dist/webcrypto.d.ts"
+      ],
+      "fetch": [
+        "dist/fetch.d.ts"
+      ]
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./webcrypto": {
+      "types": "./dist/webcrypto.d.ts",
+      "default": "./dist/webcrypto.js"
+    },
+    "./fetch": {
+      "types": "./dist/fetch.d.ts",
+      "default": "./dist/fetch.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "examples/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test",
+    "pack:check": "npm run build && node scripts/pack-check.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  }
+}
