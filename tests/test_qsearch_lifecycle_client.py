@@ -252,3 +252,104 @@ def test_duplicate_member_names_are_refused_not_last_wins(status, raw):
     assert (caught.value.code, caught.value.next_action, caught.value.http_status) == (
         "INVALID_RESPONSE", "MANUAL_RECONCILIATION", status)
     assert len(calls) == 1
+
+
+# --- strict JSON (wire contract v1 section 2.1, issue #86 parity) --------------------------------
+
+MAX_SAFE = 2**53 - 1
+ERROR_BODY = {"code": "STORE_UNAVAILABLE", "retryable": True, "next_action": "RECONCILE"}
+
+
+def _nested(depth):
+    """``depth`` nested JSON containers, the top-level object counted as depth 1."""
+    value = {}
+    for index in range(depth - 1):
+        value = [value] if index % 2 else {"x": value}
+    return value
+
+
+def _call_status(status, raw):
+    calls = []
+    client = LifecycleClient("https://example.invalid", KEY,
+                             transport=lambda *args: calls.append(args) or (status, raw))
+    try:
+        return client.status(DIGEST), None
+    except LifecycleClientError as exc:
+        return None, exc
+    finally:
+        assert len(calls) == 1
+
+
+def _assert_invalid(error, status):
+    assert error is not None
+    assert (error.code, error.field, error.retryable, error.next_action, error.http_status) == (
+        "INVALID_RESPONSE", None, False, "MANUAL_RECONCILIATION", status)
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16-le", "utf-16-be", "utf-16", "utf-32-le",
+                                      "utf-32-be", "utf-32"])
+@pytest.mark.parametrize("status", [200, 503])
+def test_non_utf8_or_bom_body_is_refused(encoding, status):
+    payload = response() if status == 200 else ERROR_BODY
+    _, error = _call_status(status, json.dumps(payload).encode(encoding))
+    _assert_invalid(error, status)
+
+
+@pytest.mark.parametrize("raw", [b'{"code":"NOT_FOUND","x":"\xff"}', b'{"code":"\xc3("}',
+                                 b'{"code":"\xed\xa0\x80"}'])
+def test_invalid_utf8_error_body_is_refused(raw):
+    _, error = _call_status(503, raw)
+    _assert_invalid(error, 503)
+
+
+def test_text_from_injected_transport_is_still_parsed():
+    result, error = _call_status(200, json.dumps(response()))
+    assert error is None and result["state"] == "QUEUED"
+    _, error = _call_status(503, json.dumps(ERROR_BODY))
+    assert (error.code, error.http_status) == ("STORE_UNAVAILABLE", 503)
+    _, error = _call_status(503, "\ufeff" + json.dumps(ERROR_BODY))
+    _assert_invalid(error, 503)
+
+
+@pytest.mark.parametrize("lexeme", [str(MAX_SAFE + 1), str(-MAX_SAFE - 1), "9007199254740993", "1e16",
+                                    "9007199254740993.0", "-1.0e300", "18446744073709551616"])
+@pytest.mark.parametrize("status", [200, 503])
+def test_number_beyond_2_53_minus_1_is_refused_in_success_and_error_bodies(lexeme, status):
+    body = response() if status == 200 else ERROR_BODY
+    raw = json.dumps({**body, "extra": "SENTINEL"}).replace('"SENTINEL"', lexeme).encode()
+    _, error = _call_status(status, raw)
+    _assert_invalid(error, status)
+
+
+@pytest.mark.parametrize("lexeme", [str(MAX_SAFE), str(-MAX_SAFE), "9007199254740991.0", "0", "-0", "1e15", "0.5"])
+def test_number_within_2_53_minus_1_is_kept(lexeme):
+    raw = json.dumps({**ERROR_BODY, "retry_after": "SENTINEL"}).replace('"SENTINEL"', lexeme).encode()
+    _, error = _call_status(503, raw)
+    assert (error.code, error.retryable, error.next_action, error.http_status) == (
+        "STORE_UNAVAILABLE", True, "RECONCILE", 503)
+
+
+@pytest.mark.parametrize("status", [200, 503])
+def test_depth_64_is_accepted_and_65_is_refused(status):
+    body = response() if status == 200 else ERROR_BODY
+    deepest = json.dumps({**body, "detail": _nested(63)}).encode()   # top-level object + 63 = 64
+    result, error = _call_status(status, deepest)
+    if status == 200:
+        assert error is None and result["state"] == "QUEUED"
+    else:
+        assert (error.code, error.http_status) == ("STORE_UNAVAILABLE", 503)
+    _, error = _call_status(status, json.dumps({**body, "detail": _nested(64)}).encode())
+    _assert_invalid(error, status)
+
+
+def test_depth_far_beyond_recursion_limit_is_refused_not_crashing():
+    raw = b'{"code":"NOT_FOUND","d":' + b"[" * 100_000 + b"]" * 100_000 + b"}"
+    _, error = _call_status(503, raw)
+    _assert_invalid(error, 503)
+
+
+@pytest.mark.parametrize("payload", [{**ERROR_BODY, "n": MAX_SAFE + 1}, {**ERROR_BODY, "n": -float(2**60)},
+                                     {**ERROR_BODY, "detail": _nested(65)}])
+def test_decoded_mapping_from_injected_transport_obeys_the_same_rules(payload):
+    _, error = _call_status(503, payload)
+    _assert_invalid(error, 503)

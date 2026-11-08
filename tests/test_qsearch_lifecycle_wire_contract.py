@@ -238,6 +238,8 @@ def test_wire_constants_equal_python_constants():
     assert WIRE["remote_codes"] == sorted(client._REMOTE_CODES)
     assert WIRE["remote_fields"] == sorted(client._REMOTE_FIELDS)
     assert WIRE["max_response_bytes"] == client._MAX_RESPONSE_BYTES
+    assert WIRE["max_json_depth"] == client._MAX_JSON_DEPTH
+    assert WIRE["max_safe_integer"] == client._MAX_SAFE_NUMBER
     assert WIRE["next_actions"] == sorted(lifecycle.NEXT_ACTIONS)
     # job_state() maps any status outside _PROVIDER_STATUSES to UNKNOWN, so the wire enum adds it.
     assert WIRE["provider_statuses"] == sorted(lifecycle._PROVIDER_STATUSES | {"UNKNOWN"})
@@ -439,20 +441,11 @@ def test_error_body_maps_to_expected_metadata(case):
 # --- negatives -----------------------------------------------------------------------------------
 
 _DISCREPANCY = {
-    "error_body": "LifecycleClient maps error bodies without the strict-JSON rules (2^53-1, depth 64)",
-    "encoding": "CONTRACT.md section 4: json.loads auto-detects a UTF-8 BOM, UTF-16 or UTF-32 body",
-    "unsafe_integer": "LifecycleClient accepts integers beyond 2^53-1 (CONTRACT.md 2.1 portability cap)",
     "envelope": "CONTRACT.md section 4: LifecycleClient checks only schema, request_digest and next_action",
 }
 
 
 def _reason(name: str) -> str:
-    if name.startswith("error_body"):
-        return _DISCREPANCY["error_body"]
-    if name.startswith("encoding_"):
-        return _DISCREPANCY["encoding"]
-    if name == "unsafe_integer":
-        return _DISCREPANCY["unsafe_integer"]
     return _DISCREPANCY["envelope"]
 
 

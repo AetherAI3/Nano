@@ -17,6 +17,10 @@ from .lifecycle import JOB_STATE_SCHEMA, NEXT_ACTIONS
 
 _PREFIX = "/qsearch/v2/requests/"
 _MAX_RESPONSE_BYTES = 1_048_576
+# Wire contract v1 section 2.1: every number exactly representable as an IEEE-754 double
+# (magnitude <= 2^53-1) and at most 64 nested containers, the top-level value counting as 1.
+_MAX_SAFE_NUMBER = 2**53 - 1
+_MAX_JSON_DEPTH = 64
 _REMOTE_CODES = frozenset({
     "NOT_FOUND", "NOT_ENABLED", "EMPTY_BODY_REQUIRED", "UNAUTHORIZED", "STORE_UNAVAILABLE",
     "STATE_UNAVAILABLE", "REQUEST_NOT_FOUND", "INVALID_REQUEST", "INVALID_JSON", "JSON", "IDENTITY",
@@ -82,6 +86,46 @@ def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError("duplicate JSON member")
         members[key] = value
     return members
+
+
+def _check_strict_value(value: Any) -> None:
+    """Refuse nesting deeper than 64 containers and numbers beyond 2^53-1 (iterative, no recursion)."""
+    pending = [(value, 1)]
+    while pending:
+        item, depth = pending.pop()
+        if isinstance(item, Mapping):
+            children = item.values()
+        elif isinstance(item, (list, tuple)):
+            children = item
+        else:
+            if (not isinstance(item, bool) and isinstance(item, (int, float))
+                    and not abs(item) <= _MAX_SAFE_NUMBER):      # also refuses NaN
+                raise ValueError("unsafe JSON number")
+            continue
+        if depth > _MAX_JSON_DEPTH:
+            raise ValueError("JSON nesting too deep")
+        pending.extend((child, depth + 1) for child in children)
+
+
+def _parse_strict(raw: Any) -> dict[str, Any]:
+    """Strict JSON (wire contract v1 section 2.1) for success AND error bodies.
+
+    Bytes must be UTF-8 (strictly decoded: no surrogates; a BOM is then refused by
+    ``json.loads``) so UTF-16/UTF-32 auto-detection never applies. Text or a decoded
+    mapping from an injected transport passes the same structural rules.
+    """
+    if isinstance(raw, Mapping):
+        payload: Any = dict(raw)
+    else:
+        if not isinstance(raw, (bytes, str)) or len(raw) > _MAX_RESPONSE_BYTES:
+            raise ValueError("invalid response body")
+        text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+        payload = json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_reject_duplicates)
+    if not isinstance(payload, dict):
+        raise ValueError("top-level JSON value must be an object")
+    _check_strict_value(payload)
+    canonical_json(payload)
+    return payload
 
 
 class LifecycleClient:
@@ -171,15 +215,7 @@ class LifecycleClient:
         if 300 <= status < 400:
             raise LifecycleClientError("UNEXPECTED_REDIRECT", http_status=status)
         try:
-            if isinstance(raw, Mapping):
-                payload = dict(raw)
-            else:
-                if not isinstance(raw, (bytes, str)) or len(raw) > _MAX_RESPONSE_BYTES:
-                    raise ValueError()
-                payload = json.loads(raw, parse_constant=_reject_constant, object_pairs_hook=_reject_duplicates)
-            if not isinstance(payload, dict):
-                raise ValueError()
-            canonical_json(payload)
+            payload = _parse_strict(raw)
         except (ValueError, TypeError, UnicodeDecodeError, RecursionError):
             raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION",
                                        http_status=status) from None

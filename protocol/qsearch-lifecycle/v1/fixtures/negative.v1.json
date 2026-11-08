@@ -319,7 +319,7 @@
    "http_status": 200,
    "name": "unsafe_integer",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -529,7 +529,7 @@
    "http_status": 200,
    "name": "encoding_utf8_bom",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -543,7 +543,7 @@
    "http_status": 200,
    "name": "encoding_utf16_le",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -557,7 +557,7 @@
    "http_status": 200,
    "name": "encoding_utf32_be",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -723,7 +723,7 @@
    "http_status": 503,
    "name": "error_body_unsafe_integer",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -737,7 +737,7 @@
    "http_status": 503,
    "name": "error_body_depth_exceeds_64",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   }
  ],
