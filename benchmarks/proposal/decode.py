@@ -42,7 +42,11 @@ def strict_json(text: str) -> Any:
     except DecodeError:
         raise
     except json.JSONDecodeError as exc:
-        raise DecodeError("json_syntax", f"{exc.msg} at offset {exc.pos}") from exc
+        # The decoder's message and offset wording differ between CPython
+        # versions (3.13 reports trailing commas differently from 3.10), and
+        # this text feeds the canonical report hash. Keep only the category so
+        # reports replay byte for byte on every supported interpreter.
+        raise DecodeError("json_syntax", "invalid JSON") from exc
 
 
 def lenient_json(text: str) -> Any:

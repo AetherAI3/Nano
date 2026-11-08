@@ -105,8 +105,8 @@ the ATS golden fixture hash `6a2b3824…62eb4` unchanged.
 Latency is written only to the telemetry file: strict decode plus Nano
 compile/validate of each first proposal, 3 warmup and 20 timed repeats per
 case, `time.perf_counter_ns`, with Python/platform details. Final run on
-CPython 3.13.5, Windows 10, AMD64, 12 CPUs: quantum p50/p95 0.96/1.41 ms
-(dev) and 1.16/1.98 ms (eval); strategy 0.24/0.40 ms (dev) and 0.30/0.66 ms
+CPython 3.13.5, Windows 10, AMD64, 12 CPUs: quantum p50/p95 0.91/1.28 ms
+(dev) and 0.93/1.29 ms (eval); strategy 0.20/0.41 ms (dev) and 0.30/0.50 ms
 (eval). This is a local measurement only; no speed claim is made.
 
 ## Bounded repair (`allowlist-v1`)
@@ -127,8 +127,8 @@ catalog snapshot. Accepted repairs are re-admitted and re-verified.
 Counts are `success/denominator`. "Safe" counts cases expected to abstain that
 did not execute.
 
-Baseline (dev, policy `none`, report `sha256:d94497f8…989b1`) and candidate 1
-(dev, `allowlist-v1`, `sha256:581f5c41…6b8f`), `recorded_repair` arm:
+Baseline (dev, policy `none`, report `sha256:9a360310…3950e`) and candidate 1
+(dev, `allowlist-v1`, `sha256:04da9d04…2f84`), `recorded_repair` arm:
 
 | Subset | Metric | Baseline | Candidate 1 |
 | --- | --- | ---: | ---: |
@@ -141,7 +141,7 @@ Baseline (dev, policy `none`, report `sha256:d94497f8…989b1`) and candidate 1
 | strategy | post-repair semantic regressions | 0 | 1 |
 
 Final (dev + eval evaluated once, `allowlist-v1`, report
-`sha256:fa20672d…7aed`). Supported-task success / safe abstention by class:
+`sha256:372094c2…cd7e`). Supported-task success / safe abstention by class:
 
 | Split / arm | Subset | Supported | Ambiguous/unsupported | Adversarial/malformed |
 | --- | --- | --- | --- | --- |
