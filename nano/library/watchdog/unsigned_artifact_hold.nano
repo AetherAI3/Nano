@@ -1,0 +1,34 @@
+// Unsigned-artifact hold: pause a release while any artifact in it carries no
+// valid signature. UNSIGNED_ARTIFACT_COUNT is the number of artifacts in the
+// release under evaluation that the host could not verify a signature for.
+// REGIME: release evaluation. Armed while the host is deciding whether a release
+// may ship; it says nothing about systems already running.
+// CONDITIONS: none in the rule. The host enumerates the artifacts, verifies the
+// signatures, decides what counts as valid, and defines which release is under
+// evaluation. Nano verifies no signature, sees no artifact and cannot stop a
+// pipeline: this rule expresses the policy, it does not enforce it.
+// INVALIDATION: every artifact verifying, so the count returns to zero. The rule
+// does not latch; ending the hold and re-running the release are the host's job.
+// SHAPE: 1m; fast enough not to delay a clean release, and the count only moves
+// when the host re-verifies, so checking faster adds nothing.
+// NOT trusted_route_guard: that pauses a running system that lost its trusted
+// path. This one holds a release that has not shipped because its contents
+// cannot be attributed to whoever was supposed to build them.
+// CALIBRATED ON: policy, not data. The ceiling is one rather than a tolerance
+// because a single unsigned artifact is exactly the one an attacker would
+// substitute; there is no number of unattributed binaries that is safe to ship.
+strategy UnsignedArtifactHold {
+
+    agent SecurityDesk
+
+    every 1m {
+
+        if UNSIGNED_ARTIFACT_COUNT >= 1 {
+
+            pause()
+
+        }
+
+    }
+
+}

@@ -1,0 +1,12 @@
+{
+  "type": "Strategy",
+  "nanoIrVersion": "0.1.0",
+  "name": "AuthFailureBurst",
+  "effects": ["intent.emit", "log.append"],
+  "nodes": [
+    { "type": "Schedule", "interval": "1m" },
+    { "type": "Condition", "signal": "AUTH_FAILURES_5M", "operator": ">=", "value": 50 },
+    { "type": "Intent", "action": "PAUSE" },
+    { "type": "Agent", "name": "SecurityDesk" }
+  ]
+}

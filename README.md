@@ -50,7 +50,7 @@ nano intent compile "when is spy earnings" --json
 ```
 
 The package has zero required dependencies and includes the compiler, runtime,
-CLI, 55-strategy conformance library, 40 deterministic indicators, Intent
+CLI, 57-strategy conformance library, 40 deterministic indicators, Intent
 frontend, and project-search fixtures. The core does not fetch market data or take
 actions: hosts supply observations and retain final authority.
 
@@ -195,7 +195,7 @@ The same corpus is browsable at **[aethersystems.net/nano](https://aethersystems
 
 | momentum | mean_reversion | trend | volatility | volume | risk | event_volatility | watchdog |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 6 rules | 7 rules | 8 rules | 4 rules | 4 rules | 7 rules | 11 rules | 8 rules |
+| 6 rules | 7 rules | 8 rules | 4 rules | 4 rules | 7 rules | 11 rules | 10 rules |
 
 That table holds **two corpora**. A **baseline rule** compares a host-supplied named signal with a literal and compiles to byte-stable v0.1.0 IR. A **v1 rule** declares its own `input`s and lets Nano compute the indicators, so the host contract is OHLCV rather than a vocabulary of agreed indicator names. `tests/test_library.py` derives every count above from the directory, so the table cannot go stale silently.
 

@@ -747,6 +747,39 @@ def test_credential_age_alert_observes_rather_than_pausing():
     ]
 
 
+def test_unsigned_artifact_hold_pauses_on_a_single_unsigned_artifact():
+    # Issue #23. The ceiling is one: zero is the only count that ships, and the
+    # rule does not latch - re-verification to zero ends the proposal.
+    graph = _load("watchdog/unsigned_artifact_hold.nano")
+    assert [a.name for a in graph.agents] == ["SecurityDesk"]
+    frame = MarketFrame(
+        timestamps=(0, 60, 120, 180),
+        signals={"UNSIGNED_ARTIFACT_COUNT": (0.0, 1.0, 3.0, 0.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 60),
+        ("PAUSE", 120),
+    ]
+    assert all(i.asset is None for i in result.intents)
+
+
+def test_auth_failure_burst_pauses_at_the_ceiling_not_below_it():
+    # Issue #24. 49 failures in the window is NOT >= 50; 50 is, and so is a
+    # larger burst. The positive control sits beside the no-fire.
+    graph = _load("watchdog/auth_failure_burst.nano")
+    assert [a.name for a in graph.agents] == ["SecurityDesk"]
+    frame = MarketFrame(
+        timestamps=(0, 60, 120, 180),
+        signals={"AUTH_FAILURES_5M": (49.0, 50.0, 400.0, 0.0)},
+    )
+    result = execute(graph, frame)
+    assert [(i.action, i.timestamp) for i in result.intents] == [
+        ("PAUSE", 60),
+        ("PAUSE", 120),
+    ]
+
+
 def test_watchdog_rules_never_propose_a_direction():
     """Every watchdog is a control, so none of them may emit a trade.
 
