@@ -456,6 +456,17 @@ def _print_text_report(
             )
 
 
+def encode_run_log(document: Any) -> bytes:
+    """The exact bytes of `nano replay --report json` (docs/run-log.md §4).
+
+    Two-space indent, keys in the order the emitters built them, non-ASCII
+    escaped, Python's shortest round-trip float repr, and exactly one LF after
+    the closing brace on every platform. Changing any argument here changes
+    the bytes every consumer and golden file was written against.
+    """
+    return (json.dumps(document, indent=2) + "\n").encode("ascii")
+
+
 def command_replay(args: Any, console: Console) -> int:
     """Run a strategy against recorded data and report what it proposed."""
     # `--date` is parsed before anything expensive: a typo should not cost a whole
@@ -544,8 +555,12 @@ def command_replay(args: Any, console: Console) -> int:
         return EXIT_OK
 
     if args.report == "json":
-        console.say(
-            json.dumps(
+        # The run log, schema in docs/run-log.md. Written as bytes through
+        # `emit` for the same reason as the receipt: `say` would turn every LF
+        # into CRLF on Windows, and the document would not be byte-stable
+        # across platforms.
+        console.emit(
+            encode_run_log(
                 {
                     "strategy": module.name,
                     "moduleHash": module.content_hash(),
@@ -556,8 +571,7 @@ def command_replay(args: Any, console: Console) -> int:
                     "warmupDeclared": module.warmup,
                     "replayVerified": bool(args.verify),
                     **result.to_dict(),
-                },
-                indent=2,
+                }
             )
         )
         return EXIT_OK
@@ -809,4 +823,5 @@ __all__ = [
     "command_replay",
     "command_version",
     "command_visualize",
+    "encode_run_log",
 ]
