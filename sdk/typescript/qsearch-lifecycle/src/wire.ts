@@ -146,3 +146,41 @@ export function isRemoteCode(value: unknown): value is RemoteCode {
 export function isRemoteField(value: unknown): value is RemoteField {
   return typeof value === "string" && REMOTE_FIELD_SET.has(value);
 }
+
+/*
+ * Constants of `protocol/qsearch-lifecycle/v2/wire.v2.json` (additive to v1).
+ * `test/drift-v2.test.mjs` asserts they equal the frozen JSON.
+ */
+
+export const CONTRACT_V2_ID = "nano.qsearch.lifecycle-wire.v2";
+
+/** Every operation a v2 client may be granted, sorted as in wire.v2.json. */
+export const CAPABILITIES = Object.freeze(["cancel", "refresh", "replace", "status"] as const);
+export const DEFAULT_CAPABILITIES = Object.freeze(["status"] as const);
+export type Capability = (typeof CAPABILITIES)[number];
+export type ControlAction = Exclude<Capability, "status">;
+
+export const CONTROL_METHOD = "POST";
+export const CONTENT_TYPE_HEADER = "Content-Type";
+export const CONTENT_TYPE_VALUE = "application/json";
+export const MAX_CANONICAL_DEPTH = 64;
+/** Python's default `sys.int_info.default_max_str_digits`: json.loads refuses longer integers. */
+export const MAX_INTEGER_DIGITS = 4_300;
+
+export const CLIENT_ERROR_CODES_V2 = Object.freeze([
+  "CLIENT_CONFIGURATION",
+  "IDENTITY",
+  "INVALID_REQUEST",
+  "INVALID_RESPONSE",
+  "REMOTE_ERROR",
+  "TRANSPORT_UNAVAILABLE",
+  "UNEXPECTED_REDIRECT",
+  "UNSUPPORTED_CAPABILITY",
+] as const);
+export type ClientErrorCodeV2 = (typeof CLIENT_ERROR_CODES_V2)[number];
+
+const CAPABILITY_SET: ReadonlySet<string> = new Set(CAPABILITIES);
+
+export function isCapability(value: unknown): value is Capability {
+  return typeof value === "string" && CAPABILITY_SET.has(value);
+}

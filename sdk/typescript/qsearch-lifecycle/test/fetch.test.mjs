@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { runInNewContext } from "node:vm";
 
-import { StatusClient } from "../dist/index.js";
+import { LifecycleClient, StatusClient } from "../dist/index.js";
 import { OPAQUE_REDIRECT_STATUS, createFetchTransport } from "../dist/fetch.js";
 import { DIGEST, STATUS_URL, bytes, errorShape, fakeTimer, jsonBytes, options, queued, rejection, thrown, tick } from "../test-support/helpers.mjs";
 
@@ -192,4 +192,51 @@ test("chunks from another realm are accepted as bytes", async () => {
   assert.equal(foreign instanceof Uint8Array, false, "really from another realm");
   const transport = createFetchTransport({ fetch: async () => ({ status: 200, body: chunkedBody([foreign]).body }) });
   assert.deepStrictEqual(await transport(request()), { status: 200, body: bytes("{}") });
+});
+
+test("POST (v2 controls): the exact body bytes are sent as a private copy; GET never sends a body", async () => {
+  const seen = [];
+  const transport = createFetchTransport({
+    fetch: async (input, init) => {
+      seen.push({ input, init, body: init.body === undefined ? undefined : Buffer.from(init.body).toString("utf8") });
+      return { status: 200, body: chunkedBody([bytes("{}")]).body };
+    },
+  });
+  const payload = bytes('{"descriptor":{}}');
+  const post = request({
+    method: "POST",
+    url: `${STATUS_URL}/replace`,
+    headers: Object.freeze({ "X-Aether-Qsearch-Auth": "v1 ts=1 nonce=00 mac=00", Accept: "application/json", "Content-Type": "application/json" }),
+    body: payload,
+  });
+  await transport(post);
+  assert.equal(seen[0].init.method, "POST");
+  assert.deepStrictEqual(Object.keys(seen[0].init).sort(), ["body", "cache", "credentials", "headers", "method", "redirect", "referrerPolicy", "signal"]);
+  assert.equal(seen[0].body, '{"descriptor":{}}');
+  assert.notStrictEqual(seen[0].init.body, payload, "a copy, not the caller's array");
+  assert.deepStrictEqual(seen[0].init.headers, { ...post.headers });
+  await transport(request({ method: "POST", url: `${STATUS_URL}/cancel`, body: new Uint8Array(0) }));
+  assert.equal(seen[1].body, "");
+  await transport(request({ body: payload }));
+  assert.equal("body" in seen[2].init, false, "GET ignores any body member");
+  await assert.rejects(transport(request({ method: "POST" })), "a POST without bytes never reaches fetch");
+  await assert.rejects(transport(request({ method: "POST", body: "text" })));
+  assert.equal(seen.length, 3);
+});
+
+test("LifecycleClient over the fetch adapter: cancel sends one POST with an empty body", async () => {
+  const seen = [];
+  const transport = createFetchTransport({
+    fetch: async (input, init) => {
+      seen.push({ input, init });
+      return { status: 200, body: chunkedBody([jsonBytes(queued())]).body };
+    },
+  });
+  const client = new LifecycleClient(options({ transport, capabilities: ["cancel"], setTimer: fakeTimer().setTimer }));
+  await client.cancel(DIGEST);
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].input, `${STATUS_URL}/cancel`);
+  assert.equal(seen[0].init.method, "POST");
+  assert.equal(seen[0].init.body.length, 0);
+  assert.equal(seen[0].init.headers["Content-Type"], "application/json");
 });

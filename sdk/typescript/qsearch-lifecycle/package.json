@@ -1,7 +1,7 @@
 {
   "name": "@nano/qsearch-lifecycle",
   "version": "0.1.0",
-  "description": "Read-only TypeScript status client for the Nano q-search lifecycle wire contract v1.",
+  "description": "TypeScript client for the Nano q-search lifecycle wire contract: v1 read-only status and capability-gated v2 controls.",
   "private": true,
   "license": "MIT",
   "type": "module",

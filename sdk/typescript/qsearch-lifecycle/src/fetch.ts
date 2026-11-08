@@ -11,8 +11,9 @@
  * - The body is streamed and reading stops at `maxResponseBytes + 1`, so an
  *   oversized body is detected without buffering it.
  * - The request's abort signal is passed to fetch and cancels the body read.
+ * - A POST (v2 control) sends a private copy of `request.body`; a GET sends none.
  */
-import { isUint8Array } from "./bytes.js";
+import { copyUint8Array, isUint8Array } from "./bytes.js";
 import { configurationError } from "./errors.js";
 import type { Transport, TransportRequest, TransportResponse } from "./client.js";
 
@@ -27,6 +28,8 @@ export interface FetchInitLike {
   readonly referrerPolicy?: string;
   readonly cache?: string;
   readonly signal?: unknown;
+  /** Present only for POST (the v2 controls): the exact request bytes. */
+  readonly body?: Uint8Array;
 }
 
 export interface FetchBodyReaderLike {
@@ -110,7 +113,7 @@ export function createFetchTransport<Init = FetchInitLike>(options: FetchTranspo
   if (typeof fetchFn !== "function") throw configurationError("transport");
   return async (request: TransportRequest): Promise<TransportResponse> => {
     if (request.signal.aborted) throw new Error("aborted");
-    const init: FetchInitLike = {
+    const common = {
       method: request.method,
       headers: { ...request.headers },
       redirect: "manual",
@@ -118,7 +121,14 @@ export function createFetchTransport<Init = FetchInitLike>(options: FetchTranspo
       referrerPolicy: "no-referrer",
       cache: "no-store",
       signal: request.signal,
-    };
+    } as const;
+    let init: FetchInitLike = common;
+    if (request.method === "POST") {
+      // A POST always carries its exact bytes (empty for refresh/cancel); a GET never has a body.
+      const body = copyUint8Array(request.body);
+      if (body === null) throw new Error("POST without a byte body");
+      init = { ...common, body };
+    }
     const response = await fetchFn.call(undefined, request.url, init as Init);
     if (typeof response !== "object" || response === null) throw new Error("no response");
     if (response.type === "opaqueredirect") {
