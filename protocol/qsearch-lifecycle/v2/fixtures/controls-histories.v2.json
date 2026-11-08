@@ -1,0 +1,406 @@
+{
+ "cases": [
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiBmYWxzZSwgInJlcXVlc3RlZF9hdCI6IG51bGx9LCAiZGVhZGxpbmVzIjogeyJhY2NvdW50aW5nX2F0IjogbnVsbCwgImFjY291bnRpbmdfZXhwaXJlZCI6IGZhbHNlLCAicXVldWVfYXQiOiA0NjAwLjAsICJxdWV1ZV9leHBpcmVkIjogZmFsc2V9LCAiZXhlY3V0aW9uIjogeyJvdXRjb21lIjogIlVOS05PV04iLCAic3RhdHVzIjogIlJVTk5JTkciLCAidGVybWluYWwiOiBmYWxzZX0sICJsaW5lYWdlIjogeyJyZXBsYWNlbWVudF9yZXF1ZXN0X2RpZ2VzdCI6IG51bGwsICJyZXBsYWNlc19yZXF1ZXN0X2RpZ2VzdCI6IG51bGx9LCAibmV4dF9hY3Rpb24iOiAiUE9MTF9TVEFUVVMiLCAicHJvdmlkZXIiOiB7ImpvYl9pZCI6ICJuYW5vMTAxLWpvYi1xMnIiLCAic3RhdHVzIjogIlJVTk5JTkcifSwgInJlcXVlc3QiOiB7InJlcXVlc3RfZGlnZXN0IjogInNoYTI1Njo2ZmRmNjZjNDk5YzYyODY0YTU5MTdmYWI1YjgyZDcwMGE4YjYyYWM3NTZlYWFkM2VmNGFjYTc4ZDRiODhjMzM4IiwgInJlcXVlc3RfaWQiOiAibmFubzEwMS1yZWZyZXNoLXJ1biIsICJ0YXJnZXQiOiAiaWJtX2ZleiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiUlVOTklORyIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiAxMC4wLCAicmVzZXJ2YXRpb25fc3RhdHVzIjogIkhFTEQiLCAic2V0dGxlZF9xdWFudHVtX3NlY29uZHMiOiBudWxsfX0=",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": false,
+     "requested_at": null
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "UNKNOWN",
+     "status": "RUNNING",
+     "terminal": false
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "POLL_STATUS",
+    "provider": {
+     "job_id": "nano101-job-q2r",
+     "status": "RUNNING"
+    },
+    "request": {
+     "request_digest": "sha256:6fdf66c499c62864a5917fab5b82d700a8b62ac756eaad3ef4aca78d4b88c338",
+     "request_id": "nano101-refresh-run",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "RUNNING",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "refresh_queued_to_running",
+   "operation": "refresh",
+   "request_digest": "sha256:6fdf66c499c62864a5917fab5b82d700a8b62ac756eaad3ef4aca78d4b88c338"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiBmYWxzZSwgInJlcXVlc3RlZF9hdCI6IG51bGx9LCAiZGVhZGxpbmVzIjogeyJhY2NvdW50aW5nX2F0IjogbnVsbCwgImFjY291bnRpbmdfZXhwaXJlZCI6IGZhbHNlLCAicXVldWVfYXQiOiA0NjAwLjAsICJxdWV1ZV9leHBpcmVkIjogZmFsc2V9LCAiZXhlY3V0aW9uIjogeyJvdXRjb21lIjogIlVOS05PV04iLCAic3RhdHVzIjogIlFVRVVFRCIsICJ0ZXJtaW5hbCI6IGZhbHNlfSwgImxpbmVhZ2UiOiB7InJlcGxhY2VtZW50X3JlcXVlc3RfZGlnZXN0IjogbnVsbCwgInJlcGxhY2VzX3JlcXVlc3RfZGlnZXN0IjogbnVsbH0sICJuZXh0X2FjdGlvbiI6ICJQT0xMX1NUQVRVUyIsICJwcm92aWRlciI6IHsiam9iX2lkIjogIm5hbm8xMDEtam9iLXRociIsICJzdGF0dXMiOiAiUVVFVUVEIn0sICJyZXF1ZXN0IjogeyJyZXF1ZXN0X2RpZ2VzdCI6ICJzaGEyNTY6YzQ2YmU4M2ZlZDUyNDU0M2EyZDkyNWQ5NjkyNGI5ZjdiYzJiZGFlMThkYTMyYjEzOTdlZjY4YzRiYzUwYTAxZSIsICJyZXF1ZXN0X2lkIjogIm5hbm8xMDEtcmVmcmVzaC10aHJvdHRsZWQiLCAidGFyZ2V0IjogImlibV9mZXoifSwgInNjaGVtYSI6ICJuYW5vLnFzZWFyY2guam9iLXN0YXRlLnYxIiwgInN0YXRlIjogIlFVRVVFRCIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiAxMC4wLCAicmVzZXJ2YXRpb25fc3RhdHVzIjogIkhFTEQiLCAic2V0dGxlZF9xdWFudHVtX3NlY29uZHMiOiBudWxsfX0=",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": false,
+     "requested_at": null
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "UNKNOWN",
+     "status": "QUEUED",
+     "terminal": false
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "POLL_STATUS",
+    "provider": {
+     "job_id": "nano101-job-thr",
+     "status": "QUEUED"
+    },
+    "request": {
+     "request_digest": "sha256:c46be83fed524543a2d925d96924b9f7bc2bdae18da32b1397ef68c4bc50a01e",
+     "request_id": "nano101-refresh-throttled",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "QUEUED",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "refresh_throttled_unchanged",
+   "operation": "refresh",
+   "request_digest": "sha256:c46be83fed524543a2d925d96924b9f7bc2bdae18da32b1397ef68c4bc50a01e"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiTk9UX0FQUExJQ0FCTEUifSwgImNhbmNlbGxhdGlvbiI6IHsiY29uZmlybWVkIjogZmFsc2UsICJjb25maXJtZWRfYXQiOiBudWxsLCAicmVxdWVzdGVkIjogdHJ1ZSwgInJlcXVlc3RlZF9hdCI6IDEwNTAuMH0sICJkZWFkbGluZXMiOiB7ImFjY291bnRpbmdfYXQiOiBudWxsLCAiYWNjb3VudGluZ19leHBpcmVkIjogZmFsc2UsICJxdWV1ZV9hdCI6IDQ2MDAuMCwgInF1ZXVlX2V4cGlyZWQiOiBmYWxzZX0sICJleGVjdXRpb24iOiB7Im91dGNvbWUiOiAiTk9UX1JVTiIsICJzdGF0dXMiOiAiTk9UX1JVTiIsICJ0ZXJtaW5hbCI6IHRydWV9LCAibGluZWFnZSI6IHsicmVwbGFjZW1lbnRfcmVxdWVzdF9kaWdlc3QiOiBudWxsLCAicmVwbGFjZXNfcmVxdWVzdF9kaWdlc3QiOiBudWxsfSwgIm5leHRfYWN0aW9uIjogIk5PTkUiLCAicHJvdmlkZXIiOiB7ImpvYl9pZCI6IG51bGwsICJzdGF0dXMiOiAiVU5LTk9XTiJ9LCAicmVxdWVzdCI6IHsicmVxdWVzdF9kaWdlc3QiOiAic2hhMjU2OjYwYzA3YzUwN2I0MzZhNDRjN2ExZDI5NjlkZjUxZTQzMzFlNzkzZDc1NzgwMjhjMTc1MDc5ZjQ5NzUyNTViZGQiLCAicmVxdWVzdF9pZCI6ICJuYW5vMTAxLWNhbmNlbC11bnN1Ym1pdHRlZCIsICJ0YXJnZXQiOiAiaWJtX2ZleiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiTk9UX1JVTiIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiBudWxsLCAicmVzZXJ2YXRpb25fc3RhdHVzIjogIk5PVF9SRVNFUlZFRCIsICJzZXR0bGVkX3F1YW50dW1fc2Vjb25kcyI6IG51bGx9fQ==",
+   "expected": {
+    "accounting": {
+     "status": "NOT_APPLICABLE"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": true,
+     "requested_at": 1050.0
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "NOT_RUN",
+     "status": "NOT_RUN",
+     "terminal": true
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "NONE",
+    "provider": {
+     "job_id": null,
+     "status": "UNKNOWN"
+    },
+    "request": {
+     "request_digest": "sha256:60c07c507b436a44c7a1d2969df51e4331e793d7578028c175079f4975255bdd",
+     "request_id": "nano101-cancel-unsubmitted",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "NOT_RUN",
+    "usage": {
+     "held_quantum_seconds": null,
+     "reservation_status": "NOT_RESERVED",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "cancel_before_submission",
+   "operation": "cancel",
+   "request_digest": "sha256:60c07c507b436a44c7a1d2969df51e4331e793d7578028c175079f4975255bdd"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiB0cnVlLCAicmVxdWVzdGVkX2F0IjogMTIwMC4wfSwgImRlYWRsaW5lcyI6IHsiYWNjb3VudGluZ19hdCI6IG51bGwsICJhY2NvdW50aW5nX2V4cGlyZWQiOiBmYWxzZSwgInF1ZXVlX2F0IjogNDYwMC4wLCAicXVldWVfZXhwaXJlZCI6IGZhbHNlfSwgImV4ZWN1dGlvbiI6IHsib3V0Y29tZSI6ICJVTktOT1dOIiwgInN0YXR1cyI6ICJSVU5OSU5HIiwgInRlcm1pbmFsIjogZmFsc2V9LCAibGluZWFnZSI6IHsicmVwbGFjZW1lbnRfcmVxdWVzdF9kaWdlc3QiOiBudWxsLCAicmVwbGFjZXNfcmVxdWVzdF9kaWdlc3QiOiBudWxsfSwgIm5leHRfYWN0aW9uIjogIlJFQ09OQ0lMRSIsICJwcm92aWRlciI6IHsiam9iX2lkIjogIm5hbm8xMDEtam9iLWRpc3BhdGNoZWQiLCAic3RhdHVzIjogIlJVTk5JTkcifSwgInJlcXVlc3QiOiB7InJlcXVlc3RfZGlnZXN0IjogInNoYTI1NjozODI3NjhjNjUyNzg1YjNmODI2NDMwYjM0ZmZmMTAzYjA2ZTZlMzliMzQ4MmE1ZjU3YTZlY2E0ZTRkYjAzZTg5IiwgInJlcXVlc3RfaWQiOiAibmFubzEwMS1jYW5jZWwtZGlzcGF0Y2hlZCIsICJ0YXJnZXQiOiAiaWJtX2ZleiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiQ0FOQ0VMTEFUSU9OX1JFUVVFU1RFRCIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiAxMC4wLCAicmVzZXJ2YXRpb25fc3RhdHVzIjogIkhFTEQiLCAic2V0dGxlZF9xdWFudHVtX3NlY29uZHMiOiBudWxsfX0=",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": true,
+     "requested_at": 1200.0
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "UNKNOWN",
+     "status": "RUNNING",
+     "terminal": false
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "RECONCILE",
+    "provider": {
+     "job_id": "nano101-job-dispatched",
+     "status": "RUNNING"
+    },
+    "request": {
+     "request_digest": "sha256:382768c652785b3f826430b34fff103b06e6e39b3482a5f57a6eca4e4db03e89",
+     "request_id": "nano101-cancel-dispatched",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "CANCELLATION_REQUESTED",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "cancel_dispatched_not_terminal",
+   "operation": "cancel",
+   "request_digest": "sha256:382768c652785b3f826430b34fff103b06e6e39b3482a5f57a6eca4e4db03e89"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiB0cnVlLCAiY29uZmlybWVkX2F0IjogMTMwMC4wLCAicmVxdWVzdGVkIjogdHJ1ZSwgInJlcXVlc3RlZF9hdCI6IDEzMDAuMH0sICJkZWFkbGluZXMiOiB7ImFjY291bnRpbmdfYXQiOiAyMjAwLjAsICJhY2NvdW50aW5nX2V4cGlyZWQiOiBmYWxzZSwgInF1ZXVlX2F0IjogNDYwMC4wLCAicXVldWVfZXhwaXJlZCI6IGZhbHNlfSwgImV4ZWN1dGlvbiI6IHsib3V0Y29tZSI6ICJDQU5DRUxMRUQiLCAic3RhdHVzIjogIkNBTkNFTExFRCIsICJ0ZXJtaW5hbCI6IHRydWV9LCAibGluZWFnZSI6IHsicmVwbGFjZW1lbnRfcmVxdWVzdF9kaWdlc3QiOiBudWxsLCAicmVwbGFjZXNfcmVxdWVzdF9kaWdlc3QiOiBudWxsfSwgIm5leHRfYWN0aW9uIjogIlJFQ09OQ0lMRSIsICJwcm92aWRlciI6IHsiam9iX2lkIjogIm5hbm8xMDEtam9iLWNvbmZpcm1lZCIsICJzdGF0dXMiOiAiQ0FOQ0VMTEVEIn0sICJyZXF1ZXN0IjogeyJyZXF1ZXN0X2RpZ2VzdCI6ICJzaGEyNTY6NjZkNTNhZTQzYWJkZjQ0NGM0NzBiYmU2ZGYxOTE3MTFjMzZhYzQwOWRhODIxN2ZhM2I0ZjVmZTIyODc2NDQ5ZSIsICJyZXF1ZXN0X2lkIjogIm5hbm8xMDEtY2FuY2VsLWNvbmZpcm1lZCIsICJ0YXJnZXQiOiAiaWJtX2ZleiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiQUNDT1VOVElOR19QRU5ESU5HIiwgInVzYWdlIjogeyJoZWxkX3F1YW50dW1fc2Vjb25kcyI6IDEwLjAsICJyZXNlcnZhdGlvbl9zdGF0dXMiOiAiSEVMRCIsICJzZXR0bGVkX3F1YW50dW1fc2Vjb25kcyI6IG51bGx9fQ==",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": true,
+     "confirmed_at": 1300.0,
+     "requested": true,
+     "requested_at": 1300.0
+    },
+    "deadlines": {
+     "accounting_at": 2200.0,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "CANCELLED",
+     "status": "CANCELLED",
+     "terminal": true
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "RECONCILE",
+    "provider": {
+     "job_id": "nano101-job-confirmed",
+     "status": "CANCELLED"
+    },
+    "request": {
+     "request_digest": "sha256:66d53ae43abdf444c470bbe6df191711c36ac409da8217fa3b4f5fe22876449e",
+     "request_id": "nano101-cancel-confirmed",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "ACCOUNTING_PENDING",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "cancel_confirmed",
+   "operation": "cancel",
+   "request_digest": "sha256:66d53ae43abdf444c470bbe6df191711c36ac409da8217fa3b4f5fe22876449e"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiB0cnVlLCAicmVxdWVzdGVkX2F0IjogMTQwMC4wfSwgImRlYWRsaW5lcyI6IHsiYWNjb3VudGluZ19hdCI6IDIzMDAuMCwgImFjY291bnRpbmdfZXhwaXJlZCI6IGZhbHNlLCAicXVldWVfYXQiOiA0NjAwLjAsICJxdWV1ZV9leHBpcmVkIjogZmFsc2V9LCAiZXhlY3V0aW9uIjogeyJvdXRjb21lIjogIlNVQ0NFRURFRCIsICJzdGF0dXMiOiAiU1VDQ0VFREVEIiwgInRlcm1pbmFsIjogdHJ1ZX0sICJsaW5lYWdlIjogeyJyZXBsYWNlbWVudF9yZXF1ZXN0X2RpZ2VzdCI6IG51bGwsICJyZXBsYWNlc19yZXF1ZXN0X2RpZ2VzdCI6IG51bGx9LCAibmV4dF9hY3Rpb24iOiAiUkVDT05DSUxFIiwgInByb3ZpZGVyIjogeyJqb2JfaWQiOiAibmFubzEwMS1qb2ItcmFjZWQiLCAic3RhdHVzIjogIkRPTkUifSwgInJlcXVlc3QiOiB7InJlcXVlc3RfZGlnZXN0IjogInNoYTI1NjpmYmVkNTY2ZGRmNzQxZmNkYzFlMjdhN2E1YTg0ZDMyZjBjODgxYmJiNWU5N2E1YzgxYTUwMTZiNmQxNWZjODQxIiwgInJlcXVlc3RfaWQiOiAibmFubzEwMS1jYW5jZWwtcmFjZWQiLCAidGFyZ2V0IjogImlibV9mZXoifSwgInNjaGVtYSI6ICJuYW5vLnFzZWFyY2guam9iLXN0YXRlLnYxIiwgInN0YXRlIjogIkFDQ09VTlRJTkdfUEVORElORyIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiAxMC4wLCAicmVzZXJ2YXRpb25fc3RhdHVzIjogIkhFTEQiLCAic2V0dGxlZF9xdWFudHVtX3NlY29uZHMiOiBudWxsfX0=",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": true,
+     "requested_at": 1400.0
+    },
+    "deadlines": {
+     "accounting_at": 2300.0,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "SUCCEEDED",
+     "status": "SUCCEEDED",
+     "terminal": true
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "RECONCILE",
+    "provider": {
+     "job_id": "nano101-job-raced",
+     "status": "DONE"
+    },
+    "request": {
+     "request_digest": "sha256:fbed566ddf741fcdc1e27a7a5a84d32f0c881bbb5e97a5c81a5016b6d15fc841",
+     "request_id": "nano101-cancel-raced",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "ACCOUNTING_PENDING",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "cancel_raced_by_completion",
+   "operation": "cancel",
+   "request_digest": "sha256:fbed566ddf741fcdc1e27a7a5a84d32f0c881bbb5e97a5c81a5016b6d15fc841"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiU0VUVExFRCJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiB0cnVlLCAicmVxdWVzdGVkX2F0IjogMTUwMC4wfSwgImRlYWRsaW5lcyI6IHsiYWNjb3VudGluZ19hdCI6IG51bGwsICJhY2NvdW50aW5nX2V4cGlyZWQiOiBmYWxzZSwgInF1ZXVlX2F0IjogNDYwMC4wLCAicXVldWVfZXhwaXJlZCI6IGZhbHNlfSwgImV4ZWN1dGlvbiI6IHsib3V0Y29tZSI6ICJTVUNDRUVERUQiLCAic3RhdHVzIjogIlNVQ0NFRURFRCIsICJ0ZXJtaW5hbCI6IHRydWV9LCAibGluZWFnZSI6IHsicmVwbGFjZW1lbnRfcmVxdWVzdF9kaWdlc3QiOiBudWxsLCAicmVwbGFjZXNfcmVxdWVzdF9kaWdlc3QiOiBudWxsfSwgIm5leHRfYWN0aW9uIjogIk5PTkUiLCAicHJvdmlkZXIiOiB7ImpvYl9pZCI6ICJuYW5vMTAxLWpvYi1zZXQiLCAic3RhdHVzIjogIlVOS05PV04ifSwgInJlcXVlc3QiOiB7InJlcXVlc3RfZGlnZXN0IjogInNoYTI1Njo3OTZiNDQ4ZTAzZDRmNWFkNjM1MTY5OGI4NjM2NGI5OTFkMmJlZWEyM2JjMzdkOWVlZmY1YzMyNDQ4NzkyYWEzIiwgInJlcXVlc3RfaWQiOiAibmFubzEwMS1jYW5jZWwtc2V0dGxlZCIsICJ0YXJnZXQiOiAiaWJtX2ZleiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiU0VUVExFRCIsICJ1c2FnZSI6IHsiaGVsZF9xdWFudHVtX3NlY29uZHMiOiAwLjAsICJyZXNlcnZhdGlvbl9zdGF0dXMiOiAiU0VUVExFRCIsICJzZXR0bGVkX3F1YW50dW1fc2Vjb25kcyI6IDIuNX19",
+   "expected": {
+    "accounting": {
+     "status": "SETTLED"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": true,
+     "requested_at": 1500.0
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 4600.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "SUCCEEDED",
+     "status": "SUCCEEDED",
+     "terminal": true
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": null
+    },
+    "next_action": "NONE",
+    "provider": {
+     "job_id": "nano101-job-set",
+     "status": "UNKNOWN"
+    },
+    "request": {
+     "request_digest": "sha256:796b448e03d4f5ad6351698b86364b991d2beea23bc37d9eeff5c32448792aa3",
+     "request_id": "nano101-cancel-settled",
+     "target": "ibm_fez"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "SETTLED",
+    "usage": {
+     "held_quantum_seconds": 0.0,
+     "reservation_status": "SETTLED",
+     "settled_quantum_seconds": 2.5
+    }
+   },
+   "http_status": 200,
+   "name": "cancel_on_settled_is_noop",
+   "operation": "cancel",
+   "request_digest": "sha256:796b448e03d4f5ad6351698b86364b991d2beea23bc37d9eeff5c32448792aa3"
+  },
+  {
+   "body_b64": "eyJhY2NvdW50aW5nIjogeyJzdGF0dXMiOiAiUEVORElORyJ9LCAiY2FuY2VsbGF0aW9uIjogeyJjb25maXJtZWQiOiBmYWxzZSwgImNvbmZpcm1lZF9hdCI6IG51bGwsICJyZXF1ZXN0ZWQiOiBmYWxzZSwgInJlcXVlc3RlZF9hdCI6IG51bGx9LCAiZGVhZGxpbmVzIjogeyJhY2NvdW50aW5nX2F0IjogbnVsbCwgImFjY291bnRpbmdfZXhwaXJlZCI6IGZhbHNlLCAicXVldWVfYXQiOiA1MjAwLjAsICJxdWV1ZV9leHBpcmVkIjogZmFsc2V9LCAiZXhlY3V0aW9uIjogeyJvdXRjb21lIjogIlVOS05PV04iLCAic3RhdHVzIjogIlFVRVVFRCIsICJ0ZXJtaW5hbCI6IGZhbHNlfSwgImxpbmVhZ2UiOiB7InJlcGxhY2VtZW50X3JlcXVlc3RfZGlnZXN0IjogbnVsbCwgInJlcGxhY2VzX3JlcXVlc3RfZGlnZXN0IjogInNoYTI1NjphOThiMTY2N2QyMjVmYmQ4MWI2YWZhYzlhMDI4M2ExZGVlZDI3YmQ0ZTE3NWYwMGQ5ZTExMGYzZTI5NDljZjI5In0sICJuZXh0X2FjdGlvbiI6ICJQT0xMX1NUQVRVUyIsICJwcm92aWRlciI6IHsiam9iX2lkIjogIm5hbm8xMDEtam9iLXN1Y2Nlc3NvciIsICJzdGF0dXMiOiAiUVVFVUVEIn0sICJyZXF1ZXN0IjogeyJyZXF1ZXN0X2RpZ2VzdCI6ICJzaGEyNTY6ZjYzNzc5YzU5NmVkYWJhMzZhMzZmZDQ5MWJhZjZhNDM3ZDEzZDk0MjI3MTk1YWEwMzk2YTk4MzE1MTFmMGVhOSIsICJyZXF1ZXN0X2lkIjogIm5hbm8xMDEtcmVwbGFjZS1zdWNjZXNzb3IiLCAidGFyZ2V0IjogImlibV9raW5nc3RvbiJ9LCAic2NoZW1hIjogIm5hbm8ucXNlYXJjaC5qb2Itc3RhdGUudjEiLCAic3RhdGUiOiAiUVVFVUVEIiwgInVzYWdlIjogeyJoZWxkX3F1YW50dW1fc2Vjb25kcyI6IDEwLjAsICJyZXNlcnZhdGlvbl9zdGF0dXMiOiAiSEVMRCIsICJzZXR0bGVkX3F1YW50dW1fc2Vjb25kcyI6IG51bGx9fQ==",
+   "expected": {
+    "accounting": {
+     "status": "PENDING"
+    },
+    "cancellation": {
+     "confirmed": false,
+     "confirmed_at": null,
+     "requested": false,
+     "requested_at": null
+    },
+    "deadlines": {
+     "accounting_at": null,
+     "accounting_expired": false,
+     "queue_at": 5200.0,
+     "queue_expired": false
+    },
+    "execution": {
+     "outcome": "UNKNOWN",
+     "status": "QUEUED",
+     "terminal": false
+    },
+    "lineage": {
+     "replacement_request_digest": null,
+     "replaces_request_digest": "sha256:a98b1667d225fbd81b6afac9a0283a1deed27bd4e175f00d9e110f3e2949cf29"
+    },
+    "next_action": "POLL_STATUS",
+    "provider": {
+     "job_id": "nano101-job-successor",
+     "status": "QUEUED"
+    },
+    "request": {
+     "request_digest": "sha256:f63779c596edaba36a36fd491baf6a437d13d94227195aa0396a9831511f0ea9",
+     "request_id": "nano101-replace-successor",
+     "target": "ibm_kingston"
+    },
+    "schema": "nano.qsearch.job-state.v1",
+    "state": "QUEUED",
+    "usage": {
+     "held_quantum_seconds": 10.0,
+     "reservation_status": "HELD",
+     "settled_quantum_seconds": null
+    }
+   },
+   "http_status": 200,
+   "name": "replace_after_settled",
+   "operation": "replace",
+   "replacement_b64": "ewogICJzY2hlbWEiOiAicHJlZGF0b3IucXNlYXJjaC5yZXF1ZXN0LnYyIiwKICAiZGVzY3JpcHRvciI6IHsKICAgICJzY2hlbWEiOiAicHJlZGF0b3IucXNlYXJjaC5yZXF1ZXN0LnYyIiwKICAgICJyZXF1ZXN0X2lkIjogIm5hbm8xMDEtcmVwbGFjZS1zdWNjZXNzb3IiLAogICAgInRhcmdldCI6ICJpYm1fa2luZ3N0b24iLAogICAgInB1cnBvc2UiOiAicWNvbW1zIiwKICAgICJtYXhfZXhlY3V0aW9uX3RpbWUiOiA1LAogICAgIm1hbmlmZXN0X2RpZ2VzdCI6ICJzaGEyNTY6MTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMSIsCiAgICAiYmF0Y2hfaW5kZXgiOiAwLAogICAgImJhdGNoX2RpZ2VzdCI6ICJzaGEyNTY6MjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMiIsCiAgICAiYmxvY2tzIjogWwogICAgICB7CiAgICAgICAgInB1Yl9pbmRleCI6IDAsCiAgICAgICAgImpvYl9kaWdlc3QiOiAic2hhMjU2OjExYjJiZmE5ODk5ZGNmYTc2Yzg4MDdlZDI3MTY5ZGEwNDJhZWVlMTFjNmQ0ODA2NzBjMjRhZGQwYzM0NzdkMzIiLAogICAgICAgICJyZWNpcGllbnRzIjogWwogICAgICAgICAgewogICAgICAgICAgICAiYWdlbnRfaWQiOiAiYWdlbnQtMDA3IiwKICAgICAgICAgICAgImNodW5rIjogMCwKICAgICAgICAgICAgInNsb3QiOiAwCiAgICAgICAgICB9CiAgICAgICAgXSwKICAgICAgICAibiI6IDQsCiAgICAgICAgInNob3RzIjogOCwKICAgICAgICAic2VlZCI6IDcsCiAgICAgICAgImNsYXNzaWNhbF9taW5fZW5lcmd5IjogLTEuNgogICAgICB9CiAgICBdCiAgfSwKICAiam9icyI6IFsKICAgIHsKICAgICAgInNjaGVtYSI6ICJwcmVkYXRvci5xc2VhcmNoLmpvYi52MSIsCiAgICAgICJjb21waWxlZF9zZWFyY2hfZGlnZXN0IjogInNoYTI1NjphOGYwNmNiYTNlZDAyMmRkMmZkNGVmYzEwODU1MTA1MDI1MTcxNTIwNjc2NTNiNDE3ZmNmNWJkNTBiMWJjMjZkIiwKICAgICAgInZhcmlhYmxlcyI6IFsKICAgICAgICAiYzAiLAogICAgICAgICJjMSIsCiAgICAgICAgImMyIiwKICAgICAgICAiYzMiCiAgICAgIF0sCiAgICAgICJxdWJvIjogewogICAgICAgICJxIjogWwogICAgICAgICAgWwogICAgICAgICAgICAtMS4wLAogICAgICAgICAgICAwLjQ1LAogICAgICAgICAgICAwLjM1LAogICAgICAgICAgICAwLjAKICAgICAgICAgIF0sCiAgICAgICAgICBbCiAgICAgICAgICAgIDAuNDUsCiAgICAgICAgICAgIC0wLjgsCiAgICAgICAgICAgIDAuMjUsCiAgICAgICAgICAgIDAuMAogICAgICAgICAgXSwKICAgICAgICAgIFsKICAgICAgICAgICAgMC4zNSwKICAgICAgICAgICAgMC4yNSwKICAgICAgICAgICAgLTAuNiwKICAgICAgICAgICAgLTAuMTUKICAgICAgICAgIF0sCiAgICAgICAgICBbCiAgICAgICAgICAgIDAuMCwKICAgICAgICAgICAgMC4wLAogICAgICAgICAgICAtMC4xNSwKICAgICAgICAgICAgLTAuNAogICAgICAgICAgXQogICAgICAgIF0sCiAgICAgICAgIm9mZnNldCI6IDAuMCwKICAgICAgICAiY29udmVudGlvbiI6ICJzeW1tZXRyaWNfaGFsZiIKICAgICAgfSwKICAgICAgImNvbXBpbGUiOiB7CiAgICAgICAgInZhcmlhbnQiOiAiYXV0byIsCiAgICAgICAgInAiOiAxLAogICAgICAgICJnYW1tYXMiOiBbCiAgICAgICAgICAwLjQKICAgICAgICBdLAogICAgICAgICJiZXRhcyI6IFsKICAgICAgICAgIDAuNAogICAgICAgIF0sCiAgICAgICAgIm9wdF9sZXZlbCI6IDMsCiAgICAgICAgInNlZWQiOiAxMSwKICAgICAgICAidGFyZ2V0IjogImlibV9raW5nc3RvbiIsCiAgICAgICAgInRyYWluaW5nIjogIm5vbmUiCiAgICAgIH0sCiAgICAgICJiYWNrZW5kIjogewogICAgICAgICJraW5kIjogImlibSIsCiAgICAgICAgImNoaV9tYXgiOiA2NCwKICAgICAgICAic2hvdHMiOiA4LAogICAgICAgICJzZWVkIjogNwogICAgICB9LAogICAgICAibGltaXRzIjogewogICAgICAgICJtYXhfdmFyaWFibGVzIjogNDAsCiAgICAgICAgIm1heF93YWxsX3MiOiAxMjAsCiAgICAgICAgIm1heF9xcHVfcyI6IDUKICAgICAgfSwKICAgICAgImF1ZGl0IjogewogICAgICAgICJjbGFzc2ljYWxfbWluX2VuZXJneSI6IC0xLjYKICAgICAgfSwKICAgICAgImpvYl9kaWdlc3QiOiAic2hhMjU2OjExYjJiZmE5ODk5ZGNmYTc2Yzg4MDdlZDI3MTY5ZGEwNDJhZWVlMTFjNmQ0ODA2NzBjMjRhZGQwYzM0NzdkMzIiCiAgICB9CiAgXQp9Cg==",
+   "request_digest": "sha256:a98b1667d225fbd81b6afac9a0283a1deed27bd4e175f00d9e110f3e2949cf29"
+  }
+ ],
+ "contract": "nano.qsearch.lifecycle-wire.v2"
+}
