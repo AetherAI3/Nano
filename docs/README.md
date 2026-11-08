@@ -13,6 +13,9 @@ For questions about what Nano does today, start with the reference documents bel
 | [Watchdog profile](watchdog_profile.md) | The restricted subset for host-governed controls: signal contracts, missing-input semantics, artifacts, receipts, and replay. |
 | [Status](status.md) | Implemented, experimental, optional, and unimplemented capabilities. |
 | [Package CLI](package-cli.md) | `nano package check` and `nano package build`: explicit `--manifest`/`--lock` arguments, exit codes, canonical JSON framing, positioned diagnostics, and output safety for RFC 0066 packages. |
+| [Immutable records](rfc-0085-immutable-records.md) | Package-only typed records, executable IR 1.1.0, strict host-input validation and fixed ceilings. |
+| [Native quantum bridge](quantum-native-bridge.md) | Opt-in, local-only prepare/sample path: pinned-Qiskit prepared artifact, `/qsearch/native/v1` routes, caller-retained verification. |
+| [Proposal benchmark](proposal-benchmark.md) | Frozen offline proposal-and-repair benchmark: dataset, metrics, locked split and replay command. |
 | [Run receipts](receipts.md) | The versioned run artifact: canonical bytes, executable identity, and what external consumers may depend on. |
 | [Q-search service](qsearch-service.md) | `nano-qsearch-serve`, the host-side `nano_qsearch` package (beside `nano/`, not part of the deterministic engine) that serves sealed q-search receipts to Predator Drive: configuration, auth, caps, recovery. |
 | [Strategy corpus](../nano/library/README.md) | Conventions for paired `.nano` and IR examples. |

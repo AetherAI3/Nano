@@ -185,7 +185,12 @@ typed scalar fields in this milestone. `execute()` proposes an EXECUTE intent;
 it does not actuate anything. The host still owns DecisionGate authorization,
 model execution, evidence authenticity, reservations and device execution.
 
-## Proposed next data-type subset (not shipped)
+## Proposed next data-type subset
+
+> **Update:** the records-only part of this section is now specified and
+> implemented by [RFC 0085](rfc-0085-immutable-records.md) (package-only
+> immutable records, executable IR 1.1.0). Enums, results and matching below
+> remain proposed and are not accepted.
 
 After scalar helpers prove useful, add reusable immutable records first:
 
@@ -241,8 +246,12 @@ CLI orchestration: `nano package check|build|test` is implemented as
 specified in [package-cli.md](package-cli.md); `nano init` and `fmt` remain
 deferred.
 
-Deferred: registry/network resolution, portable host
-clients, records/enums/results execution, and task-graph/fanout syntax. Future
+A read-only portable status client is specified by the
+[q-search lifecycle wire contract](../protocol/qsearch-lifecycle/v1/CONTRACT.md)
+and records by [RFC 0085](rfc-0085-immutable-records.md).
+
+Deferred: registry/network resolution, portable write clients
+(cancel/replace), enums/results execution, and task-graph/fanout syntax. Future
 fanout must compute per-child and shared-pool limits before host execution and
 reuse Predator qualification/reservation rules. This is not an unbounded agent
 runtime. No paid inference, simulator dependency or hardware is needed to test
