@@ -1,0 +1,85 @@
+{
+  "auth_header": "X-Aether-Qsearch-Auth",
+  "capabilities": [
+    "cancel",
+    "refresh",
+    "replace",
+    "status"
+  ],
+  "client_error_codes": [
+    "CLIENT_CONFIGURATION",
+    "IDENTITY",
+    "INVALID_REQUEST",
+    "INVALID_RESPONSE",
+    "REMOTE_ERROR",
+    "TRANSPORT_UNAVAILABLE",
+    "UNEXPECTED_REDIRECT",
+    "UNSUPPORTED_CAPABILITY"
+  ],
+  "contract": "nano.qsearch.lifecycle-wire.v2",
+  "default_capabilities": [
+    "status"
+  ],
+  "empty_body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "extends": "nano.qsearch.lifecycle-wire.v1",
+  "job_state_schema": "nano.qsearch.job-state.v1",
+  "local_refusals": {
+    "capability": {
+      "code": "UNSUPPORTED_CAPABILITY",
+      "field": "operation"
+    },
+    "replacement": {
+      "code": "INVALID_REQUEST",
+      "field": "replacement"
+    }
+  },
+  "max_canonical_depth": 64,
+  "operations": {
+    "cancel": {
+      "body": "empty",
+      "method": "POST",
+      "path_template": "/qsearch/v2/requests/{request_digest}/cancel",
+      "response_digest": "request_digest"
+    },
+    "refresh": {
+      "body": "empty",
+      "method": "POST",
+      "path_template": "/qsearch/v2/requests/{request_digest}/refresh",
+      "response_digest": "request_digest"
+    },
+    "replace": {
+      "body": "canonical_json(replacement)",
+      "lineage_replaces_request_digest": "request_digest",
+      "method": "POST",
+      "path_template": "/qsearch/v2/requests/{request_digest}/replace",
+      "response_digest": "sha256(canonical_json(replacement.descriptor))"
+    },
+    "status": {
+      "body": "empty",
+      "method": "GET",
+      "path_template": "/qsearch/v2/requests/{request_digest}",
+      "response_digest": "request_digest"
+    }
+  },
+  "request_headers": {
+    "GET": {
+      "Accept": "application/json"
+    },
+    "POST": {
+      "Accept": "application/json",
+      "Content-Type": "application/json"
+    }
+  },
+  "transport_failure": {
+    "GET": {
+      "code": "TRANSPORT_UNAVAILABLE",
+      "next_action": "POLL_STATUS",
+      "retryable": true
+    },
+    "POST": {
+      "code": "TRANSPORT_UNAVAILABLE",
+      "next_action": "MANUAL_RECONCILIATION",
+      "retryable": true
+    }
+  }
+}
