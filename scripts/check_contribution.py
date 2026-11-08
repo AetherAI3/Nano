@@ -102,6 +102,32 @@ def catalog_problem(diagnostic: CatalogDiagnostic) -> str:
     return f"{location}: {diagnostic.message}"
 
 
+def library_slugs() -> frozenset[str]:
+    """Every entry slug, by file stem. Entries name neighbours by bare slug."""
+    return frozenset(path.stem for path in LIBRARY.glob("**/*.nano"))
+
+
+def neighbour_problems(rel: str, nearest_confused: Iterable[Any]) -> list[str]:
+    """`NOT <slug>:` must name an entry that exists somewhere in the library.
+
+    The catalog parser already requires the line and rejects self-reference and
+    duplicates; it deliberately tolerates an unresolved slug (``"id": null``)
+    because the catalog is a hosted artifact, not contribution policy. A
+    neighbour that does not exist cannot be the rule a reader confuses this one
+    with, so the contribution check refuses it. Any category is allowed: the
+    most useful contrast is sometimes across categories.
+    """
+    known = library_slugs()
+    return [
+        f"{rel}: `NOT {item.slug}:` names no library entry — there is no "
+        f"`{item.slug}.nano` anywhere under nano/library/. Name the existing rule "
+        "this one is most likely to be confused with, or update the slug if that "
+        "rule was renamed (see the comment header in nano/library/README.md)."
+        for item in nearest_confused
+        if item.slug not in known
+    ]
+
+
 def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
     rel = nano_path.relative_to(ROOT).as_posix()
 
@@ -135,7 +161,7 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
     # optional SOURCE validation delegates to contribution.py, preserving the
     # exact provenance policy landed in #30.
     try:
-        parse_strategy_metadata(
+        metadata = parse_strategy_metadata(
             source,
             document,
             category=nano_path.parent.name,
@@ -144,6 +170,8 @@ def check_entry(nano_path: Path, write: bool, problems: list[str]) -> None:
         )
     except CatalogValidationError as error:
         problems.extend(catalog_problem(item) for item in error.diagnostics)
+    else:
+        problems.extend(neighbour_problems(rel, metadata.nearest_confused))
 
     if document.get("effects") != ALLOWED_EFFECTS:
         problems.append(

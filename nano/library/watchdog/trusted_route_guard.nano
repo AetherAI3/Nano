@@ -9,8 +9,8 @@
 // latch, and it does not decide when the pause ends - the host does.
 // SHAPE: 1m; fast enough to notice a real outage, slow enough that a transient
 // blip has already been smoothed away by the host's own measurement window.
-// NOT endpoint_posture_ceiling: that counts how many endpoints are out of
-// policy while the system still works. This one says the path itself is gone.
+// NOT credential_age_alert: that warns ahead of a breakage and proposes
+// review while the system still works. This one says the path itself is gone.
 // CALIBRATED ON: nothing numeric to calibrate - the threshold is the host's
 // own binary. What does not travel is the definition of "trusted", which is
 // site-specific and belongs to whoever operates the network.
