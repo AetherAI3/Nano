@@ -1,9 +1,17 @@
-# @nano/qsearch-lifecycle (TypeScript, read-only)
+# @nano/qsearch-lifecycle (TypeScript)
 
-A small, **read-only** status client for the Nano q-search lifecycle wire
-contract `nano.qsearch.lifecycle-wire.v1`
-([`protocol/qsearch-lifecycle/v1/CONTRACT.md`](../../../protocol/qsearch-lifecycle/v1/CONTRACT.md)).
-It reads job state; it cannot cancel, refresh, replace or submit anything.
+Small clients for the Nano q-search lifecycle wire contracts:
+
+- `StatusClient`: the **read-only** status client for
+  `nano.qsearch.lifecycle-wire.v1`
+  ([`v1/CONTRACT.md`](../../../protocol/qsearch-lifecycle/v1/CONTRACT.md)).
+  Unchanged; it cannot cancel, refresh, replace or submit anything.
+- `LifecycleClient`: the additive `nano.qsearch.lifecycle-wire.v2`
+  ([`v2/CONTRACT.md`](../../../protocol/qsearch-lifecycle/v2/CONTRACT.md))
+  client: status plus the explicit host controls `refresh`, `cancel` and
+  `replace`, each available only when the caller grants it (default: status
+  only). See "v2 controls" below.
+
 The Python service and `nano_qsearch.client.LifecycleClient` stay
 authoritative. This package is `"private": true` and is not published.
 
@@ -20,12 +28,12 @@ authoritative. This package is `"private": true` and is not published.
 
 | Entry point | Contents |
 | --- | --- |
-| `@nano/qsearch-lifecycle` | `StatusClient`, `LifecycleClientError`, `parseStrictJson`, `validateJobState`, `JOB_STATE_SPEC`, wire constants, types (`JobStateV1`, `Transport`, `Signer`, ...) |
-| `@nano/qsearch-lifecycle/webcrypto` | `createHmacSha256Signer(key)`, `createRandomNonce()` |
-| `@nano/qsearch-lifecycle/fetch` | `createFetchTransport({ fetch })` |
+| `@nano/qsearch-lifecycle` | `StatusClient`, `LifecycleClient`, `LifecycleClientError`, `canonicalJson`, `parseStrictJson`, `validateJobState`, `JOB_STATE_SPEC`, wire constants (v1 and v2), types (`JobStateV1`, `Transport`, `Signer`, `Sha256`, ...) |
+| `@nano/qsearch-lifecycle/webcrypto` | `createHmacSha256Signer(key)`, `createRandomNonce()`, `createSha256()` |
+| `@nano/qsearch-lifecycle/fetch` | `createFetchTransport({ fetch })` (sends the body for POST) |
 
 ```
-src/        TypeScript sources (client, errors, json, validate, types, wire, webcrypto, fetch)
+src/        TypeScript sources (client, canonical, errors, json, validate, types, wire, webcrypto, fetch)
 dist/       tsc output (.js + .d.ts), gitignored, built by `npm run build`
 test/       node:test suites on plain .mjs importing ../dist/
 examples/   offline-status.mjs (fake transport, synthetic key, no network)
@@ -81,9 +89,93 @@ complete runnable example with a fake transport.
   `signal` is aborted. Late results are ignored.
 - Errors expose only `code`, `field`, `retryable`, `nextAction`, `httpStatus`;
   the message is always `q-search lifecycle failed (<code>)`.
-- `supports(op)` is true only for `"status"`; `requireCapability(op)` throws
-  `UNSUPPORTED_CAPABILITY` (field `"operation"`) for cancel/refresh/replace and
-  native #61 operations. No write method exists.
+- `StatusClient.supports(op)` is true only for `"status"`; `requireCapability(op)`
+  throws `UNSUPPORTED_CAPABILITY` (field `"operation"`) for cancel/refresh/replace
+  and native #61 operations. `StatusClient` has no write method.
+
+## v2 controls (`LifecycleClient`)
+
+```js
+import { LifecycleClient } from "@nano/qsearch-lifecycle";
+import { createHmacSha256Signer, createRandomNonce, createSha256 } from "@nano/qsearch-lifecycle/webcrypto";
+
+const client = new LifecycleClient({
+  baseUrl, transport, signer: createHmacSha256Signer(requestKeyBytes), clock, nonce: createRandomNonce,
+  capabilities: ["status", "cancel", "replace"], // default ["status"]
+  sha256: createSha256(),                        // required when "replace" is granted
+});
+
+const afterCancel = await client.cancel(digest);            // the server's state AFTER the request
+const replacement = await client.replace(digest, jsonText); // JSON text or UTF-8 bytes
+```
+
+**Capabilities.** The caller picks the set from exactly `status`, `refresh`,
+`cancel`, `replace`; anything else (or a non-array) is `CLIENT_CONFIGURATION`
+(field `capabilities`). `supports(op)` is true only for a granted operation.
+Calling an operation that was not granted (or `requireCapability` with any
+other name, including native #61 operations) is `UNSUPPORTED_CAPABILITY`
+(field `operation`) with **zero** transport calls, checked before anything
+else. Granting a capability grants no host, provider, ATLAS, reservation or
+budget authority; every authority check stays server-side. `StatusClient`
+still refuses every control.
+
+**Requests.** One control is exactly one
+`POST <origin>/qsearch/v2/requests/<digest>/<refresh|cancel|replace>` with
+exactly three headers: `X-Aether-Qsearch-Auth`, `Accept: application/json`,
+`Content-Type: application/json`. `refresh` and `cancel` send an empty body
+(the MAC uses the empty-body SHA-256 constant). `replace` sends the canonical
+replacement bytes and the MAC covers their SHA-256, computed by the injected
+`sha256` capability (32 bytes; anything else, or a hash still pending at the
+deadline, is `CLIENT_CONFIGURATION` field `sha256` with zero transport calls).
+Every `TransportRequest` from `LifecycleClient` carries `body: Uint8Array` (a
+private copy; empty for GET/refresh/cancel); `StatusClient` keeps its frozen
+v1 request shape without a `body` member.
+
+**Responses.** v1 rules unchanged (status code, redirect, 1 MiB cap, strict
+JSON, error mapping, full closed-envelope validation of every 2xx). Binding:
+`refresh`/`cancel` must return `request.request_digest` equal to the requested
+digest; `replace` must return the **new** request, whose digest is
+`"sha256:" + hex(sha256(canonical(replacement.descriptor)))`, and
+`lineage.replaces_request_digest` must equal the original digest. Anything else
+is `INVALID_RESPONSE` (`MANUAL_RECONCILIATION`, field `null` like Python).
+
+**A cancel response is not cancellation.** The client returns the server's
+envelope as is and never interprets it: only `execution.status: CANCELLED`
+(with `cancellation.confirmed: true`) is cancellation. `CANCELLATION_REQUESTED`,
+a `RUNNING`/`DONE` provider status, or an unchanged state (refresh may be
+throttled) are reported exactly as received. No status read, retry, refresh,
+cancel, replace or resubmission ever follows automatically.
+
+**Lost acknowledgement.** A transport failure or client timeout on a control is
+`TRANSPORT_UNAVAILABLE`, `retryable: true`, `nextAction: "MANUAL_RECONCILIATION"`:
+the request may or may not have taken effect, so observe (`status`) before
+deciding anything. It never yields or implies a state. (A failed GET keeps
+`POLL_STATUS`.) A caller-initiated retry uses a fresh nonce.
+
+### Canonicalisation boundary
+
+`replace` accepts the replacement as **JSON text or UTF-8 bytes**, never as a
+JS object, because a parsed object has already lost what Python's
+`canonical_json(json.loads(text))` depends on (integer versus float lexemes,
+big integers, duplicate members). `canonicalJson(input)` (also used by
+`replace`) reproduces those bytes exactly (CONTRACT v2 section 2.1):
+
+- members sorted by Unicode code point (not UTF-16 code units), no whitespace;
+- strings raw UTF-8; escaped are `"`, `\`, the short forms `\b \f \n \r \t`,
+  and other U+0000..U+001F as lowercase `\u00xx`;
+- a number's kind follows its lexeme: no `.`/`e`/`E` is an integer written
+  exactly (`BigInt`; `-0` becomes `0`); otherwise the nearest double written as
+  Python `repr(float)` (`1.0`, `-0.0`, `1e+16`, `1.5e-05`, `5e-324`);
+- refused as `INVALID_REQUEST` (field `replacement`, zero transport calls):
+  invalid UTF-8, a BOM, non-RFC 8259 text, duplicate member names (after
+  escape decoding), nesting deeper than 64, lone surrogates (escaped or raw),
+  a float that overflows to infinity, an integer of more than 4300 digits
+  (Python's default `int_max_str_digits`, which makes `json.loads` refuse it),
+  and a replacement that is not an object with an object `descriptor`.
+
+Validating the replacement against `predator.qsearch.request.v2`, and refusing
+a reused identity or target, are server decisions; the client does not
+pre-empt them.
 
 ## Number and byte handling
 
@@ -119,8 +211,10 @@ shape. `createHmacSha256Signer` copies the key into a non-extractable
 - read environment variables, files, cookies or browser storage;
 - discover services, follow redirects or contact any origin but the base URL
   (the fetch adapter also sends no cookies or Referer and bypasses HTTP caches);
-- retry, poll, cancel, refresh, replace or resubmit (errors, timeouts and
-  `next_action` are information for the caller, not actions);
+- retry, poll, cancel, refresh, replace or resubmit on its own (errors,
+  timeouts and `next_action` are information for the caller, not actions; a
+  `LifecycleClient` control is sent only by the explicit, granted call);
+- interpret a control's response (a cancel response is not cancellation);
 - recompute lifecycle deadlines from its own clock (the request timeout is a
   client-side bound on one exchange, independent of envelope deadlines);
 - log, emit telemetry, or put URLs, keys, headers, nonces, bodies or
@@ -135,6 +229,10 @@ npm run pack:check     # npm pack -> install into a temp dir outside the repo ->
 ```
 
 `test/goldens.test.mjs` replays Python-derived vectors from
-`protocol/qsearch-lifecycle/v1/fixtures/`; it **fails** (never skips) when
-that directory is missing. `test/drift.test.mjs` fails if the embedded
-constants or the validator drift from the frozen contract files.
+`protocol/qsearch-lifecycle/v1/fixtures/`, and `test/goldens-v2.test.mjs` those
+from `protocol/qsearch-lifecycle/v2/fixtures/`; each **fails** (never skips)
+when its directory is missing. `test/drift.test.mjs` and
+`test/drift-v2.test.mjs` fail if the embedded constants or the validator drift
+from the frozen contract files. `test/canonical.test.mjs` checks the
+canonicaliser against `test-support/canonical-devset.json`, derived from the
+Python reference by `test-support/derive-canonical-devset.py`.

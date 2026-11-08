@@ -124,3 +124,92 @@ With those temporary Python-derived fixtures present, the whole suite
 ## Current totals (`npm test`, fixtures present)
 
 81 tests: 81 pass, 0 fail, 0 skipped, 0 cancelled.
+
+# v2 controls (Nano #101, PR2)
+
+Budget: at most 3 candidate iterations against the dev set, same rules (never
+weaken validation, delete a negative test, or relabel a skip as a pass).
+
+Dev set: `test-support/canonical-devset.json`, 19 accepted vectors and 40
+refusals, derived from the real Python reference
+(`nano_qsearch.canonical.canonical_json(json.loads(text))`, Python 3.13.5) by
+`test-support/derive-canonical-devset.py`: key order by code point (BMP above
+U+FF00 against astral, escaped and raw), every control character, the short
+escapes, raw U+2028/U+2029/U+FEFF/DEL, escaped surrogate pairs, an escaped
+`descriptor` key, integers up to 4300 digits, `-0`, floats in both repr
+notations, underflow, depth exactly 64; refusals for duplicates (also after
+escape decoding), depth 65, lone surrogates, NaN/Infinity, overflow, 4301-digit
+integers, RFC 8259 violations, BOM, invalid/overlong UTF-8, UTF-16, and every
+wrong replacement shape. Plus the fake-transport client suite
+(`test/lifecycle.test.mjs`) and the property tests in `test/canonical.test.mjs`.
+
+Environment for every run: Node v24.18.0, npm 11.16.0, typescript 5.8.3,
+Windows 10 Home 10.0.19045 (Git Bash), base `5ec301d` (contract v2 freeze).
+Node v22.19.0 used as a second runtime where stated.
+
+## Candidate 1: initial implementation
+
+- Hypothesis: a separate lexeme-preserving strict parser that canonicalises
+  each number at parse time (BigInt for integer lexemes; `toExponential()`
+  shortest digits re-laid out as Python `repr` for float lexemes), a
+  code-point comparator for member order, and a `ensure_ascii=False` string
+  encoder reproduce Python byte for byte; the transport/timer/signing engine of
+  `StatusClient` can be shared unchanged by a capability-gated
+  `LifecycleClient` if hashing runs as one more phase inside the same deadline.
+- Diff: new `src/canonical.ts`; `src/client.ts` extracts the engine into an
+  internal `Core` (v1 framing keeps the frozen request shape, v2 framing adds
+  `body`), `StatusClient` becomes a thin wrapper, new `LifecycleClient`;
+  `src/errors.ts` (`transportUnavailable(method)`, `unsupportedCapability`,
+  `invalidRequest`); `src/wire.ts` v2 constants; `src/webcrypto.ts`
+  `createSha256`; `src/fetch.ts` sends the POST body; `src/index.ts` exports.
+- Commands and results:
+  - `node --test` (existing 81 tests, before any new test): 81 pass, 0 fail.
+  - `node --test test/canonical.test.mjs`: dev set 2/2 pass on the first run
+    (all 19 vectors byte-equal, all 40 refusals INVALID_REQUEST). The property
+    test failed twice, both on the oracle side, never on the canonicaliser:
+    1. int-only #3, "same value" check: the test compared `JSON.parse` of the
+       canonical output with `JSON.parse` of the input using deepStrictEqual,
+       which tells `-0` from `0`; canonical `-0` is `0` by contract. Fixed the
+       test's comparison (normalise `-0` on both sides); no implementation
+       change, no assertion removed.
+    2. int-only #12: `canonical(text)` and `canonical(JSON.stringify(JSON.parse(text)))`
+       differed in one key. Delta-debugging showed `JSON.parse` itself is
+       wrong: on Node 24.18.0, once an object with keys `""` and an escaped
+       backslash (U+005C) has been parsed, parsing `{"":0,"<escaped U+000D>":1}`
+       returns the key U+005C instead of U+000D (a V8 map-transition reuse
+       bug; Node 22.19.0 returns U+000D). Python's canonical bytes for the
+       minimal case equal the TS output. Diagnosis: the oracle is broken, the
+       canonicaliser is right.
+  - `node --test test/lifecycle.test.mjs test/drift-v2.test.mjs test/fetch.test.mjs`:
+    36 pass, 0 fail on the first run.
+- Regression delta: v1 suite 81/81 before and after (no existing test edited).
+
+## Candidate 2: property-test oracle hardening (test-only)
+
+- Hypothesis: keeping the property while avoiding the Node 24 `JSON.parse`
+  defect needs only a narrower key alphabet on the oracle side, plus a pinned
+  test proving the canonicaliser handles the exact defect sequence.
+- Diff (tests only): generated object keys never contain U+005C (it maps to
+  `/`); string values still do, and the dev set still covers backslash keys.
+  Added "escaped single-character keys decode exactly, whatever was parsed
+  before", which runs the defect sequence through `canonicalJson` and pins
+  the Python bytes.
+- Command: `node --test test/canonical.test.mjs`: 8 pass, 0 fail.
+- Regression delta: +1 test, 0 regressions; no implementation change.
+
+## Golden runner self-check (no implementation change)
+
+I generated temporary fixtures in the exact v2 interface format with the real
+Python `nano_qsearch.client.LifecycleClient` (injected transport) plus
+`auth._message`, from a scratch script outside the repo, covering the
+canonical dev set, a signing vector per operation, three histories, two
+remote errors and three binding negatives. Results with them present:
+`node --test test/goldens-v2.test.mjs` 6 pass, 0 fail; the whole suite 120
+pass, 0 fail, 0 skipped on Node 24.18.0 and on Node 22.19.0. I then deleted
+the fixtures (not committed). Without fixtures, the 6 v2 golden tests fail
+with "v2 golden fixture directory missing"; nothing is skipped.
+
+## Current totals (`npm test`, no v2 fixtures yet)
+
+120 tests: 114 pass, 6 fail (exactly the v2 golden tests, fixtures missing),
+0 skipped, 0 cancelled. `npm run pack:check`: ok.

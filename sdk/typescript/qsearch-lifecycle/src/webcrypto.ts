@@ -8,7 +8,7 @@
  */
 import { copyUint8Array, lowerHex } from "./bytes.js";
 import { configurationError } from "./errors.js";
-import type { Signer } from "./client.js";
+import type { Sha256, Signer } from "./client.js";
 import { MIN_KEY_BYTES } from "./wire.js";
 
 const NONCE_BYTES = 16;
@@ -49,4 +49,20 @@ export function createRandomNonce(): string {
   const api = globalThis.crypto;
   if (api === undefined || typeof api.getRandomValues !== "function") throw configurationError("nonce");
   return lowerHex(api.getRandomValues(new Uint8Array(NONCE_BYTES)));
+}
+
+/**
+ * SHA-256 capability for `LifecycleClient` (`replace` only), over
+ * `crypto.subtle.digest("SHA-256", ...)`. Each call hashes a private copy of
+ * the bytes and returns 32 bytes. Without Web Crypto it throws
+ * `CLIENT_CONFIGURATION` (field `sha256`).
+ */
+export function createSha256(): Sha256 {
+  const api = globalThis.crypto?.subtle;
+  if (api === undefined || typeof api.digest !== "function") throw configurationError("sha256");
+  return async (bytes: Uint8Array): Promise<Uint8Array> => {
+    const copy = copyUint8Array(bytes);
+    if (copy === null) throw configurationError("sha256");
+    return new Uint8Array(await api.digest("SHA-256", copy));
+  };
 }

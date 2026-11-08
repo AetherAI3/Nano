@@ -43,6 +43,22 @@ export function invalidResponse(httpStatus: number | null, field: string | null 
   });
 }
 
-export function transportUnavailable(): LifecycleClientError {
-  return new LifecycleClientError("TRANSPORT_UNAVAILABLE", { retryable: true, nextAction: "POLL_STATUS" });
+/**
+ * Transport failure or client timeout. A GET read only needs another read
+ * (`POLL_STATUS`); a POST control's acknowledgement is unknown, so the caller
+ * must observe and reconcile (`MANUAL_RECONCILIATION`). Never a job state.
+ */
+export function transportUnavailable(method: "GET" | "POST" = "GET"): LifecycleClientError {
+  return new LifecycleClientError("TRANSPORT_UNAVAILABLE", {
+    retryable: true,
+    nextAction: method === "GET" ? "POLL_STATUS" : "MANUAL_RECONCILIATION",
+  });
+}
+
+export function unsupportedCapability(): LifecycleClientError {
+  return new LifecycleClientError("UNSUPPORTED_CAPABILITY", { field: "operation" });
+}
+
+export function invalidRequest(field: string): LifecycleClientError {
+  return new LifecycleClientError("INVALID_REQUEST", { field });
 }
