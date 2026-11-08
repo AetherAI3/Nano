@@ -2,8 +2,11 @@
 
 Status: first milestone of [#88](https://github.com/AetherAI3/Nano/issues/88)
 (roadmap [#67](https://github.com/AetherAI3/Nano/issues/67)): a local harness
-and a versioned evidence schema. There is no workflow integration yet. CI
-workflows are unchanged.
+and a versioned evidence schema. The
+[Release conformance workflow](../.github/workflows/release-conformance.yml)
+runs it on Linux for every push to `main` (and for pull requests that change the
+harness) and publishes the gate, per-suite counts and canonical evidence hash in
+the job summary. It is evidence, not a required check.
 
 `scripts/conformance/release_conformance.py` tests one exact commit: its
 source export and its core wheel. It writes machine-readable evidence that
@@ -248,7 +251,8 @@ repository on every test run.
 | Platform / interpreter | Status |
 | --- | --- |
 | Windows 10, CPython 3.13.5, qiskit 2.3.1 / qiskit-aer 0.17.2, Node v24.18.0 and v22.19.0, TypeScript 5.8.3 | local reference platform for this milestone. The acceptance check is two fresh full runs with byte-identical `evidence.canonical.json`; the run evidence records the result. |
-| Linux, CPython 3.10–3.13 | **UNVERIFIED**: not run for this milestone |
+| Linux, CPython 3.11, qiskit 2.3.1 / qiskit-aer 0.17.2, no Node | CI: the Release conformance workflow on the self-hosted Linux runner. Each run's job summary records the gate and canonical evidence hash; the TypeScript client row is not executed there (`--no-node`, optional capability). |
+| Linux, CPython 3.10, 3.12, 3.13 | **UNVERIFIED** for the full harness. The harness's own tests run on all four in the main CI matrix. |
 
 ## Fault-injection controls
 
@@ -275,6 +279,6 @@ declared suite file and required test ID exists in this source.
 
 ## Not in this milestone
 
-* Workflow integration. A later PR may run this harness on an already authorized self-hosted route, with serialized execution and artifact upload. Runner, credential and security settings are out of scope.
+* Artifact upload. The workflow prints the canonical evidence into the job log and its hash into the job summary instead of uploading an artifact.
 * Actual CI runner, job and run identities (`environment.runner.ci_run` stays `null` locally).
 * Pytest itself has no installed-wheel hook for the package CLI. The harness checks the wheel directly in `wheel.package_cli`.
