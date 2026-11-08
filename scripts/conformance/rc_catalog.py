@@ -91,6 +91,20 @@ LIFECYCLE_REQUIRED_TESTS = (
     "tests/test_qsearch_lifecycle_wire_contract.py::test_error_body_maps_to_expected_metadata",
     "tests/test_qsearch_lifecycle_wire_contract.py::test_negative_expected_error_is_what_the_contract_mandates",
 )
+LIFECYCLE_V2 = "protocol/qsearch-lifecycle/v2/"
+LIFECYCLE_V2_FIXTURES = (LIFECYCLE_V2 + "*.json", LIFECYCLE_V2 + "CONTRACT.md", LIFECYCLE_V2 + "SHA256SUMS",
+                         LIFECYCLE_V2 + "fixtures/*.json")
+_V2_TESTS = "tests/test_qsearch_lifecycle_wire_v2.py::"
+LIFECYCLE_V2_REQUIRED_TESTS = tuple(_V2_TESTS + name for name in (
+    "test_regen_check_reproduces_committed_fixtures_byte_for_byte",
+    "test_sha256sums_cover_every_v2_file_and_verify",
+    "test_canonical_vector_reproduces_via_nano_qsearch_canonical",
+    "test_signing_vector_reproduces_python_client_bytes_and_verifies",
+    "test_history_validates_and_python_client_binds_it",
+    "test_error_body_maps_to_expected_metadata",
+    "test_negative_expected_error_is_what_the_contract_mandates",
+    "test_python_discrepancies_are_exactly_the_recorded_ones",
+))
 TS = "sdk/typescript/qsearch-lifecycle/"
 
 CROSS_REPO_FILES = (
@@ -142,6 +156,13 @@ def _capability_suites() -> List[SuiteSpec]:
         SuiteSpec("cap.lifecycle_wire.pytest", "core", "pytest", True, "lifecycle_wire",
                   files=("tests/test_qsearch_lifecycle_wire_contract.py", "tests/test_qsearch_lifecycle_client.py"),
                   required_tests=LIFECYCLE_REQUIRED_TESTS, fixtures=LIFECYCLE_FIXTURES),
+        SuiteSpec("cap.lifecycle_wire_v2.sha256sums", "core", "sha256sums", True, "lifecycle_wire_v2",
+                  files=(LIFECYCLE_V2 + "SHA256SUMS",)),
+        SuiteSpec("cap.lifecycle_wire_v2.regen_check", "core", "regen_check", True, "lifecycle_wire_v2",
+                  files=(LIFECYCLE_V2 + "fixtures/regen.py",), fixtures=LIFECYCLE_V2_FIXTURES),
+        SuiteSpec("cap.lifecycle_wire_v2.pytest", "core", "pytest", True, "lifecycle_wire_v2",
+                  files=("tests/test_qsearch_lifecycle_wire_v2.py",),
+                  required_tests=LIFECYCLE_V2_REQUIRED_TESTS, fixtures=LIFECYCLE_V2_FIXTURES),
         SuiteSpec("cap.ts_client.build", "core", "ts_build", False, "ts_client",
                   files=(TS + "package.json", TS + "package-lock.json", TS + "tsconfig.json"),
                   fixtures=(TS + "src/*.ts",), needs=("node:0", "npm_cache")),
@@ -188,6 +209,8 @@ CAPABILITIES = (
     CapabilitySpec("records", ISSUES + "85", True, "bounded immutable records"),
     CapabilitySpec("lifecycle_wire", ISSUES + "86", True,
                    "q-search lifecycle wire v1: SHA256SUMS, regen --check, Python contract and client tests"),
+    CapabilitySpec("lifecycle_wire_v2", ISSUES + "101", True,
+                   "q-search lifecycle wire v2 controls: SHA256SUMS, regen --check, Python contract tests"),
     CapabilitySpec("ts_client", ISSUES + "86", False, "read-only TypeScript status client (offline lockfile install, tsc, node --test)"),
     CapabilitySpec("proposal_benchmark", ISSUES + "87", True, "frozen proposal benchmark reports replay"),
     CapabilitySpec("qubo_artifact", ISSUES + "88", True,
