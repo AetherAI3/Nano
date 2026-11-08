@@ -1,0 +1,113 @@
+{
+  "artifact_digest": "sha256:38c10afb57344ab4f2b441cc79613eab667030fc0e0d34d686b6f5e672e8aaba",
+  "effect": "local_compile",
+  "plan": {
+    "operations": [
+      {
+        "bits": "100",
+        "id": "prepare",
+        "op": "prepare_bits",
+        "packets": [],
+        "variables": [
+          "x0",
+          "x1",
+          "x2"
+        ]
+      },
+      {
+        "backend": "local_ideal",
+        "id": "sample",
+        "limits": {
+          "max_circuits": 1,
+          "max_qpu_s": 0,
+          "max_wall_s": 5
+        },
+        "op": "sample",
+        "preparation_id": "prepare",
+        "result": {
+          "bit_order": "msb_first",
+          "pub_index": 0,
+          "register": "meas",
+          "width": 3
+        },
+        "seed": 0,
+        "shots": 2
+      }
+    ],
+    "schema": "nano.quantum.operations.v1"
+  },
+  "plan_digest": "sha256:d54d01ad61a6cfaf558f54e23469855b8b9cf6522454af1e76390fb29aa298e4",
+  "preparations": [
+    {
+      "preparation_id": "prepare",
+      "width": 3,
+      "x_qubits": [
+        0
+      ]
+    }
+  ],
+  "profile": {
+    "compiler": {
+      "name": "nano-qsearch",
+      "qiskit_ibm_runtime_version": null,
+      "qiskit_version": "2.3.1",
+      "version": "1.1.0"
+    },
+    "id": "local-ideal-identity-v1",
+    "layout": "identity",
+    "operations": [
+      "prepare_bits",
+      "sample"
+    ],
+    "optimization_level": 0,
+    "schema": "nano.quantum.native-profile.v1",
+    "target_digest": "sha256:f6fca647d215645a769d13dec5ce154e59dd12362ecf632dfbe224cff88cfc1f"
+  },
+  "profile_digest": "sha256:f2057d341cb1ab57ed32c04d196561fd358180e4d163c3a187c069803e67d3ec",
+  "pub_map_digest": "sha256:b14999517065689fb671306e2494507e9e2300bea9b37a0919bbac95e63bd390",
+  "pubs": [
+    {
+      "isa_digest": "sha256:4eb79616f36cd173cbd98c2e50bced4e33045d989394648708be2050a78bcdca",
+      "layout": [
+        0,
+        1,
+        2
+      ],
+      "operation_id": "sample",
+      "ops": {
+        "measure": 3,
+        "x": 1
+      },
+      "preparation_id": "prepare",
+      "pub_index": 0,
+      "qpy_base64": "UUlTS0lUEQIDAQAAAAAAAAABcHEAAAAAAAAAHAAbZgAIAAAAAwAAAAMAAAAAAAABYgAAAAIAAAAAAAAABAAAAABuYW5vLm5hdGl2ZS5wcmVwYXJlX2JpdHMudjEAAAAAAAAAAHsibmFuby5uYXRpdmUudjEiOnsicGxhbl9kaWdlc3QiOiJzaGEyNTY6ZDU0ZDAxYWQ2MWE2Y2ZhZjU1OGY1NGUyMzQ2OTg1NWI4YjljZjY1MjI0NTRhZjFlNzYzOTBmYjI5YWEyOThlNCIsInByb2ZpbGVfZGlnZXN0Ijoic2hhMjU2OmYyMDU3ZDM0MWNiMWFiNTdlZDMyYzA0ZDE5NjU2MWZkMzU4MTgwZTRkMTYzYzNhMTg3YzA2OTgwM2U2N2QzZWMiLCJ0YXJnZXRfZGlnZXN0Ijoic2hhMjU2OmY2ZmNhNjQ3ZDIxNTY0NWE3NjlkMTNkZWM1Y2UxNTRlNTlkZDEyMzYyZWNmNjMyZGZiZTIyNGNmZjg4Y2ZjMWYiLCJvcGVyYXRpb25faWQiOiJzYW1wbGUiLCJwcmVwYXJhdGlvbl9pZCI6InByZXBhcmUiLCJwdWJfaW5kZXgiOjB9fXEBAAAAAwABAXEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAJjAQAAAAMABAFtZWFzAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAACAAAAAAAAAAAAAAAAAAUAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWEdhdGVxAAAAAAAHAAAAAAAAAAEAAAABAAAAAAAAAAAAAAAAAAAAAAAAAE1lYXN1cmVxAAAAAGMAAAAAAAcAAAAAAAAAAQAAAAEAAAAAAAAAAAAAAAAAAAAAAAAATWVhc3VyZXEAAAABYwAAAAEABwAAAAAAAAABAAAAAQAAAAAAAAAAAAAAAAAAAAAAAABNZWFzdXJlcQAAAAJjAAAAAgAAAP///////////////wAAAAAAAAAA",
+      "register": "meas",
+      "seed": 0,
+      "shots": 2,
+      "width": 3
+    }
+  ],
+  "resources": {
+    "deadline_s": 5,
+    "max_shots_per_pub": 2,
+    "max_width": 3,
+    "preparations": 1,
+    "pub_count": 1,
+    "qpu_seconds": 0,
+    "total_shots": 2
+  },
+  "schema": "nano.quantum.native-artifact.v1",
+  "target": {
+    "basis": [
+      "measure",
+      "x"
+    ],
+    "kind": "local_simulator",
+    "name": "local_ideal",
+    "num_qubits": 16,
+    "qpu_seconds": 0,
+    "schema": "nano.quantum.native-target.v1",
+    "simulator": "qiskit.primitives.StatevectorSampler"
+  },
+  "target_digest": "sha256:f6fca647d215645a769d13dec5ce154e59dd12362ecf632dfbe224cff88cfc1f"
+}

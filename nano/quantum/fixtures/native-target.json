@@ -1,0 +1,12 @@
+{
+  "basis": [
+    "measure",
+    "x"
+  ],
+  "kind": "local_simulator",
+  "name": "local_ideal",
+  "num_qubits": 16,
+  "qpu_seconds": 0,
+  "schema": "nano.quantum.native-target.v1",
+  "simulator": "qiskit.primitives.StatevectorSampler"
+}

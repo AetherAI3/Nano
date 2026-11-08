@@ -82,7 +82,7 @@ includes an optional [Qiskit Aer service](docs/qsearch-service.md) for quadratic
 binary optimization (QUBO), with declared job limits and simulation receipts.
 Hosts own data, authorization and external effects.
 
-**Included in this source checkout; native prepare/sample service-wire integration remains incomplete.**
+**Included in this source checkout; the native prepare/sample bridge is opt-in and local-only.**
 [Typed operations](https://github.com/AetherAI3/Nano/pull/72) distinguish known-bit
 preparation, sampling and QUBO optimization, with explicit shots, circuit counts
 and QPU-second limits. The local known-bit path builds and measures a circuit
@@ -106,9 +106,12 @@ This is classical simulation on your machine, requiring no model or IBM
 credentials; it demonstrates neither hardware execution nor quantum advantage.
 
 Other included capabilities add [inspectable prepared artifacts](https://github.com/AetherAI3/Nano/pull/80)
-that record compilation choices and provenance. That adapter currently covers
-`optimize_qubo` only; complete prepare/sample artifact and service-wire support
-remains unfinished, and [#61 remains open](https://github.com/AetherAI3/Nano/issues/61).
+that record compilation choices and provenance. The legacy adapter still covers
+`optimize_qubo` only. Known-bit preparation and sampling use a separate
+[native bridge](docs/quantum-native-bridge.md): a pinned-Qiskit prepared artifact
+and opt-in `/qsearch/native/v1` service routes, disabled by default, that accept
+only the local ideal simulator. A local result is not hardware qualification,
+and no provider or hardware adapter is included.
 [JSON diagnostics](https://github.com/AetherAI3/Nano/pull/79) point to source
 errors, while [nesting limits](https://github.com/AetherAI3/Nano/pull/73) reject
 excessively deep compiler input without promising global time or memory bounds.

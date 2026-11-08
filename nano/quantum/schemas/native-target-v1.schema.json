@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aethersystems.net/schemas/nano.quantum.native-target.v1.json",
+  "title": "Native local simulator target (no hardware)",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "nano.quantum.native-target.v1"
+    },
+    "name": {
+      "const": "local_ideal"
+    },
+    "kind": {
+      "const": "local_simulator"
+    },
+    "simulator": {
+      "const": "qiskit.primitives.StatevectorSampler"
+    },
+    "num_qubits": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "basis": {
+      "const": [
+        "measure",
+        "x"
+      ]
+    },
+    "qpu_seconds": {
+      "const": 0
+    }
+  },
+  "required": [
+    "basis",
+    "kind",
+    "name",
+    "num_qubits",
+    "qpu_seconds",
+    "schema",
+    "simulator"
+  ],
+  "additionalProperties": false
+}

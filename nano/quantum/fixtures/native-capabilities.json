@@ -1,0 +1,40 @@
+{
+  "defaults": {
+    "native_enables_hardware": false,
+    "native_service_enabled": false,
+    "preparation_only_artifact": "admitted_without_execution"
+  },
+  "native_targets": [
+    "local_ideal"
+  ],
+  "operations": {
+    "optimize_qubo": {
+      "direct_local_adapter": "unsupported",
+      "hardware": "legacy_host_gated",
+      "legacy_job_adapter": "supported",
+      "legacy_prepared_artifact": "supported",
+      "native_artifact": "unsupported",
+      "native_service": "unsupported",
+      "operations_v1": "supported"
+    },
+    "prepare_bits": {
+      "direct_local_adapter": "supported",
+      "hardware": "unsupported",
+      "legacy_job_adapter": "unsupported",
+      "legacy_prepared_artifact": "unsupported",
+      "native_artifact": "supported",
+      "native_service": "opt_in_local_only",
+      "operations_v1": "supported"
+    },
+    "sample": {
+      "direct_local_adapter": "supported",
+      "hardware": "unsupported",
+      "legacy_job_adapter": "unsupported",
+      "legacy_prepared_artifact": "unsupported",
+      "native_artifact": "supported",
+      "native_service": "opt_in_local_only",
+      "operations_v1": "supported"
+    }
+  },
+  "schema": "nano.quantum.native-capabilities.v1"
+}
