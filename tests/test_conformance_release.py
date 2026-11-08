@@ -315,6 +315,16 @@ def test_sha256sums_check_refuses_tampered_unlisted_missing_and_unsorted_files(t
     assert sha256sums_problems(tmp_path) == ["missing SHA256SUMS"]
 
 
+def test_cli_refuses_an_output_dir_too_long_for_windows_max_path(monkeypatch, tmp_path, capsys):
+    import types
+
+    import release_conformance as cli
+    monkeypatch.setattr(cli, "os", types.SimpleNamespace(name="nt"))
+    long_out = tmp_path / ("x" * (cli.MAX_WINDOWS_OUT_DIR + 1))
+    assert cli.main(["run", "--out-dir", str(long_out), "--no-node"]) == cli.EXIT_HARNESS
+    assert "MAX_PATH" in capsys.readouterr().err and not long_out.exists()
+
+
 def test_this_source_lifecycle_sums_verify():
     from rc_checks import sha256sums_problems
     assert sha256sums_problems(ROOT / "protocol" / "qsearch-lifecycle" / "v1") == []

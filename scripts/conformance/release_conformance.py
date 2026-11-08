@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -29,6 +30,7 @@ from rc_manifest import Checkout  # noqa: E402
 
 EXIT_OK, EXIT_GATE, EXIT_USAGE, EXIT_HARNESS = 0, 1, 2, 3
 DEFAULT_TIMEOUT_S = 3600
+MAX_WINDOWS_OUT_DIR = 80
 CHECKOUT_ENV = {"atlas": "NANO_QSEARCH_ATLAS_PATH", "predator": "NANO_QSEARCH_PREDATOR_PATH"}
 
 
@@ -97,7 +99,16 @@ def _cmd_manifest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _check_out_dir_length(out: Path) -> None:
+    """Some tests copy the tree into ``OUT/tmp/...`` and run git there; keep Windows under MAX_PATH."""
+    resolved = str(out.resolve())
+    if os.name == "nt" and len(resolved) > MAX_WINDOWS_OUT_DIR:
+        raise HarnessError(f"--out-dir is {len(resolved)} characters; on Windows use at most "
+                           f"{MAX_WINDOWS_OUT_DIR} so nested test checkouts stay under MAX_PATH")
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
+    _check_out_dir_length(args.out_dir)
     manifest = json.loads(args.manifest.read_text(encoding="utf-8")) if args.manifest else None
     doc = run(_options(args, args.out_dir, manifest))
     gate = doc["canonical"]["gate"]

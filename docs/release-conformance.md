@@ -17,7 +17,9 @@ python scripts/conformance/release_conformance.py run --out-dir OUT [--manifest 
 python scripts/conformance/release_conformance.py verify OUT/evidence.json
 ```
 
-`OUT` must be a new or empty directory outside the repository. Useful options:
+`OUT` must be a new or empty directory outside the repository. On Windows it
+must be at most 80 characters long. Some tests copy the tree under `OUT/tmp` and
+run git there, and git there is limited to MAX_PATH (260). Useful options:
 
 * `--python` sets the test interpreter (default: the running one).
 * `--wheel-python` sets an interpreter that has setuptools.
