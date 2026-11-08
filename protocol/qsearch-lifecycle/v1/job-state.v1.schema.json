@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:nano:qsearch:job-state:v1",
+  "title": "nano.qsearch.job-state.v1",
+  "description": "Successful body of GET /qsearch/v2/requests/<request_digest>. Closed: any additive change needs a new schema identity. Mirrors nano_qsearch/lifecycle.py job_state().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "request", "lineage", "state", "provider", "execution", "accounting", "usage", "cancellation", "deadlines", "next_action"],
+  "properties": {
+    "schema": {"const": "nano.qsearch.job-state.v1"},
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "request_digest", "target"],
+      "properties": {
+        "request_id": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"},
+        "request_digest": {"$ref": "#/$defs/digest"},
+        "target": {"$ref": "#/$defs/nullableIdentifier"}
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["replaces_request_digest", "replacement_request_digest"],
+      "properties": {
+        "replaces_request_digest": {"$ref": "#/$defs/nullableDigest"},
+        "replacement_request_digest": {"$ref": "#/$defs/nullableDigest"}
+      }
+    },
+    "state": {"enum": ["ACCEPTED", "SUBMITTED_UNKNOWN", "QUEUED", "RUNNING", "COMPLETED", "SUCCEEDED", "FAILED", "CANCELLED", "NOT_RUN", "QUEUE_EXPIRED", "CANCELLATION_REQUESTED", "ACCOUNTING_PENDING", "ACCOUNTING_EXPIRED", "SETTLED"]},
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "status"],
+      "properties": {
+        "job_id": {"$ref": "#/$defs/nullableIdentifier"},
+        "status": {"enum": ["CANCELED", "CANCELLED", "COMPLETED", "DONE", "ERROR", "FAILED", "INITIALIZING", "PENDING", "QUEUED", "RUNNING", "UNKNOWN", "VALIDATING"]}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "outcome", "terminal"],
+      "properties": {
+        "status": {"enum": ["ACCEPTED", "SUBMITTED_UNKNOWN", "QUEUED", "RUNNING", "COMPLETED", "SUCCEEDED", "FAILED", "CANCELLED", "NOT_RUN"]},
+        "outcome": {"enum": ["SUCCEEDED", "FAILED", "CANCELLED", "NOT_RUN", "UNKNOWN"]},
+        "terminal": {"type": "boolean"}
+      }
+    },
+    "accounting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {"status": {"enum": ["PENDING", "SETTLED", "NOT_APPLICABLE"]}}
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reservation_status", "held_quantum_seconds", "settled_quantum_seconds"],
+      "properties": {
+        "reservation_status": {"enum": ["HELD", "UNKNOWN", "SETTLED", "NOT_RESERVED"]},
+        "held_quantum_seconds": {"$ref": "#/$defs/nullableAmount"},
+        "settled_quantum_seconds": {"$ref": "#/$defs/nullableAmount"}
+      }
+    },
+    "cancellation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "requested_at", "confirmed", "confirmed_at"],
+      "properties": {
+        "requested": {"type": "boolean"},
+        "requested_at": {"$ref": "#/$defs/nullableAmount"},
+        "confirmed": {"type": "boolean"},
+        "confirmed_at": {"$ref": "#/$defs/nullableAmount"}
+      }
+    },
+    "deadlines": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queue_at", "queue_expired", "accounting_at", "accounting_expired"],
+      "properties": {
+        "queue_at": {"$ref": "#/$defs/amount"},
+        "queue_expired": {"type": "boolean"},
+        "accounting_at": {"$ref": "#/$defs/nullableAmount"},
+        "accounting_expired": {"type": "boolean"}
+      }
+    },
+    "next_action": {"enum": ["NONE", "POLL_STATUS", "REQUEST_CANCEL", "RECONCILE", "MANUAL_RECONCILIATION"]}
+  },
+  "allOf": [
+    {
+      "description": "I1 settled accounting: reservation settled, nothing held, a reported settled amount, state SETTLED, no proposed action.",
+      "if": {"properties": {"accounting": {"properties": {"status": {"const": "SETTLED"}}}}},
+      "then": {"properties": {
+        "state": {"const": "SETTLED"},
+        "next_action": {"const": "NONE"},
+        "usage": {"properties": {"reservation_status": {"const": "SETTLED"}, "held_quantum_seconds": {"const": 0}, "settled_quantum_seconds": {"$ref": "#/$defs/amount"}}}
+      }}
+    },
+    {
+      "description": "I2 not-applicable accounting (dry run or never submitted): nothing reserved, held and settled null, no proposed action.",
+      "if": {"properties": {"accounting": {"properties": {"status": {"const": "NOT_APPLICABLE"}}}}},
+      "then": {"properties": {
+        "next_action": {"const": "NONE"},
+        "usage": {"properties": {"reservation_status": {"const": "NOT_RESERVED"}, "held_quantum_seconds": {"const": null}, "settled_quantum_seconds": {"const": null}}}
+      }}
+    },
+    {
+      "description": "I3 pending accounting: nothing settled; reservation HELD or UNKNOWN; an unknown held amount stays null, never zero-by-default.",
+      "if": {"properties": {"accounting": {"properties": {"status": {"const": "PENDING"}}}}},
+      "then": {"properties": {
+        "state": {"enum": ["ACCEPTED", "SUBMITTED_UNKNOWN", "QUEUED", "RUNNING", "QUEUE_EXPIRED", "CANCELLATION_REQUESTED", "ACCOUNTING_PENDING", "ACCOUNTING_EXPIRED"]},
+        "usage": {"properties": {"reservation_status": {"enum": ["HELD", "UNKNOWN"]}, "settled_quantum_seconds": {"const": null}}}
+      }}
+    },
+    {
+      "description": "I4 non-terminal execution has an unknown outcome and a non-terminal status.",
+      "if": {"properties": {"execution": {"properties": {"terminal": {"const": false}}}}},
+      "then": {"properties": {"execution": {"properties": {"status": {"enum": ["ACCEPTED", "SUBMITTED_UNKNOWN", "QUEUED", "RUNNING"]}, "outcome": {"const": "UNKNOWN"}}}}}
+    },
+    {
+      "description": "I5 terminal execution has a terminal status.",
+      "if": {"properties": {"execution": {"properties": {"terminal": {"const": true}}}}},
+      "then": {"properties": {"execution": {"properties": {"status": {"enum": ["COMPLETED", "SUCCEEDED", "FAILED", "CANCELLED", "NOT_RUN"]}}}}}
+    },
+    {"description": "I6a outcome matches a decided status.", "if": {"properties": {"execution": {"properties": {"status": {"const": "SUCCEEDED"}}}}}, "then": {"properties": {"execution": {"properties": {"outcome": {"const": "SUCCEEDED"}, "terminal": {"const": true}}}}}},
+    {"description": "I6b", "if": {"properties": {"execution": {"properties": {"status": {"const": "FAILED"}}}}}, "then": {"properties": {"execution": {"properties": {"outcome": {"const": "FAILED"}, "terminal": {"const": true}}}}}},
+    {"description": "I6c", "if": {"properties": {"execution": {"properties": {"status": {"const": "CANCELLED"}}}}}, "then": {"properties": {"execution": {"properties": {"outcome": {"const": "CANCELLED"}, "terminal": {"const": true}}}}}},
+    {"description": "I6d", "if": {"properties": {"execution": {"properties": {"status": {"const": "NOT_RUN"}}}}}, "then": {"properties": {"execution": {"properties": {"outcome": {"const": "NOT_RUN"}, "terminal": {"const": true}}}}}},
+    {"description": "I6e provider DONE without an audited result is COMPLETED with an UNKNOWN outcome.", "if": {"properties": {"execution": {"properties": {"status": {"const": "COMPLETED"}}}}}, "then": {"properties": {"execution": {"properties": {"outcome": {"const": "UNKNOWN"}, "terminal": {"const": true}}}}}},
+    {
+      "description": "I7 cancellation is confirmed exactly when execution is CANCELLED; a request alone is never terminal confirmation.",
+      "if": {"properties": {"execution": {"properties": {"status": {"const": "CANCELLED"}}}}},
+      "then": {"properties": {"cancellation": {"properties": {"confirmed": {"const": true}}}}},
+      "else": {"properties": {"cancellation": {"properties": {"confirmed": {"const": false}, "confirmed_at": {"const": null}}}}}
+    },
+    {
+      "description": "I8 requested flag matches presence of a durable request timestamp.",
+      "if": {"properties": {"cancellation": {"properties": {"requested": {"const": true}}}}},
+      "then": {"properties": {"cancellation": {"properties": {"requested_at": {"$ref": "#/$defs/amount"}}}}},
+      "else": {"properties": {"cancellation": {"properties": {"requested_at": {"const": null}}}}}
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "nullableDigest": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/digest"}]},
+    "identifier": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$"},
+    "nullableIdentifier": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/identifier"}]},
+    "amount": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
+    "nullableAmount": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/amount"}]}
+  }
+}
