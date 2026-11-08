@@ -1,0 +1,37 @@
+// Authentication-failure burst: pause when failed sign-ins against one monitored
+// surface reach a ceiling inside a five-minute window - the measurable core of a
+// credential-stuffing or brute-force control. AUTH_FAILURES_5M is the GLOBAL
+// count of failed authentication attempts against that surface, across all
+// accounts and sources, over the trailing five minutes, as the host counts them.
+// REGIME: all of them. Abuse of a login surface is not tied to a market or a
+// release; the rule is armed whenever the surface is exposed.
+// CONDITIONS: none in the rule. The host collects the events, defines what a
+// failure is, owns the window boundary, and performs any lockout or block. Nano
+// reads no log, locks no account and blocks no address; it proposes a pause and
+// the host's DecisionGate decides.
+// INVALIDATION: the window draining below the ceiling. The rule does not latch;
+// how long a lockout lasts is host policy.
+// SHAPE: 1m over a 5m trailing count; frequent enough to catch a burst while it
+// is running, and the window - not this cadence - absorbs single mistyped
+// passwords, which is why there is no separate observe tier here.
+// NOT credential_age_alert: that reviews a credential that is merely getting
+// old. This one reacts to someone failing to use credentials right now.
+// CALIBRATED ON: a placeholder policy figure, 50 global failures in five
+// minutes for one surface. It does not travel: it scales with the surface's
+// legitimate traffic, and a per-account count is a different control that
+// needs a far lower ceiling - publish it under its own signal name.
+strategy AuthFailureBurst {
+
+    agent SecurityDesk
+
+    every 1m {
+
+        if AUTH_FAILURES_5M >= 50 {
+
+            pause()
+
+        }
+
+    }
+
+}

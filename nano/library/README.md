@@ -15,7 +15,7 @@ The library holds two kinds of entry, and the difference is worth understanding 
 
 | | **Baseline entries** | **v1 entries** |
 | --- | --- | --- |
-| Count | 41 | 14 |
+| Count | 43 | 14 |
 | Source shape | one `every`, one `if`, AND-chained comparisons of a named signal against a literal | `param`/`input`/`let` declarations, arithmetic, `else`, offsets |
 | Where the numbers come from | the **host** computes every indicator and injects it as a named series | the host supplies **OHLCV**; Nano computes the indicators |
 | Compiled IR | `0.1.0`, byte-stable | `1.0.0`, carries `sourceHash` and `moduleHash` |
@@ -27,7 +27,7 @@ The practical difference for a host is the size of the contract. A baseline entr
 
 ## Learn, compare, contribute
 
-The current library contains 55 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 41 baseline and 14 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
+The current library contains 57 strategies across eight categories — seven trading, one for deterministic watchdog controls — in two corpora: 43 baseline and 14 v1. Browse an entry to see the source, its expected IR, and the data contract it assumes. When you are ready, a well-documented strategy pair is the most direct contribution to Nano.
 
 [Walk through a first contribution →](../../docs/first-contribution.md) · [Add a strategy →](../../CONTRIBUTING.md#add-a-strategy) · [Open a proposal →](https://github.com/AetherAI3/Nano/issues/new?template=strategy-library.yml)
 
@@ -50,7 +50,7 @@ python scripts/check_contribution.py --write nano/library/<category>/<name>.nano
 | `volume/` | `volume_spike_confirmation`, `obv_trend`, `volume_climax_reversal`†, `vwap_band_reversion`† |
 | `risk/` | `max_drawdown_breaker`, `daily_loss_limit`, `position_concentration_cap`, `correlation_cluster_guard`, `stale_data_halt`, `leverage_ceiling`, `consecutive_loss_circuit` |
 | `event_volatility/` | `event_impulse_pullback_long`, `event_impulse_pullback_short`, `cpi_impulse_pullback_long`, `cpi_impulse_pullback_short`, `event_false_first_move_long`, `event_false_first_move_short`, `event_second_leg_long`, `event_second_leg_short`, `event_liquidity_halt`, `event_release_integrity_halt`, `event_whipsaw_halt` |
-| `watchdog/` | `trusted_route_guard`, `credential_age_alert`, `aether_release_notes_coverage`, `aether_release_notes_batch_unaccounted`, `aether_release_notes_proof_missing`, `aether_release_notes_copy_unvalidated`, `aether_release_notes_uncovered_merge`, `aether_release_notes_candidate_unattached` |
+| `watchdog/` | `trusted_route_guard`, `credential_age_alert`, `aether_release_notes_coverage`, `aether_release_notes_batch_unaccounted`, `aether_release_notes_proof_missing`, `aether_release_notes_copy_unvalidated`, `aether_release_notes_uncovered_merge`, `aether_release_notes_candidate_unattached`, `unsigned_artifact_hold`, `auth_failure_burst` |
 
 ## The comment header
 
@@ -184,6 +184,8 @@ the library.
 | --- | --- | --- |
 | trusted route unavailable | `TRUSTED_ROUTE_DOWN` | 0 while the host's connectivity check verifies the route, 1 while it does not; host owns debouncing |
 | credential age | `CREDENTIAL_AGE_DAYS` | Age in whole days of the oldest in-scope credential or signing key |
+| unsigned release artifacts | `UNSIGNED_ARTIFACT_COUNT` | Count of artifacts in the release under evaluation whose signature the host could not verify; 0 is the only count that ships |
+| authentication failures | `AUTH_FAILURES_5M` | Global count of failed authentication attempts against one monitored surface over the trailing five minutes; a per-account count is a different signal |
 
 #### Release-note signals
 

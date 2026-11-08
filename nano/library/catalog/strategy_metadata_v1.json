@@ -3,7 +3,7 @@
   "type": "NanoStrategyCatalog",
   "schemaVersion": 1,
   "metadataVersion": "StrategyMetadataV1",
-  "strategyCount": 55,
+  "strategyCount": 57,
   "categoryCounts": {
     "event_volatility": 11,
     "mean_reversion": 7,
@@ -12,10 +12,10 @@
     "trend": 8,
     "volatility": 4,
     "volume": 4,
-    "watchdog": 8
+    "watchdog": 10
   },
   "irMaturityCounts": {
-    "baseline": 41,
+    "baseline": 43,
     "v1": 14
   },
   "strategies": [
@@ -1599,6 +1599,33 @@
     },
     {
       "metadataVersion": "StrategyMetadataV1",
+      "id": "watchdog/auth_failure_burst",
+      "slug": "auth_failure_burst",
+      "name": "AuthFailureBurst",
+      "category": "watchdog",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "all of them. Abuse of a login surface is not tied to a market or a release; the rule is armed whenever the surface is exposed.",
+      "conditions": "none in the rule. The host collects the events, defines what a failure is, owns the window boundary, and performs any lockout or block. Nano reads no log, locks no account and blocks no address; it proposes a pause and the host's DecisionGate decides.",
+      "invalidation": "the window draining below the ceiling. The rule does not latch; how long a lockout lasts is host policy.",
+      "shape": "1m over a 5m trailing count; frequent enough to catch a burst while it is running, and the window - not this cadence - absorbs single mistyped passwords, which is why there is no separate observe tier here.",
+      "calibratedOn": "a placeholder policy figure, 50 global failures in five minutes for one surface. It does not travel: it scales with the surface's legitimate traffic, and a per-account count is a different control that needs a far lower ceiling - publish it under its own signal name.",
+      "nearestConfused": [
+        {
+          "slug": "credential_age_alert",
+          "id": "watchdog/credential_age_alert",
+          "distinction": "that reviews a credential that is merely getting old. This one reacts to someone failing to use credentials right now."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "AUTH_FAILURES_5M"
+      ],
+      "sourcePath": "library/watchdog/auth_failure_burst.nano",
+      "irPath": "library/watchdog/auth_failure_burst_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
       "id": "watchdog/credential_age_alert",
       "slug": "credential_age_alert",
       "name": "CredentialAgeAlert",
@@ -1650,6 +1677,33 @@
       ],
       "sourcePath": "library/watchdog/trusted_route_guard.nano",
       "irPath": "library/watchdog/trusted_route_guard_ir.json"
+    },
+    {
+      "metadataVersion": "StrategyMetadataV1",
+      "id": "watchdog/unsigned_artifact_hold",
+      "slug": "unsigned_artifact_hold",
+      "name": "UnsignedArtifactHold",
+      "category": "watchdog",
+      "irMaturity": "baseline",
+      "irVersion": "0.1.0",
+      "regime": "release evaluation. Armed while the host is deciding whether a release may ship; it says nothing about systems already running.",
+      "conditions": "none in the rule. The host enumerates the artifacts, verifies the signatures, decides what counts as valid, and defines which release is under evaluation. Nano verifies no signature, sees no artifact and cannot stop a pipeline: this rule expresses the policy, it does not enforce it.",
+      "invalidation": "every artifact verifying, so the count returns to zero. The rule does not latch; ending the hold and re-running the release are the host's job.",
+      "shape": "1m; fast enough not to delay a clean release, and the count only moves when the host re-verifies, so checking faster adds nothing.",
+      "calibratedOn": "policy, not data. The ceiling is one rather than a tolerance because a single unsigned artifact is exactly the one an attacker would substitute; there is no number of unattributed binaries that is safe to ship.",
+      "nearestConfused": [
+        {
+          "slug": "trusted_route_guard",
+          "id": "watchdog/trusted_route_guard",
+          "distinction": "that pauses a running system that lost its trusted path. This one holds a release that has not shipped because its contents cannot be attributed to whoever was supposed to build them."
+        }
+      ],
+      "provenance": null,
+      "requiredHostSignals": [
+        "UNSIGNED_ARTIFACT_COUNT"
+      ],
+      "sourcePath": "library/watchdog/unsigned_artifact_hold.nano",
+      "irPath": "library/watchdog/unsigned_artifact_hold_ir.json"
     }
   ]
 }
