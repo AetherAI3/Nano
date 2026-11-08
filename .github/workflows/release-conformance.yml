@@ -1,0 +1,93 @@
+name: Release conformance
+
+# Runs scripts/conformance/release_conformance.py (issue #88) against the exact
+# commit under test and publishes the gate, per-suite counts and the canonical
+# evidence hash in the job summary. Linux counterpart of the documented Windows
+# reference run. Not a required check: it is evidence, and it is heavier than
+# the unit suite.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/conformance/**'
+      - 'docs/release-conformance*'
+      - '.github/workflows/release-conformance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-conformance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: Release conformance (Linux, CPython 3.11, Qiskit 2.3.1)
+    runs-on: ${{ vars.AETHER_CI_RUNNER == 'self-hosted' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "linux", "x64", "aether-ci-standard"]') || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    steps:
+      - name: Refuse to start on a nearly full disk
+        # The self-hosted host is shared; a run needs a few hundred MB of
+        # scratch on top of the cached interpreters.
+        run: |
+          avail_kib=$(df --output=avail -k "${RUNNER_TEMP}" | tail -1)
+          echo "available: $((avail_kib / 1024)) MiB"
+          test "$avail_kib" -gt 1572864 || { echo "::error::less than 1.5 GiB free; not running the harness"; exit 1; }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Nano with the pinned local simulator and a wheel builder
+        run: python -m pip install -e ".[dev,quantum]" setuptools wheel
+      - name: Run the release-conformance harness
+        id: harness
+        run: |
+          out="${RUNNER_TEMP}/rc"
+          set +e
+          python scripts/conformance/release_conformance.py run \
+            --repo "${GITHUB_WORKSPACE}" --python "$(command -v python)" \
+            --wheel-python "$(command -v python)" --no-node \
+            --out-dir "$out"
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          test -f "$out/evidence.json" || { echo "::error::harness wrote no evidence (exit $status)"; exit 1; }
+          python scripts/conformance/release_conformance.py verify "$out/evidence.json"
+      - name: Publish gate and evidence hash
+        if: always()
+        run: |
+          out="${RUNNER_TEMP}/rc"
+          test -f "$out/evidence.canonical.json" || exit 0
+          python - "$out" >> "$GITHUB_STEP_SUMMARY" <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          out = Path(sys.argv[1])
+          raw = (out / "evidence.canonical.json").read_bytes()
+          e = json.loads(raw)
+          g, s = e["gate"], e["source"]
+          print("## Release conformance")
+          print(f"- gate: core **{g['core']}**, release **{g['release']}**")
+          print(f"- source: `{s['identity']}` commit `{s['tested_commit']}` tree `{s['tested_tree']}`")
+          print(f"- canonical evidence sha256: `{hashlib.sha256(raw).hexdigest()}`")
+          if g.get("optional_not_executed"):
+              print(f"- optional not executed: {', '.join(g['optional_not_executed'])}")
+          print("\n| suite | status | passed / executed |\n| --- | --- | --- |")
+          for suite in e["suites"]:
+              c = suite.get("counts") or {}
+              counts = f"{c.get('passed')} / {c.get('executed')}" if c else ""
+              print(f"| `{suite['id']}` | {suite['status']} | {counts} |")
+          print("\n| capability | required | status |\n| --- | --- | --- |")
+          for cap in e["capabilities"]:
+              print(f"| {cap['id']} | {cap['required']} | {cap['status']} |")
+          PY
+          echo "canonical evidence (compact):"
+          cat "$out/evidence.canonical.json"
+      - name: Fail when the release gate did not pass
+        if: steps.harness.outputs.status != '0'
+        run: |
+          echo "::error::release-conformance gate did not pass (exit ${{ steps.harness.outputs.status }})"
+          exit 1
