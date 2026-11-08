@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AetherAI3/Nano/blob/main/docs/release-conformance.schema.json",
+  "title": "Nano release-conformance evidence v1",
+  "description": "Evidence written by scripts/conformance/release_conformance.py (issue #88). Only `canonical` enters `canonical_sha256`; `telemetry` holds timestamps, durations, absolute paths and raw file hashes. Runtime run-log serialization is out of scope here; see issue #10.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "canonical", "canonical_sha256", "telemetry"],
+  "properties": {
+    "schema": {"const": "nano.release-conformance.evidence.v1"},
+    "canonical_sha256": {"$ref": "#/$defs/sha256"},
+    "canonical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "manifest", "manifest_sha256", "observed_manifest_sha256", "admission", "source",
+                   "environment", "artifacts", "suites", "capabilities", "gate", "related"],
+      "properties": {
+        "schema": {"const": "nano.release-conformance.evidence.v1"},
+        "manifest": {
+          "type": "object",
+          "description": "The supplied (or, when none was supplied, observed) input manifest exactly as admitted or refused. A well-formed manifest satisfies #/$defs/manifest."
+        },
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "observed_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reasons", "manifest_supplied"],
+          "properties": {
+            "status": {"enum": ["ADMITTED", "REFUSED"]},
+            "reasons": {"$ref": "#/$defs/strings"},
+            "manifest_supplied": {"type": "boolean"}
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tested_commit", "tested_tree", "pinned_commit", "pinned_tree", "identity", "merge_tree",
+                       "merge_tree_match", "dirty_before", "dirty_after"],
+          "properties": {
+            "tested_commit": {"$ref": "#/$defs/hex40"},
+            "tested_tree": {"$ref": "#/$defs/hex40"},
+            "pinned_commit": {"type": ["string", "null"]},
+            "pinned_tree": {"type": ["string", "null"]},
+            "identity": {"enum": ["exact_commit", "equivalent_tree", "mismatch"]},
+            "merge_tree": {"type": ["string", "null"]},
+            "merge_tree_match": {"type": ["boolean", "null"]},
+            "dirty_before": {"$ref": "#/$defs/strings"},
+            "dirty_after": {"$ref": "#/$defs/strings"}
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["allowlist", "inherited_present", "harness_set", "runner"],
+          "description": "Environment variable NAMES only; values are never recorded.",
+          "properties": {
+            "allowlist": {"$ref": "#/$defs/names"},
+            "inherited_present": {"$ref": "#/$defs/names"},
+            "harness_set": {"$ref": "#/$defs/names"},
+            "runner": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "ci_run"],
+              "properties": {
+                "kind": {"enum": ["local"]},
+                "ci_run": {"type": "null", "description": "Reserved for actual runner/job/run identity captured during a CI execution."}
+              }
+            }
+          }
+        },
+        "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+        "suites": {"type": "array", "items": {"$ref": "#/$defs/suite_row"}},
+        "capabilities": {"type": "array", "items": {"$ref": "#/$defs/capability"}},
+        "gate": {"$ref": "#/$defs/gate"},
+        "related": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["run_log_schema"],
+          "properties": {"run_log_schema": {"const": "https://github.com/AetherAI3/Nano/issues/10"}}
+        }
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at", "finished_at", "durations_s", "paths", "files"],
+      "properties": {
+        "started_at": {"type": "string"},
+        "finished_at": {"type": "string"},
+        "durations_s": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0}},
+        "paths": {"type": "object"},
+        "files": {"type": "object", "additionalProperties": {"$ref": "#/$defs/sha256"}}
+      }
+    }
+  },
+  "$defs": {
+    "hex40": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "names": {"type": "array", "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"}, "uniqueItems": true},
+    "suite_status": {"enum": ["PASS", "FAIL", "NOT_EXECUTED", "BLOCKED"]},
+    "rollup_status": {"enum": ["PASS", "FAIL", "INCOMPLETE"]},
+    "mode": {"enum": ["core", "qiskit", "cross_repo"]},
+    "pinned_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]}
+      }
+    },
+    "suite_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "kind", "required", "capability", "files", "fixture_patterns", "fixtures",
+                   "required_tests", "needs"],
+      "properties": {
+        "id": {"type": "string"},
+        "mode": {"$ref": "#/$defs/mode"},
+        "kind": {"type": "string"},
+        "required": {"type": "boolean"},
+        "capability": {"type": ["string", "null"]},
+        "files": {"type": "array", "items": {"$ref": "#/$defs/pinned_file"}},
+        "fixture_patterns": {"$ref": "#/$defs/strings"},
+        "fixtures": {"type": "array", "items": {"$ref": "#/$defs/pinned_file"}},
+        "required_tests": {"$ref": "#/$defs/strings"},
+        "needs": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collected", "executed", "passed", "failed", "error", "skipped", "xfailed"],
+      "properties": {
+        "collected": {"type": "integer", "minimum": 0},
+        "executed": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0},
+        "xfailed": {"type": "integer", "minimum": 0}
+      }
+    },
+    "suite_row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "kind", "required", "capability", "status", "reasons", "command", "exit_code",
+                   "counts", "skip_reasons", "outcomes_sha256", "required_tests", "junit", "log", "detail"],
+      "properties": {
+        "id": {"type": "string"},
+        "mode": {"$ref": "#/$defs/mode"},
+        "kind": {"type": "string"},
+        "required": {"type": "boolean"},
+        "capability": {"type": ["string", "null"]},
+        "status": {"$ref": "#/$defs/suite_status"},
+        "reasons": {"$ref": "#/$defs/strings"},
+        "command": {"$ref": "#/$defs/strings", "description": "Commands with absolute paths replaced by {python}, {src}, {out}, {node}, {wheel_python} placeholders."},
+        "exit_code": {"type": ["integer", "null"]},
+        "counts": {"oneOf": [{"$ref": "#/$defs/counts"}, {"type": "null"}]},
+        "skip_reasons": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 1}},
+        "outcomes_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "required_tests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["declared", "missing", "not_passed"],
+          "properties": {
+            "declared": {"type": "integer", "minimum": 0},
+            "missing": {"$ref": "#/$defs/strings"},
+            "not_passed": {"$ref": "#/$defs/strings"}
+          }
+        },
+        "junit": {"type": ["string", "null"], "description": "Path relative to the output directory; its raw SHA-256 is in telemetry.files."},
+        "log": {"type": ["string", "null"], "description": "Path relative to the output directory; its raw SHA-256 is in telemetry.files."},
+        "detail": {"type": "object"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "PASS"}}},
+          "then": {"properties": {"reasons": {"maxItems": 0}, "exit_code": {"const": 0}}}
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "sha256", "builder", "members_sha256", "member_count"],
+      "properties": {
+        "id": {"type": "string"},
+        "path": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "builder": {"type": "object"},
+        "members_sha256": {"oneOf": [{"$ref": "#/$defs/sha256"}, {"type": "null"}]},
+        "member_count": {"type": ["integer", "null"]}
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "issue", "required", "summary", "status", "suites"],
+      "properties": {
+        "id": {"type": "string"},
+        "issue": {"type": "string"},
+        "required": {"type": "boolean"},
+        "summary": {"type": "string"},
+        "status": {"$ref": "#/$defs/rollup_status"},
+        "suites": {"type": "object", "additionalProperties": {"$ref": "#/$defs/suite_status"}}
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core", "release", "source_reasons", "failing_suites", "failing_capabilities",
+                   "incomplete_required_suites", "incomplete_required_capabilities", "optional_not_executed"],
+      "properties": {
+        "core": {"$ref": "#/$defs/rollup_status"},
+        "release": {"$ref": "#/$defs/rollup_status"},
+        "source_reasons": {"$ref": "#/$defs/strings"},
+        "failing_suites": {"$ref": "#/$defs/strings"},
+        "failing_capabilities": {"$ref": "#/$defs/strings"},
+        "incomplete_required_suites": {"$ref": "#/$defs/strings"},
+        "incomplete_required_capabilities": {"$ref": "#/$defs/strings"},
+        "optional_not_executed": {"$ref": "#/$defs/strings"}
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "source", "interpreter", "dependencies", "sdk_pins", "node", "wheel_builder",
+                   "checkouts", "selected_suites", "suites"],
+      "properties": {
+        "schema": {"const": "nano.release-conformance.manifest.v1"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "tree", "merge_tree"],
+          "properties": {
+            "commit": {"$ref": "#/$defs/hex40"},
+            "tree": {"$ref": "#/$defs/hex40"},
+            "merge_tree": {"oneOf": [{"$ref": "#/$defs/hex40"}, {"type": "null"}]}
+          }
+        },
+        "interpreter": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["implementation", "version", "system", "machine", "platform"],
+          "properties": {
+            "implementation": {"type": "string"},
+            "version": {"type": "string"},
+            "system": {"type": "string"},
+            "machine": {"type": "string"},
+            "platform": {"type": "string"}
+          }
+        },
+        "dependencies": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
+        "sdk_pins": {"type": "object", "additionalProperties": {"type": "string"}},
+        "node": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slot", "version"],
+            "properties": {"slot": {"type": "integer", "minimum": 0}, "version": {"type": ["string", "null"]}}
+          }
+        },
+        "wheel_builder": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["role", "python", "pip", "setuptools", "wheel"],
+              "properties": {
+                "role": {"enum": ["explicit", "test-interpreter", "base-interpreter"]},
+                "python": {"type": "string"},
+                "pip": {"type": ["string", "null"]},
+                "setuptools": {"type": "string"},
+                "wheel": {"type": ["string", "null"]}
+              }
+            }
+          ]
+        },
+        "checkouts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["role", "commit", "tree", "dirty"],
+            "properties": {
+              "role": {"enum": ["atlas", "predator"]},
+              "commit": {"oneOf": [{"$ref": "#/$defs/hex40"}, {"type": "null"}]},
+              "tree": {"oneOf": [{"$ref": "#/$defs/hex40"}, {"type": "null"}]},
+              "dirty": {"type": ["boolean", "null"]}
+            }
+          }
+        },
+        "selected_suites": {"$ref": "#/$defs/strings"},
+        "suites": {"type": "array", "items": {"$ref": "#/$defs/suite_entry"}}
+      }
+    }
+  }
+}
