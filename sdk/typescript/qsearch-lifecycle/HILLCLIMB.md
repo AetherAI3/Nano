@@ -213,3 +213,21 @@ with "v2 golden fixture directory missing"; nothing is skipped.
 
 120 tests: 114 pass, 6 fail (exactly the v2 golden tests, fixtures missing),
 0 skipped, 0 cancelled. `npm run pack:check`: ok.
+
+### v2 candidate 3: independent review follow-up (lead)
+
+- Review (no CRITICAL/HIGH; 36,669-input canonical differential vs Python
+  found no byte or refusal mismatch beyond the documented stricter rules).
+- Hypothesis M1: `replace` hashed the body and descriptor sequentially, so a
+  slow first `sha256` let the second call start after the deadline had
+  already settled the operation (outcome unchanged, but the capability ran
+  outside the deadline). Reproduced first: new test RED (invocations grew
+  after the deadline).
+- Minimal diff: both hashes start together via `Promise.all` inside
+  `prepare`, so every capability call begins before the deadline can fire.
+- Result (`npm test`, Node v24.18.0, no v2 fixtures yet): 121 tests, 115 pass,
+  6 fail (only the fixture-dependent v2 goldens), 0 skipped.
+- Kept by design, recorded for the PR: a 3xx on a POST control maps to
+  `UNEXPECTED_REDIRECT` / `NONE` (v1 rule and Python parity); no client-side
+  size cap on the replacement text (Python parity; the service refuses bodies
+  above its 1 MiB limit with 413).

@@ -496,8 +496,12 @@ export class LifecycleClient {
     const sha256 = this.#sha256;
     if (sha256 === null) throw configurationError("sha256"); // unreachable: checked at construction
     const prepare = async (): Promise<Prepared> => {
-      const bodyHash = await sha256Of(sha256, canonical.body);
-      const descriptorHash = await sha256Of(sha256, canonical.descriptor);
+      // Both hashes start together, inside the deadline: the injected capability is
+      // never invoked after the call has already been settled by the timer.
+      const [bodyHash, descriptorHash] = await Promise.all([
+        sha256Of(sha256, canonical.body),
+        sha256Of(sha256, canonical.descriptor),
+      ]);
       return { bodySha256: lowerHex(bodyHash), expectedDigest: `sha256:${lowerHex(descriptorHash)}` };
     };
     return this.#core.call({ method: CONTROL_METHOD, requestDigest, action: "replace", body: canonical.body, prepare });

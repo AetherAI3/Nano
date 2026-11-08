@@ -248,6 +248,28 @@ test("a hung sha256 is bounded by the deadline: CLIENT_CONFIGURATION sha256, zer
   assert.equal(calls.length, 0);
 });
 
+test("review M1: the sha256 capability is never invoked after the deadline", async () => {
+  const releases = [];
+  let invocations = 0;
+  const { client, calls, timer } = lifecycle(respondWith(200, jsonBytes(replaced())), {
+    sha256: () => {
+      invocations += 1;
+      return new Promise((resolve) => releases.push(resolve));
+    },
+  });
+  const pending = client.replace(DIGEST, REPLACEMENT_TEXT);
+  await tick();
+  timer.fire();
+  assert.deepStrictEqual(errorShape(await rejection(pending)), configuration("sha256"));
+  const atDeadline = invocations;
+  for (const release of releases.splice(0)) release(new Uint8Array(32));
+  for (let i = 0; i < 4; i += 1) await tick();
+  for (const release of releases.splice(0)) release(new Uint8Array(32));
+  await tick();
+  assert.equal(invocations, atDeadline, "sha256 called again after the deadline had already settled the call");
+  assert.equal(calls.length, 0);
+});
+
 test("replacement that cannot be canonicalised: INVALID_REQUEST field replacement, zero transport calls", async () => {
   const BS = String.fromCharCode(92);
   const INVALID_REQUEST = { code: "INVALID_REQUEST", field: "replacement", retryable: false, nextAction: "NONE", httpStatus: null };
