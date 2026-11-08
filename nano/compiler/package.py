@@ -33,6 +33,10 @@ MAX_BYTES = 262144
 MAX_TOKENS = 16384
 MAX_FUNCTIONS = 128
 MAX_DEPTH = 32
+# Manifest and lock documents are at most a few levels deep. The ceiling is
+# enforced by scanning the raw bytes before decoding, so it does not depend on
+# whether a given interpreter's JSON decoder happens to raise RecursionError.
+MAX_METADATA_DEPTH = 32
 MAX_EXPANSION = 8192
 MAX_IR_NODES = 8192
 SCALARS = frozenset({"int", "float", "bool", "string"})
@@ -64,6 +68,36 @@ class PackageResourceError(PackageError):
 
     code = "RESOURCE_LIMIT"
     category = "resource"
+
+
+def _check_metadata_depth(raw: bytes, name: str) -> None:
+    """Reject over-deep JSON containers before decoding, with a position.
+
+    Brackets inside JSON strings (including escaped quotes) are ignored, so a
+    module path such as ``"a[b]"`` never counts toward depth. Malformed input
+    is left for the decoder to report.
+    """
+    depth, line, column = 0, 1, 0
+    in_string = escaped = False
+    for byte in raw:
+        column += 1
+        if byte == 0x0A:
+            line, column = line + 1, 0
+        if in_string:
+            if escaped:
+                escaped = False
+            elif byte == 0x5C:
+                escaped = True
+            elif byte == 0x22:
+                in_string = False
+        elif byte == 0x22:
+            in_string = True
+        elif byte in (0x5B, 0x7B):
+            depth += 1
+            if depth > MAX_METADATA_DEPTH:
+                raise PackageResourceError("metadata depth budget exceeded", name, line, column)
+        elif byte in (0x5D, 0x7D):
+            depth -= 1
 
 
 def _digest(data):
@@ -186,6 +220,7 @@ class _Build:
                 raw = stream.read(MAX_BYTES + 1)
             if len(raw) > MAX_BYTES:
                 raise PackageResourceError("metadata byte budget exceeded", path.name)
+            _check_metadata_depth(raw, path.name)
             def unique(pairs):
                 result = {}
                 for key, value in pairs:
