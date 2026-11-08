@@ -95,7 +95,7 @@
    "http_status": 200,
    "name": "missing_member_cancellation",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -109,7 +109,7 @@
    "http_status": 200,
    "name": "missing_member_usage_settled",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -123,7 +123,7 @@
    "http_status": 200,
    "name": "extra_member_top_level",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -137,7 +137,7 @@
    "http_status": 200,
    "name": "extra_member_nested",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -151,7 +151,7 @@
    "http_status": 200,
    "name": "wrong_type_state_number",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -165,7 +165,7 @@
    "http_status": 200,
    "name": "wrong_type_terminal_string",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -179,7 +179,7 @@
    "http_status": 200,
    "name": "bool_as_number",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -193,7 +193,7 @@
    "http_status": 200,
    "name": "number_as_bool",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -207,7 +207,7 @@
    "http_status": 200,
    "name": "null_not_allowed",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -221,7 +221,7 @@
    "http_status": 200,
    "name": "negative_amount",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -235,7 +235,7 @@
    "http_status": 200,
    "name": "unknown_state_enum",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -249,7 +249,7 @@
    "http_status": 200,
    "name": "unknown_provider_status_enum",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -361,7 +361,7 @@
    "http_status": 200,
    "name": "invariant_i1_settled_state",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:c07a7c27e0f9d13c505b4e6e2593a72bf9010277b53340ffedb4fe75287ab826"
   },
   {
@@ -375,7 +375,7 @@
    "http_status": 200,
    "name": "invariant_i2_not_applicable_reserved",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:488da29a0127635e4acb8348f2771d6afd4036c7f9796869ed9327644ffd0de4"
   },
   {
@@ -389,7 +389,7 @@
    "http_status": 200,
    "name": "invariant_i3_pending_with_settled",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -403,7 +403,7 @@
    "http_status": 200,
    "name": "invariant_i4_nonterminal_outcome",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -417,7 +417,7 @@
    "http_status": 200,
    "name": "invariant_i5_terminal_status",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {
@@ -431,7 +431,7 @@
    "http_status": 200,
    "name": "invariant_i6_cancelled_outcome",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:233f003a77c723e16aed14a00ec9b9ed638c90e19eae5d598247e7b213ae97c3"
   },
   {
@@ -445,7 +445,7 @@
    "http_status": 200,
    "name": "invariant_i7_confirmed_without_cancelled",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:30edabe1f54498a961167919dbff92e38ec535f4ff875b796bf4f01294e9b90b"
   },
   {
@@ -459,7 +459,7 @@
    "http_status": 200,
    "name": "invariant_i8_requested_without_time",
    "pad_trailing_spaces": 0,
-   "python_client": "accepts",
+   "python_client": "agrees",
    "request_digest": "sha256:404574cff21c17571f32f04b17fb606bbe01f4c5ce6336cb4649e247938f514c"
   },
   {

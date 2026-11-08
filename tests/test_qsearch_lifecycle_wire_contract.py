@@ -5,7 +5,8 @@ Python implementation by ``fixtures/regen.py``. These tests prove that the
 committed bytes are still what Python produces, that every vector satisfies the
 frozen contract (checked by an independent strict reference reader here, not by
 the Python client), and record each place where ``LifecycleClient`` is laxer
-than the contract as an ``xfail(strict=True)`` compatibility test.
+than the contract as an ``xfail(strict=True)`` compatibility test (none remain;
+a differential test pins the client's envelope check to jsonschema).
 
 Offline only: no network, Qiskit, ATLAS or provider runtime.
 """
@@ -440,20 +441,21 @@ def test_error_body_maps_to_expected_metadata(case):
 
 # --- negatives -----------------------------------------------------------------------------------
 
-_DISCREPANCY = {
-    "envelope": "CONTRACT.md section 4: LifecycleClient checks only schema, request_digest and next_action",
-}
-
-
-def _reason(name: str) -> str:
-    return _DISCREPANCY["envelope"]
+# Negative name -> reason for every case CONTRACT.md section 4 records as a Python discrepancy.
+# Empty since the strict-JSON and closed-envelope parity patches; a new entry must be added here
+# deliberately (test_python_discrepancies_are_exactly_the_recorded_ones fails otherwise).
+_DISCREPANCY: dict[str, str] = {}
 
 
 def _negative_params():
     for case in NEGATIVES["cases"]:
-        marks = ([pytest.mark.xfail(strict=True, reason=_reason(case["name"]))]
+        marks = ([pytest.mark.xfail(strict=True, reason=_DISCREPANCY.get(case["name"], "unrecorded discrepancy"))]
                  if case["python_client"] == "accepts" else [])
         yield pytest.param(case, id=case["name"], marks=marks)
+
+
+def test_python_discrepancies_are_exactly_the_recorded_ones():
+    assert {c["name"] for c in NEGATIVES["cases"] if c["python_client"] == "accepts"} == set(_DISCREPANCY)
 
 
 def test_negative_cases_cover_the_required_classes():
@@ -481,3 +483,253 @@ def test_python_client_refuses_negative_as_the_contract_requires(case):
     result, error = _python(case["request_digest"], case["http_status"], _body(case))
     assert result is None and error is not None
     assert _error_fields(error, compact=True) == case["expected_error"]
+
+
+# --- differential: LifecycleClient's stdlib envelope check versus jsonschema ----------------------
+
+def _schema_enum_strings() -> list[str]:
+    found: set[str] = set()
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key == "enum":
+                    found.update(v for v in value if isinstance(v, str))
+                elif key == "const" and isinstance(value, str):
+                    found.add(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(JOB_SCHEMA)
+    return sorted(found)
+
+
+# No NaN/Infinity (python-jsonschema's minimum/maximum let NaN through; strict JSON refuses it first)
+# and no trailing newline (python-jsonschema uses re.search, where "$" also matches before a final
+# "\n"; ECMA-262 and the hand validator do not). Both are pinned by dedicated tests instead.
+_PROBES: list[Any] = [
+    None, True, False, 0, 0.0, -0.0, 1, 12, 2.5, -1, -0.5, MAX_SAFE, float(MAX_SAFE), MAX_SAFE + 1, 1e300,
+    "", "x", "sha256:" + "0" * 64, "sha256:" + "A" * 64, "sha256:" + "0" * 63, "a" * 80, "a" * 81, "a" * 200,
+    "a" * 201, "ibm_fez", "id.with:colon-1", "bad id", "\u00e9", [], {}, ["NONE"], {"status": "PENDING"},
+    *_schema_enum_strings(),
+]
+
+
+def _paths(value: Any, prefix: tuple[str, ...] = ()) -> list[tuple[str, ...]]:
+    out = [prefix] if prefix else []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            out += _paths(item, prefix + (key,))
+    return out
+
+
+def _with(base: dict[str, Any], path: tuple[str, ...], value: Any = None, *, delete: bool = False,
+          extra: bool = False) -> dict[str, Any]:
+    payload = json.loads(json.dumps(base))
+    target = payload
+    for name in path[:-1]:
+        target = target[name]
+    if extra:
+        target = target[path[-1]] if path else target
+        target["unexpected_member"] = value
+    elif delete:
+        del target[path[-1]]
+    else:
+        target[path[-1]] = value
+    return payload
+
+
+def _single_member_mutations(base: dict[str, Any]):
+    yield base
+    yield _with(base, (), 1, extra=True)
+    for path in _paths(base):
+        yield _with(base, path, delete=True)
+        if isinstance(_get_path(base, path), dict):
+            yield _with(base, path, None, extra=True)
+        for probe in _PROBES:
+            yield _with(base, path, probe)
+
+
+def _get_path(value: Any, path: tuple[str, ...]) -> Any:
+    for name in path:
+        value = value[name]
+    return value
+
+
+_SETS = {
+    "accounting.status": ["PENDING", "SETTLED", "NOT_APPLICABLE"],
+    "state": JOB_SCHEMA["properties"]["state"]["enum"],
+    "usage.reservation_status": ["HELD", "UNKNOWN", "SETTLED", "NOT_RESERVED"],
+    "usage.held_quantum_seconds": [None, 0, 0.0, 4.5],
+    "usage.settled_quantum_seconds": [None, 0, 7.5],
+    "next_action": ["NONE", "RECONCILE"],
+}
+_EXECUTION_SETS = {
+    "execution.status": JOB_SCHEMA["properties"]["execution"]["properties"]["status"]["enum"],
+    "execution.outcome": JOB_SCHEMA["properties"]["execution"]["properties"]["outcome"]["enum"],
+    "execution.terminal": [False, True],
+    "cancellation.requested": [False, True],
+    "cancellation.requested_at": [None, 1200.0],
+    "cancellation.confirmed": [False, True],
+    "cancellation.confirmed_at": [None, 1500],
+}
+
+
+def _cross_product(base: dict[str, Any], sets: dict[str, list[Any]]):
+    import itertools
+    keys = list(sets)
+    for combo in itertools.product(*(sets[k] for k in keys)):
+        payload = json.loads(json.dumps(base))
+        for key, value in zip(keys, combo):
+            *parents, leaf = key.split(".")
+            target = payload
+            for name in parents:
+                target = target[name]
+            target[leaf] = value
+        yield payload
+
+
+def _client_accepts(digest: str, payload: dict[str, Any], client: LifecycleClient) -> bool:
+    raw = json.dumps(payload, sort_keys=True, allow_nan=False).encode()
+    client._transport = lambda *args: (200, raw)
+    try:
+        client.status(digest)
+    except LifecycleClientError as exc:
+        assert (exc.code, exc.next_action, exc.http_status) == ("INVALID_RESPONSE", "MANUAL_RECONCILIATION", 200)
+        return False
+    return True
+
+
+def _differential(payloads) -> tuple[int, int]:
+    client = LifecycleClient(ORIGIN, KEY, clock=lambda: 1000, nonce_factory=lambda: "ab" * 16)
+    accepted = refused = 0
+    seen: set[str] = set()
+    for digest, payload in payloads:
+        key = digest + json.dumps(payload, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        expected = JOB_VALIDATOR.is_valid(payload) and payload["request"]["request_digest"] == digest
+        assert _client_accepts(digest, payload, client) is expected, json.dumps(payload, sort_keys=True)
+        accepted += expected
+        refused += not expected
+    return accepted, refused
+
+
+def test_differential_every_single_member_mutation_of_every_golden_history():
+    accepted, refused = _differential((h["request_digest"], payload) for h in HISTORIES["histories"]
+                                      for payload in _single_member_mutations(h["expected"]))
+    assert accepted >= 100 and refused >= 10_000, (accepted, refused)
+
+
+@pytest.mark.parametrize("family", ["accounting", "execution"])
+def test_differential_invariant_cross_products(family):
+    sets = _SETS if family == "accounting" else _EXECUTION_SETS
+    bases = {h["name"]: h for h in HISTORIES["histories"]}
+    names = (("queued", "settled_positive", "dry_run") if family == "accounting"
+             else ("running", "cancelled_confirmed", "accounting_pending"))
+    accepted, refused = _differential((bases[n]["request_digest"], payload) for n in names
+                                      for payload in _cross_product(bases[n]["expected"], sets))
+    assert accepted >= 20 and refused >= 1_000, (accepted, refused)
+
+
+@pytest.mark.parametrize("path", [("request", "request_id"), ("request", "target"), ("provider", "job_id"),
+                                  ("lineage", "replaces_request_digest"), ("lineage", "replacement_request_digest")])
+def test_trailing_newline_in_a_patterned_string_is_refused(path):
+    history = next(h for h in HISTORIES["histories"] if h["name"] == "replacement_lineage")
+    value = _get_path(history["expected"], path) or "sha256:" + "0" * 64
+    payload = _with(history["expected"], path, value + "\n")
+    # ECMA-262 "$" (the schema's dialect, and the TypeScript client) never matches before a final "\n".
+    _, error = _python(history["request_digest"], 200, json.dumps(payload).encode())
+    assert error is not None and error.code == "INVALID_RESPONSE"
+
+
+def test_every_golden_history_still_parses_through_every_operation():
+    for history in HISTORIES["histories"]:
+        raw = _body(history)
+        result, error = _python(history["request_digest"], 200, raw)
+        assert error is None and _same_json(result, history["expected"])
+        for operation in ("cancel", "refresh"):
+            python_client = LifecycleClient(ORIGIN, KEY, transport=lambda *a, r=raw: (200, r), clock=lambda: 1000)
+            assert _same_json(getattr(python_client, operation)(history["request_digest"]), history["expected"])
+
+
+# --- behaviour guard: every envelope the real projection emits is accepted ------------------------
+
+def _fuzz_number(rng) -> Any:
+    roll = rng.random()
+    if roll < 0.15:
+        return None
+    if roll < 0.2:
+        return rng.choice([True, False, "12", -1, -0.5, [], {}])
+    if roll < 0.3:
+        return 0 if rng.random() < 0.5 else 0.0
+    if roll < 0.6:
+        return rng.randint(0, 2**51)
+    return rng.uniform(0, 2.0**51)
+
+
+def _fuzz_inputs(rng):
+    from nano_qsearch.store import RequestRecord
+
+    statuses = sorted(lifecycle._PROVIDER_STATUSES) + ["unknown", "done", "Cancelled", "", None, 7]
+    identifiers = ["job-1", "ibm_fez", "a" * 200, "a" * 201, "bad id", "", None, 3, "job-1\n"]
+    digests = ["sha256:" + "d" * 64, "sha256:" + "D" * 64, "bad", None, 1]
+    record = {}
+    for key in ("provider_status", "provider_job_id", "result", "accounting", "quantum_seconds", "settled_qpu_s",
+                "held_qpu_s", "held_quantum_seconds", "queue_started_at", "accounting_pending_since",
+                "cancellation_requested_at", "cancellation_confirmed_at", "replaces_request_digest",
+                "replacement_request_digest"):
+        if rng.random() < 0.5:
+            continue
+        if key == "provider_status":
+            record[key] = rng.choice(statuses)
+        elif key == "provider_job_id":
+            record[key] = rng.choice(identifiers)
+        elif key == "result":
+            record[key] = rng.choice(["OK", "FAILED", "NOT_RUN", "PENDING", None])
+        elif key == "accounting":
+            record[key] = rng.choice(["settled", "pending", None])
+        elif key.endswith("request_digest"):
+            record[key] = rng.choice(digests)
+        else:
+            record[key] = _fuzz_number(rng)
+    receipt = None
+    if rng.random() < 0.6:
+        receipt = {"status": rng.choice(["OK", "FAILED", "NOT_RUN", None]),
+                   "backend": {"dry_run": rng.choice([True, False, None]), "kind": rng.choice(["ibm", "hardware"])},
+                   "hardware": {"provider_job_id": rng.choice(identifiers)},
+                   "usage": {"usage_pending": rng.choice([True, False, None]), "quantum_seconds": _fuzz_number(rng)}}
+    target = rng.choice(identifiers)
+    body = {"descriptor": {"request_id": "fuzz-1", **({} if target is None else {"target": target})}}
+    digest = "sha256:" + f"{rng.getrandbits(256):064x}"
+    row = RequestRecord(digest, rng.choice(["fuzz-1", "a" * 80, "A_b-9"]), "ACCEPTED", json.dumps(body),
+                        json.dumps(receipt) if receipt else None, float(rng.randint(0, 2**51)), None,
+                        rng.randint(0, 3))
+    now = rng.choice([0.0, float(rng.randint(0, 2**52)), rng.uniform(0, 2.0**52)])
+    queue = rng.choice([1, 0.5, 3600, rng.uniform(1e-6, 2.0**51)])
+    accounting = rng.choice([1, 900, rng.uniform(1e-6, 2.0**51)])
+    return row, record, receipt, now, queue, accounting
+
+
+FUZZ_CASES = 4000
+
+
+def test_fuzz_every_envelope_projected_by_job_state_is_accepted_by_the_client():
+    import random
+
+    rng = random.Random(86_2026_11)
+    client_ = LifecycleClient(ORIGIN, KEY, clock=lambda: 1000, nonce_factory=lambda: "ab" * 16)
+    covered: set[tuple[str, str, str]] = set()
+    for _ in range(FUZZ_CASES):
+        row, record, receipt, now, queue, accounting = _fuzz_inputs(rng)
+        payload = lifecycle.job_state(row, record, receipt, now=now, queue_deadline_s=queue,
+                                      accounting_deadline_s=accounting)
+        assert JOB_VALIDATOR.is_valid(payload), json.dumps(payload, sort_keys=True)
+        assert _client_accepts(row.request_digest, payload, client_), json.dumps(payload, sort_keys=True)
+        covered.add((payload["state"], payload["accounting"]["status"], payload["execution"]["status"]))
+    states = {state for state, _, _ in covered}
+    assert len(states) >= 10 and {a for _, a, _ in covered} == {"PENDING", "SETTLED", "NOT_APPLICABLE"}, covered

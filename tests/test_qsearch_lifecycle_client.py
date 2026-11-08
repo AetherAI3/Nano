@@ -16,8 +16,18 @@ DIGEST = "sha256:" + "b" * 64
 NEW_DIGEST = "sha256:" + "c" * 64
 
 
-def response(digest=DIGEST):
-    return {"schema": JOB_STATE_SCHEMA, "request": {"request_digest": digest}, "state": "QUEUED",
+def response(digest=DIGEST, *, replaces=None):
+    """A complete, closed ``nano.qsearch.job-state.v1`` envelope (job-state.v1.schema.json)."""
+    return {"schema": JOB_STATE_SCHEMA,
+            "request": {"request_id": "request-1", "request_digest": digest, "target": "ibm_fez"},
+            "lineage": {"replaces_request_digest": replaces, "replacement_request_digest": None},
+            "state": "QUEUED", "provider": {"job_id": "job-1", "status": "QUEUED"},
+            "execution": {"status": "QUEUED", "outcome": "UNKNOWN", "terminal": False},
+            "accounting": {"status": "PENDING"},
+            "usage": {"reservation_status": "HELD", "held_quantum_seconds": 30.0, "settled_quantum_seconds": None},
+            "cancellation": {"requested": False, "requested_at": None, "confirmed": False, "confirmed_at": None},
+            "deadlines": {"queue_at": 4600.0, "queue_expired": False, "accounting_at": None,
+                          "accounting_expired": False},
             "next_action": "POLL_STATUS"}
 
 
@@ -31,9 +41,9 @@ def test_all_operations_bind_exact_method_path_body_and_fresh_nonce():
         path = url.removeprefix("http://127.0.0.1:8798")
         verify_request(KEY, headers[AUTH_HEADER], method, path, body, now=1234, nonce_store=nonce_store)
         calls.append((method, path, body, timeout_s))
-        payload = response(canonical_digest(replacement["descriptor"]) if path.endswith("/replace") else DIGEST)
-        if path.endswith("/replace"):
-            payload["lineage"] = {"replaces_request_digest": DIGEST}
+        is_replace = path.endswith("/replace")
+        payload = response(canonical_digest(replacement["descriptor"]) if is_replace else DIGEST,
+                           replaces=DIGEST if is_replace else None)
         return 200, json.dumps(payload).encode()
 
     client = LifecycleClient("http://127.0.0.1:8798/", KEY, transport=transport,
@@ -219,8 +229,7 @@ def test_client_real_service_http_status_cancel_and_refresh_keep_one_execution(t
 def test_replacement_response_must_bind_new_descriptor_and_original_parent(wrong_digest, wrong_parent):
     replacement = {"descriptor": {"request_id": "replacement"}, "jobs": []}
     expected = canonical_digest(replacement["descriptor"])
-    payload = response(NEW_DIGEST if wrong_digest else expected)
-    payload["lineage"] = {"replaces_request_digest": NEW_DIGEST if wrong_parent else DIGEST}
+    payload = response(NEW_DIGEST if wrong_digest else expected, replaces=NEW_DIGEST if wrong_parent else DIGEST)
     client = LifecycleClient("https://example.invalid", KEY, transport=lambda *args: (200, payload))
     with pytest.raises(LifecycleClientError) as caught:
         client.replace(DIGEST, replacement)
@@ -329,17 +338,19 @@ def test_number_within_2_53_minus_1_is_kept(lexeme):
         "STORE_UNAVAILABLE", True, "RECONCILE", 503)
 
 
-@pytest.mark.parametrize("status", [200, 503])
+@pytest.mark.parametrize("status", [404, 503])
 def test_depth_64_is_accepted_and_65_is_refused(status):
-    body = response() if status == 200 else ERROR_BODY
-    deepest = json.dumps({**body, "detail": _nested(63)}).encode()   # top-level object + 63 = 64
-    result, error = _call_status(status, deepest)
-    if status == 200:
-        assert error is None and result["state"] == "QUEUED"
-    else:
-        assert (error.code, error.http_status) == ("STORE_UNAVAILABLE", 503)
-    _, error = _call_status(status, json.dumps({**body, "detail": _nested(64)}).encode())
+    # Only an (open) error body can carry 64 levels; a closed job-state.v1 envelope is 2 deep.
+    deepest = json.dumps({**ERROR_BODY, "detail": _nested(63)}).encode()   # top-level object + 63 = 64
+    _, error = _call_status(status, deepest)
+    assert (error.code, error.http_status) == ("STORE_UNAVAILABLE", status)
+    _, error = _call_status(status, json.dumps({**ERROR_BODY, "detail": _nested(64)}).encode())
     _assert_invalid(error, status)
+
+
+def test_success_body_deeper_than_64_is_refused_by_the_parser():
+    _, error = _call_status(200, json.dumps({**response(), "detail": _nested(64)}).encode())
+    _assert_invalid(error, 200)
 
 
 def test_depth_far_beyond_recursion_limit_is_refused_not_crashing():
@@ -353,3 +364,111 @@ def test_depth_far_beyond_recursion_limit_is_refused_not_crashing():
 def test_decoded_mapping_from_injected_transport_obeys_the_same_rules(payload):
     _, error = _call_status(503, payload)
     _assert_invalid(error, 503)
+
+
+# --- closed job-state.v1 envelope on 2xx (wire contract v1 section 2.2) ---------------------------
+
+_DELETE = object()
+
+
+def _mutated(changes, digest=DIGEST):
+    """``response()`` with ``{dotted.path: value}`` applied; ``_DELETE`` removes the member."""
+    payload = json.loads(json.dumps(response(digest)))
+    for path, value in changes.items():
+        *parents, leaf = path.split(".")
+        target = payload
+        for name in parents:
+            target = target[name]
+        if value is _DELETE:
+            del target[leaf]
+        else:
+            target[leaf] = value
+    return payload
+
+
+_SETTLED = {"state": "SETTLED", "next_action": "NONE", "accounting.status": "SETTLED",
+            "usage.reservation_status": "SETTLED", "usage.held_quantum_seconds": 0, "usage.settled_quantum_seconds": 12,
+            "execution.status": "FAILED", "execution.outcome": "FAILED", "execution.terminal": True}
+_CANCELLED = {**_SETTLED, "execution.status": "CANCELLED", "execution.outcome": "CANCELLED",
+              "cancellation.confirmed": True, "cancellation.confirmed_at": 1500.5}
+
+
+@pytest.mark.parametrize("changes", [
+    {},
+    {"usage.held_quantum_seconds": 30, "deadlines.queue_at": MAX_SAFE},
+    {"usage.held_quantum_seconds": None, "request.target": None, "provider.job_id": None},
+    {"usage.held_quantum_seconds": 0.0, "deadlines.queue_at": -0.0},
+    {"lineage.replaces_request_digest": NEW_DIGEST, "lineage.replacement_request_digest": NEW_DIGEST},
+    {"request.request_id": "a" * 80, "request.target": "ibm.fez:1_x-" + "z" * 188},
+    {"cancellation.requested": True, "cancellation.requested_at": 1200, "state": "CANCELLATION_REQUESTED",
+     "next_action": "RECONCILE"},
+    _SETTLED,
+    {**_SETTLED, "usage.held_quantum_seconds": 0.0, "usage.settled_quantum_seconds": 0},
+    _CANCELLED,
+    {**_CANCELLED, "cancellation.confirmed_at": None},
+    {"accounting.status": "NOT_APPLICABLE", "next_action": "NONE", "usage.reservation_status": "NOT_RESERVED",
+     "usage.held_quantum_seconds": None, "state": "NOT_RUN", "execution.status": "NOT_RUN",
+     "execution.outcome": "NOT_RUN", "execution.terminal": True},
+    {"execution.status": "COMPLETED", "execution.outcome": "UNKNOWN", "execution.terminal": True,
+     "state": "ACCOUNTING_PENDING", "next_action": "RECONCILE", "provider.status": "DONE"},
+], ids=lambda changes: ",".join(changes) or "base")
+def test_valid_closed_envelopes_are_accepted(changes):
+    payload = _mutated(changes)
+    result, error = _call_status(200, json.dumps(payload, sort_keys=True, allow_nan=False).encode())
+    assert error is None and result == payload
+
+
+@pytest.mark.parametrize("changes", [
+    {"cancellation": _DELETE}, {"usage.settled_quantum_seconds": _DELETE}, {"request.target": _DELETE},
+    {"extra": 1}, {"provider.extra": None}, {"accounting.reason": "x"},
+    {"state": 3}, {"execution.terminal": "false"}, {"execution.terminal": 0}, {"cancellation.requested": None},
+    {"usage.held_quantum_seconds": True}, {"deadlines.queue_expired": 0}, {"deadlines.queue_at": None},
+    {"usage.held_quantum_seconds": "30"}, {"usage.held_quantum_seconds": -0.5}, {"deadlines.queue_at": -1},
+    {"state": "DONE"}, {"provider.status": "done"}, {"execution.outcome": "OK"}, {"accounting.status": None},
+    {"usage.reservation_status": "RELEASED"},
+    {"request.request_id": ""}, {"request.request_id": "a" * 81}, {"request.request_id": "request.1"},
+    {"request.request_id": "request-1\n"}, {"request.target": "ibm_fez\n"}, {"request.target": "x" * 201},
+    {"request.target": "ibm fez"}, {"provider.job_id": "job-1\n"}, {"provider.job_id": ""},
+    {"lineage.replaces_request_digest": NEW_DIGEST + "\n"}, {"lineage.replaces_request_digest": "sha256:" + "C" * 64},
+    {"lineage.replacement_request_digest": "c" * 64}, {"request.request_id": 1},
+    {"request": [DIGEST]}, {"usage": None}, {"deadlines": []},
+    {"usage.held_quantum_seconds": 2**53}, {"deadlines.accounting_at": float(2**53)},
+    # I1..I8
+    {**_SETTLED, "state": "ACCOUNTING_PENDING"}, {**_SETTLED, "next_action": "RECONCILE"},
+    {**_SETTLED, "usage.reservation_status": "HELD"}, {**_SETTLED, "usage.held_quantum_seconds": 1},
+    {**_SETTLED, "usage.held_quantum_seconds": None}, {**_SETTLED, "usage.settled_quantum_seconds": None},
+    {"accounting.status": "NOT_APPLICABLE", "next_action": "NONE", "usage.reservation_status": "NOT_RESERVED"},
+    {"accounting.status": "NOT_APPLICABLE", "next_action": "NONE", "usage.reservation_status": "HELD",
+     "usage.held_quantum_seconds": None},
+    {"usage.settled_quantum_seconds": 1}, {"usage.reservation_status": "SETTLED"}, {"state": "SETTLED"},
+    {"state": "FAILED"},
+    {"execution.outcome": "SUCCEEDED"}, {"execution.status": "COMPLETED"},
+    {"execution.terminal": True},
+    {"execution.status": "SUCCEEDED", "execution.outcome": "SUCCEEDED"},
+    {"execution.status": "CANCELLED", "execution.outcome": "FAILED", "execution.terminal": True},
+    {"execution.status": "NOT_RUN", "execution.outcome": "UNKNOWN", "execution.terminal": True},
+    {"execution.status": "COMPLETED", "execution.outcome": "SUCCEEDED", "execution.terminal": True},
+    {**_CANCELLED, "cancellation.confirmed": False},
+    {"cancellation.confirmed": True}, {"cancellation.confirmed_at": 1500},
+    {"cancellation.requested": True}, {"cancellation.requested_at": 1200},
+], ids=lambda changes: ",".join(f"{k}={v!r}"[:40] for k, v in changes.items()))
+def test_open_partial_or_inconsistent_envelopes_are_refused(changes):
+    _, error = _call_status(200, json.dumps(_mutated(changes)).encode())
+    _assert_invalid(error, 200)
+
+
+@pytest.mark.parametrize("operation", ["cancel", "refresh", "replace"])
+def test_write_operation_responses_are_validated_as_closed_envelopes(operation):
+    replacement = {"descriptor": {"request_id": "replacement"}, "jobs": []}
+    digest = canonical_digest(replacement["descriptor"]) if operation == "replace" else DIGEST
+    payload = response(digest, replaces=DIGEST if operation == "replace" else None)
+    for body, accepted in ((payload, True), ({**payload, "extra": None}, False)):
+        client = LifecycleClient("https://example.invalid", KEY, transport=lambda *args, b=body: (200, b))
+        call = getattr(client, operation)
+        try:
+            result = call(DIGEST, replacement) if operation == "replace" else call(DIGEST)
+        except LifecycleClientError as exc:
+            assert not accepted
+            _assert_invalid(exc, 200)
+        else:
+            assert accepted and result == payload

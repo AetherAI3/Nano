@@ -11,6 +11,7 @@ import urllib.request
 from collections.abc import Callable, Mapping
 from typing import Any
 
+from ._job_state_v1 import is_valid_job_state
 from .auth import AUTH_HEADER, MIN_KEY_BYTES, sign_request
 from .canonical import canonical_digest, canonical_json, validate_digest
 from .lifecycle import JOB_STATE_SCHEMA, NEXT_ACTIONS
@@ -235,6 +236,9 @@ class LifecycleClient:
         if (not isinstance(request, Mapping)
                 or request.get("request_digest") != (expected_response_digest or request_digest)
                 or not isinstance(next_action, str) or next_action not in NEXT_ACTIONS):
+            raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION", http_status=status)
+        if not is_valid_job_state(payload):
+            # Closed v1 envelope (wire contract section 2.2): exact members, types, enums and I1-I8.
             raise LifecycleClientError("INVALID_RESPONSE", next_action="MANUAL_RECONCILIATION", http_status=status)
         if action == "replace":
             lineage = payload.get("lineage")
