@@ -137,6 +137,35 @@ def test_existing_file_is_refused_untouched(tmp_path, capsys):
     assert sorted(p.name for p in tmp_path.iterdir()) == ["file.txt"]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="junctions are Windows reparse points")
+def test_junction_destination_is_refused(tmp_path, capsys):
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "junction"
+    made = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(real)],
+                          capture_output=True, check=False)
+    assert made.returncode == 0, made.stderr  # junctions need no privilege; never skip
+    code, _, err = _init(link, capsys)
+    assert code == 2
+    assert "symlink or junction" in err
+    assert list(real.iterdir()) == []
+
+
+def test_unreadable_destination_is_io_error_not_traceback(tmp_path, capsys, monkeypatch):
+    from nano.cli import package_init
+
+    target = tmp_path / "locked"
+    target.mkdir()
+
+    def denied(path):
+        raise PermissionError(13, "Permission denied", str(path))
+
+    monkeypatch.setattr(package_init.os, "scandir", denied)
+    code, out, err = _init(target, capsys)
+    assert (code, out) == (3, "")
+    assert "error:" in err
+
+
 def test_symlink_destination_is_refused(tmp_path, capsys):
     real = tmp_path / "real"
     real.mkdir()
@@ -190,6 +219,60 @@ def test_failed_init_into_new_directory_leaves_nothing(tmp_path, capsys, monkeyp
     assert (code, out) == (3, "")
     assert len(calls) == 3
     assert list(tmp_path.iterdir()) == []  # no destination, no temporary sibling
+
+
+def _fail_after_partial_write(monkeypatch):
+    """Fail the 3rd file after it was opened and partly written (review finding)."""
+    from nano.cli import package_init
+
+    real = package_init._write_all
+    calls: List[int] = []
+
+    def partial(stream, data):
+        calls.append(len(data))
+        if len(calls) == 3:
+            stream.write(data[:10])
+            stream.flush()
+            raise OSError(28, "No space left on device")
+        return real(stream, data)
+
+    monkeypatch.setattr(package_init, "_write_all", partial)
+    return calls
+
+
+@pytest.mark.parametrize("existing", [True, False])
+def test_partially_written_file_is_removed(tmp_path, capsys, monkeypatch, existing):
+    calls = _fail_after_partial_write(monkeypatch)
+    target = tmp_path / "agent"
+    if existing:
+        target.mkdir()
+    code, out, _ = _init(target, capsys)
+    assert (code, out) == (3, "")
+    assert len(calls) == 3
+    expected = ["agent"] if existing else []
+    assert sorted(p.name for p in tmp_path.iterdir()) == expected
+    if existing:
+        assert list(target.iterdir()) == []
+
+
+def test_destination_swapped_for_a_link_mid_write_is_refused(tmp_path, capsys, monkeypatch):
+    """Review finding (TOCTOU): re-validate the destination before every file."""
+    from nano.cli import package_init
+
+    target = tmp_path / "empty"
+    target.mkdir()
+    real_is_link = package_init._is_link
+    checks: List[int] = []
+
+    def swapped_after_first_check(path):
+        checks.append(1)
+        return True if len(checks) > 1 else real_is_link(path)
+
+    monkeypatch.setattr(package_init, "_is_link", swapped_after_first_check)
+    code, _, err = _init(target, capsys)
+    assert code == 3
+    assert "changed" in err
+    assert list(target.iterdir()) == []
 
 
 def test_failed_init_into_empty_directory_leaves_it_empty(tmp_path, capsys, monkeypatch):

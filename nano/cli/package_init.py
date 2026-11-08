@@ -108,22 +108,51 @@ def _refusal(target: Path) -> Optional[str]:
     return None
 
 
+class DestinationChanged(OSError):
+    """The destination stopped being a plain directory between check and write."""
+
+
+def _write_all(stream, data: bytes) -> None:
+    stream.write(data)
+
+
 def _write_new_file(path: Path, data: bytes) -> None:
-    """Create ``path`` exclusively; an existing file is never overwritten."""
+    """Create ``path`` exclusively and remove it again if writing fails."""
     with open(path, "xb") as stream:
-        stream.write(data)
+        try:
+            _write_all(stream, data)
+        except BaseException:
+            stream.close()
+            path.unlink(missing_ok=True)
+            raise
 
 
-def _create_new(target: Path) -> None:
-    """Write into a temporary sibling, then rename it into place."""
+def _create_new(target: Path) -> Optional[str]:
+    """Write into a temporary sibling, then rename it into place.
+
+    Returns the staging path if cleanup after a failure could not remove it.
+    """
     staging = tempfile.mkdtemp(prefix=f".{target.name}.", suffix=".init", dir=target.parent)
     try:
         for name, data in template():
             _write_new_file(Path(staging) / name, data)
         os.rename(staging, target)
-    except BaseException:
+    except BaseException as error:
         shutil.rmtree(staging, ignore_errors=True)
+        if os.path.lexists(staging):
+            error.nano_leftover = staging  # type: ignore[attr-defined]
         raise
+    return None
+
+
+def _still_plain_directory(target: Path) -> None:
+    """Narrow the check-to-write race: refuse if the target became a link.
+
+    Not an OS sandbox (Windows offers no no-follow directory handle): a local
+    process able to rename entries in the parent could still race this.
+    """
+    if _is_link(target) or not target.is_dir():
+        raise DestinationChanged(f"{target} changed while writing")
 
 
 def _fill_empty(target: Path) -> None:
@@ -131,6 +160,7 @@ def _fill_empty(target: Path) -> None:
     created = []
     try:
         for name, data in template():
+            _still_plain_directory(target)
             path = target / name
             _write_new_file(path, data)
             created.append(path)
@@ -140,20 +170,32 @@ def _fill_empty(target: Path) -> None:
         raise
 
 
+def _place(target: Path) -> Optional[str]:
+    """Refusal reason, or None after writing the scaffold. Raises OSError."""
+    reason = _refusal(target)
+    if reason is not None:
+        return reason
+    if os.path.lexists(target):
+        _fill_empty(target)
+    else:
+        _create_new(target)
+    return None
+
+
 def command_init(args: argparse.Namespace, console: Console) -> int:
     """Create the example package in a new or empty ``--directory``."""
     target = Path(args.directory)
-    reason = _refusal(target)
+    try:
+        reason = _place(target)
+    except OSError as error:
+        detail = str(error) if isinstance(error, DestinationChanged) else (error.strerror or error)
+        console.warn(f"error: cannot create {target}: {detail}")
+        leftover = getattr(error, "nano_leftover", None)
+        if leftover:
+            console.warn(f"warning: could not remove temporary directory {leftover}")
+        return EXIT_IO
     if reason is not None:
         console.warn(f"error: {target} {reason}; init only writes into a new or empty directory")
         return EXIT_USAGE
-    try:
-        if os.path.lexists(target):
-            _fill_empty(target)
-        else:
-            _create_new(target)
-    except OSError as error:
-        console.warn(f"error: cannot create {target}: {error.strerror or error}")
-        return EXIT_IO
     console.warn(f"created {target} ({len(template())} files)")
     return EXIT_OK

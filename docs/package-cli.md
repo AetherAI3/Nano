@@ -199,7 +199,9 @@ generator: it never reads, discovers, repins or rewrites any existing project.
   place when the destination does not exist. For an existing empty directory,
   each file is created exclusively (it must not appear concurrently) and any
   file already created is removed if a later one fails. A failed `init` leaves
-  no partial scaffold.
+  no partial scaffold. The destination is re-checked before every file, but
+  like the package build API this is not an OS sandbox: a concurrent local
+  process that can rename entries in the parent could still race the check.
 * stdout stays empty; one `created <PATH> (5 files)` note goes to stderr.
   Exit 0 on success.
 
