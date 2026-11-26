@@ -157,6 +157,37 @@ def test_no_benefit_candidate_rejected_before_admission():
     assert decision.stage_reached == "Verification"
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("benchmark_delta", float("nan")),
+        ("benchmark_delta", float("inf")),
+        ("benchmark_delta", float("-inf")),
+        ("benchmark_delta", True),
+        ("benchmark_delta", "0.12"),
+        ("benchmark_delta", 10**400),
+        ("regressions", -1),
+        ("regressions", False),
+        ("regressions", 0.0),
+        ("replay_matches", "pending"),
+        ("static_ok", "pending"),
+    ],
+)
+def test_unusable_evidence_stops_candidate_at_verification(field, value):
+    decision = admit_mutation(_candidate(**{field: value}), allowed_capabilities=("quantum.submit",))
+    assert not decision.admitted
+    assert decision.stage_reached == "Verification"
+    assert decision.artifact is None
+
+
+@pytest.mark.parametrize("minimum", [float("nan"), float("inf"), -0.01, False])
+def test_invalid_gain_threshold_stops_admission(minimum):
+    decision = admit_mutation(_candidate(), allowed_capabilities=("quantum.submit",), min_gain=minimum)
+    assert not decision.admitted
+    assert decision.stage_reached == "Verification"
+    assert decision.artifact is None
+
+
 def test_admission_is_deterministic():
     a = admit_mutation(_candidate(), allowed_capabilities=("quantum.submit",))
     b = admit_mutation(_candidate(), allowed_capabilities=("quantum.submit",))

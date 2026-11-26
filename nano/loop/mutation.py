@@ -6,6 +6,7 @@ admission record. It does not generate, compile, verify, or deploy a mutation.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -43,6 +44,15 @@ class AdmissionDecision:
 _MIN_BENCHMARK_GAIN = 0.0  # must strictly improve to justify a live change
 
 
+def _finite_benchmark_value(value: object) -> bool:
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def admit_mutation(
     candidate: Candidate,
     *,
@@ -51,16 +61,22 @@ def admit_mutation(
 ) -> AdmissionDecision:
     """Run the candidate through Verification then Admission. Deterministic."""
     # --- Stage 3: Verification ------------------------------------------------
-    if not candidate.replay_matches:
+    if candidate.replay_matches is not True:
         return AdmissionDecision(
             False, "Verification", "replay does not reproduce baseline behavior"
         )
+    if type(candidate.regressions) is not int or candidate.regressions < 0:
+        return AdmissionDecision(False, "Verification", "invalid regression count")
     if candidate.regressions > 0:
         return AdmissionDecision(
             False, "Verification", f"{candidate.regressions} regression(s) present"
         )
-    if not candidate.static_ok:
+    if candidate.static_ok is not True:
         return AdmissionDecision(False, "Verification", "static analysis failed")
+    if not _finite_benchmark_value(candidate.benchmark_delta):
+        return AdmissionDecision(False, "Verification", "benchmark delta must be finite")
+    if not _finite_benchmark_value(min_gain) or min_gain < 0:
+        return AdmissionDecision(False, "Verification", "minimum gain must be finite and non-negative")
     if candidate.benchmark_delta <= min_gain:
         return AdmissionDecision(
             False,
