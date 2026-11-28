@@ -33,11 +33,16 @@ be audited.
 
 from __future__ import annotations
 
+import json
 from typing import Sequence, Tuple
 
 from ..ir.module import NanoModule
-from ..ir.schema import IRValidationError
-from .contracts import WatchdogError, WatchdogSignalSpecV1, declared_signal_names
+from .contracts import (
+    WatchdogError,
+    WatchdogSignalSpecV1,
+    canonical_json,
+    declared_signal_names,
+)
 
 
 class WatchdogProfileError(WatchdogError):
@@ -161,9 +166,14 @@ def validate_watchdog(
     carrying `ai.signature` is told about `ai.signature` rather than about the
     tier that admits it — the opcode is the thing the author has to remove.
     """
+    if type(module) is not NanoModule:
+        raise WatchdogProfileError("Watchdog IR must be an exact NanoModule")
     try:
-        checked = module.validate()
-    except IRValidationError as error:
+        # Node attributes can contain mutable nested data. Admission and the
+        # VM must hold the same graph even if the caller edits its module.
+        document = canonical_json(module.to_dict(include_hash=False))
+        checked = NanoModule.from_dict(json.loads(document))
+    except (AttributeError, TypeError, ValueError, RuntimeError) as error:
         raise WatchdogProfileError(f"Watchdog IR is not valid: {error}") from error
 
     _check_opcodes(checked)

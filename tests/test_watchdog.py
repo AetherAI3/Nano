@@ -590,6 +590,62 @@ def test_an_artifact_whose_ir_no_longer_matches_its_hash_is_invalid():
     assert receipt.proposed_intents == ()
 
 
+@pytest.mark.parametrize(
+    "changed", [{"name": "DifferentRule"}, {"allowed_intents": ()}, {"cadence": "1s"}]
+)
+def test_artifact_metadata_must_match_the_admitted_module(changed):
+    artifact = dataclasses.replace(sample_artifact(), **changed)
+    receipt = evaluate_watchdog(artifact, frame(96.0))
+    assert receipt.input_state == WatchdogState.WATCHDOG_INVALID
+    assert receipt.proposed_intents == ()
+
+
+def test_evaluation_checks_the_hash_of_the_validated_graph(monkeypatch):
+    from nano.watchdog import evaluate as evaluate_module
+
+    artifact = sample_artifact()
+    validate = evaluate_module.validate_watchdog
+
+    def edit_then_validate(module, signals):
+        threshold = next(node for node in module.of_op("const") if node.attrs["value"] == 90)
+        threshold.attrs["value"] = 99
+        return validate(module, signals)
+
+    monkeypatch.setattr(evaluate_module, "validate_watchdog", edit_then_validate)
+    receipt = evaluate_watchdog(artifact, frame(96.0))
+    assert receipt.input_state == WatchdogState.WATCHDOG_INVALID
+    assert receipt.proposed_intents == ()
+
+
+def test_dependency_check_uses_the_same_module_as_the_vm(monkeypatch):
+    from nano.watchdog import evaluate as evaluate_module
+
+    artifact = sample_artifact()
+    validate = evaluate_module.validate_watchdog
+
+    def validate_then_edit(module, signals):
+        checked = validate(module, signals)
+        signal = next(node for node in module.nodes if node.op in ("input.ref", "feed.signal"))
+        signal.attrs["name"] = "OTHER"
+        return checked
+
+    monkeypatch.setattr(evaluate_module, "validate_watchdog", validate_then_edit)
+    receipt = evaluate_watchdog(artifact, frame(96.0))
+    assert receipt.input_state == WatchdogState.OK
+    assert [intent.action for intent in receipt.proposed_intents] == ["OBSERVE"]
+
+
+def test_profile_snapshot_detaches_nested_module_attributes():
+    source = QUEUE_WATCHDOG.replace(
+        "    every 1m", "    risk {\n        max_drawdown 0.05\n    }\n    every 1m"
+    )
+    module = compile_module(source)
+    checked = validate_watchdog(module, (SATURATION,))
+    limits = module.of_op("risk.limits")[0].attrs["limits"]
+    limits["max_drawdown"] = 0.1
+    assert checked.of_op("risk.limits")[0].attrs["limits"]["max_drawdown"] == 0.05
+
+
 def test_an_artifact_carrying_a_denied_construct_is_invalid_not_executed():
     smuggled = dataclasses.replace(
         sample_artifact(),

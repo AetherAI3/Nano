@@ -28,6 +28,7 @@ here decides.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Optional, Sequence, Tuple
 
 from .. import __version__ as NANO_VERSION
@@ -168,6 +169,7 @@ def evaluate_watchdog(
 
     try:
         module = _admitted_module(artifact)
+        artifact = replace(artifact, module=module)
     except WatchdogError as error:
         return receipt(
             WatchdogState.WATCHDOG_INVALID,
@@ -226,11 +228,16 @@ def _admitted_module(artifact: WatchdogArtifactV1):
     that authorised it, and running it would produce a receipt naming an artifact
     that did not decide anything.
     """
-    actual = artifact.module.content_hash()
+    module = validate_watchdog(artifact.module, artifact.signals)
+    actual = module.content_hash()
     if actual != artifact.canonical_ir_hash:
         raise WatchdogIntegrityError(
             f"Watchdog {artifact.watchdog_id!r} rev {artifact.revision} declares IR "
             f"{artifact.canonical_ir_hash}, but the module it carries hashes to "
             f"{actual}"
         )
-    return validate_watchdog(artifact.module, artifact.signals)
+    if (artifact.name, artifact.allowed_intents, artifact.cadence) != (
+        module.name, proposable_intents(module), cadence_of(module)
+    ):
+        raise WatchdogIntegrityError("Watchdog metadata disagrees with its IR")
+    return module
